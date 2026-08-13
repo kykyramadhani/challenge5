@@ -3,7 +3,7 @@
 //  GetCooking
 //
 //  Reads hand-pose data every frame and turns it into grab, drag,
-//  release, and clap interactions.
+//  release, and trash-hover interactions.
 //
 
 import SpriteKit
@@ -13,7 +13,7 @@ extension GameScene {
     /// A snapshot of one hand this frame, in scene coordinates.
     struct FrameHand {
         let cursor: CGPoint
-        let span: CGFloat
+        let isOpen: Bool
         let isHolding: Bool
     }
 
@@ -21,13 +21,14 @@ extension GameScene {
 
     /// Reads every tracked hand, converts its joints from view space
     /// (top-left origin, y-down) to scene space (bottom-left, y-up),
-    /// and runs the grab / drag / release / clap logic.
+    /// and runs the grab / drag / release / trash-hover logic.
     func updateHandInput(now: TimeInterval) {
         guard let view, let handPoseManager, let gameStateManager,
               gameStateManager.state == .cooking else {
             abandonAllDrags()
             hideAllCursors()
-            clapDetector.disarm()
+            trashHoverDetector.reset()
+            updateTrashProgress(0)
             return
         }
 
@@ -47,8 +48,9 @@ extension GameScene {
                 .map(convertPoint(fromView:))
             handPoints.append(cursor)
 
-            let span = handPoints.map { $0.vc_distance(to: cursor) }.max() ?? 0
-            frameHands.append(FrameHand(cursor: cursor, span: span, isHolding: tracker.held != nil))
+            frameHands.append(FrameHand(cursor: cursor,
+                                        isOpen: state == .open,
+                                        isHolding: tracker.held != nil))
 
             updateCursorNode(for: hand.id, at: cursor, isFist: state == .fist)
 
@@ -82,30 +84,66 @@ extension GameScene {
             trackers[hand.id] = tracker
         }
 
-        detectClap(frameHands, gameStateManager: gameStateManager, now: now)
+        detectTrashHover(frameHands, gameStateManager: gameStateManager, now: now)
     }
 
-    // MARK: - Clap detection
+    // MARK: - Trash hover
 
-    /// Two empty hands brought together over the plate dumps
-    /// whatever is on it.
-    func detectClap(_ hands: [FrameHand], gameStateManager: GameStateManager, now: TimeInterval) {
-        guard hands.count == 2 else {
-            clapDetector.disarm()
+    /// An open, empty hand held over the trash bin for two seconds dumps
+    /// whatever is on the plate.
+    ///
+    /// Deliberately a dwell on a fixed target rather than a pose: it needs only
+    /// one hand, and holding still over the bin is not something the player
+    /// does by accident while ferrying ingredients into the bowl.
+    func detectTrashHover(_ hands: [FrameHand], gameStateManager: GameStateManager, now: TimeInterval) {
+        let reach = trashRadius + grabSlack
+
+        // Open *and* empty: on the frame a hand opens to drop a bubble it is
+        // still recorded as holding, so this keeps the release itself from
+        // counting as the opening frame of a dwell.
+        let isHovering = hands.contains {
+            $0.isOpen && !$0.isHolding
+                && $0.cursor.vc_distance(to: trashNode.position) <= reach
+        }
+
+        let fired = trashHoverDetector.update(isHovering: isHovering, now: now)
+        updateTrashProgress(trashHoverDetector.progress)
+        if fired { gameStateManager.discardPlate() }
+    }
+
+    /// Draws the dwell as an arc closing around the bin. Without it the
+    /// two-second wait is invisible and reads as the gesture not working.
+    func updateTrashProgress(_ progress: CGFloat) {
+        guard progress > 0 else {
+            trashProgressNode?.removeFromParent()
+            trashProgressNode = nil
             return
         }
-        let (left, right) = (hands[0], hands[1])
 
-        let clapped = clapDetector.update(
-            left: left.cursor,
-            right: right.cursor,
-            span: max((left.span + right.span) / 2, 1),
-            bothHandsEmpty: !left.isHolding && !right.isHolding,
-            target: plateHome,
-            targetRadius: plateRadius + grabSlack,
-            now: now
+        let ring: SKShapeNode
+        if let existing = trashProgressNode {
+            ring = existing
+        } else {
+            ring = SKShapeNode()
+            ring.strokeColor = .white
+            ring.lineWidth = 5
+            ring.lineCap = .round
+            ring.fillColor = .clear
+            ring.zPosition = 2
+            trashNode.addChild(ring)
+            trashProgressNode = ring
+        }
+
+        // Sweeps clockwise from 12 o'clock, the way a countdown reads.
+        let path = CGMutablePath()
+        path.addArc(
+            center: .zero,
+            radius: trashRadius + 8,
+            startAngle: .pi / 2,
+            endAngle: .pi / 2 - .pi * 2 * progress,
+            clockwise: true
         )
-        if clapped { gameStateManager.discardPlate() }
+        ring.path = path
     }
 
     // MARK: - Grab candidate
