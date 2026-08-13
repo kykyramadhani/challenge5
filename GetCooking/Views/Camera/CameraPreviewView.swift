@@ -18,6 +18,7 @@ struct CameraPreviewView: UIViewRepresentable {
         let view = PreviewView()
         let layer = view.videoPreviewLayer
         layer.session = handPoseManager.captureSession
+
         
         // The manager owns this setting because its hand → screen mapping has
         // to undo exactly the same fitting; see `HandPoseManager.viewPoint`.
