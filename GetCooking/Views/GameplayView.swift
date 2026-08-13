@@ -8,9 +8,9 @@
 //  time the player starts a new game from the main menu.
 //
 
-import SwiftUI
-import SpriteKit
 import AVFoundation
+import SpriteKit
+import SwiftUI
 
 struct GameplayView: View {
     @ObservedObject var sceneManager: SceneManager
@@ -32,29 +32,36 @@ struct GameplayView: View {
                     HandSkeletonView(handPoseManager: handPoseManager)
                         .ignoresSafeArea()
                 }
-                
-                SpriteView(scene: scene, options: [.allowsTransparency, .ignoresSiblingOrder])
-                    .ignoresSafeArea()
-                    .background(.clear)
-                    .onAppear {
-                        scene.size = proxy.size
-                        scene.gameStateManager = gameStateManager
-                        scene.handPoseManager = handPoseManager
-                    }
-                    .onChange(of: proxy.size) { _, newSize in
-                        scene.size = newSize
-                    }
+
+                SpriteView(
+                    scene: scene,
+                    options: [.allowsTransparency, .ignoresSiblingOrder]
+                )
+                .ignoresSafeArea()
+                .background(.clear)
+                .onAppear {
+                    scene.size = proxy.size
+                    scene.gameStateManager = gameStateManager
+                    scene.handPoseManager = handPoseManager
+                }
+                .onChange(of: proxy.size) { _, newSize in
+                    scene.size = newSize
+                }
 
                 VStack {
                     HStack(alignment: .top) {
                         RecipeCardView(recipe: gameStateManager.currentRecipe)
                         Spacer(minLength: 12)
                         HStack(spacing: 8) {
-                            StatBadge(icon: "star.fill", value: "\(gameStateManager.score)")
+                            StatBadge(
+                                icon: "star.fill",
+                                value: "\(gameStateManager.score)"
+                            )
                             StatBadge(
                                 icon: "timer",
                                 value: "\(gameStateManager.remainingTime)",
-                                tint: gameStateManager.remainingTime <= 10 ? .red : .primary
+                                tint: gameStateManager.remainingTime <= 10
+                                    ? .red : .primary
                             )
                             PauseButton(isPaused: gameStateManager.isPaused) {
                                 gameStateManager.togglePause()
@@ -75,7 +82,8 @@ struct GameplayView: View {
                 }
 
                 if handPoseManager.authorizationStatus == .denied
-                    || handPoseManager.authorizationStatus == .restricted {
+                    || handPoseManager.authorizationStatus == .restricted
+                {
                     CameraPermissionDeniedOverlay()
                 }
             }
@@ -92,7 +100,6 @@ struct GameplayView: View {
         }
         .onChange(of: gameStateManager.state) { _, state in
             scene.isPaused = (state == .gameOver)
-            }
         }
     }
 }
