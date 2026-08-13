@@ -46,6 +46,8 @@ final class GameScene: SKScene {
     var plateNode: SKShapeNode?
     var trashNode: SKShapeNode!
     var trashLabel: SKLabelNode?
+    /// Arc drawn around the bin while a discard dwell is charging.
+    var trashProgressNode: SKShapeNode?
     var finishedDishNode: SKNode?
     var swipeCueNode: SKNode?
 
@@ -61,7 +63,7 @@ final class GameScene: SKScene {
 
     var trackers: [Int: HandTracker] = [:]
     var cursorNodes: [Int: SKShapeNode] = [:]
-    var clapDetector = ClapDetector()
+    var trashHoverDetector = HoverDetector()
 
     // MARK: - State-machine bookkeeping
 

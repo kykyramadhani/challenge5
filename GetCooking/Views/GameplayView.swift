@@ -22,14 +22,17 @@ struct GameplayView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
+                // Layer 1 — camera feed
                 CameraPreviewView(handPoseManager: handPoseManager)
                     .ignoresSafeArea()
 
+                // Layer 1.5 — live hand skeleton, painted onto the camera feed.
+                // Set `showHandSkeleton = false` to hide it during real play.
                 if showHandSkeleton {
                     HandSkeletonView(handPoseManager: handPoseManager)
                         .ignoresSafeArea()
                 }
-
+                
                 SpriteView(scene: scene, options: [.allowsTransparency, .ignoresSiblingOrder])
                     .ignoresSafeArea()
                     .background(.clear)
@@ -89,6 +92,7 @@ struct GameplayView: View {
         }
         .onChange(of: gameStateManager.state) { _, state in
             scene.isPaused = (state == .gameOver)
+            }
         }
     }
 }
