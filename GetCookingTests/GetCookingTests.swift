@@ -21,6 +21,15 @@ struct ArtAssetTests {
             #expect(TrimmedArt.image(named: ingredient.imageName) != nil,
                     "missing art '\(ingredient.imageName)' for \(ingredient.displayName)")
         }
+
+        // Catalog lookups are case-sensitive even though the filesystem the
+        // assets are authored on is not, which is how `salad` shipped as
+        // "Salad" and left the finished dish invisible.
+        for recipe in Recipe.all {
+            #expect(TrimmedArt.image(named: recipe.finishedDishImageName) != nil,
+                    "missing finished-dish art '\(recipe.finishedDishImageName)' for \(recipe.name)")
+        }
+
         #expect(TrimmedArt.image(named: GameArt.bubble) != nil)
         #expect(TrimmedArt.image(named: GameArt.plate) != nil)
     }
@@ -235,100 +244,168 @@ struct SwipeDetectionTests {
     }
 }
 
-struct ClapDetectorTests {
+struct HoverDetectorTests {
 
-    private let plate = CGPoint(x: 500, y: 200)
-    private let plateReach: CGFloat = 170
-    private let span: CGFloat = 100
-
-    /// Hands start apart (arming the detector) then come together over the bowl.
-    private func clap(
-        _ detector: inout ClapDetector,
-        at centre: CGPoint,
-        separation: CGFloat,
-        empty: Bool = true,
-        now: TimeInterval
-    ) -> Bool {
-        detector.update(
-            left: CGPoint(x: centre.x - separation / 2, y: centre.y),
-            right: CGPoint(x: centre.x + separation / 2, y: centre.y),
-            span: span, bothHandsEmpty: empty,
-            target: plate, targetRadius: plateReach, now: now
-        )
+    /// The shipped `maxFrameGap` deliberately caps how much a single frame can
+    /// contribute; these tests jump the clock in one step, so they lift it.
+    private func detector(dwell: TimeInterval = 2.0) -> HoverDetector {
+        var detector = HoverDetector()
+        detector.dwellDuration = dwell
+        detector.maxFrameGap = 60
+        return detector
     }
 
-    @Test func handsComingTogetherOverThePlateFires() {
-        var detector = ClapDetector()
-        _ = clap(&detector, at: plate, separation: 300, now: 0)      // apart → arms
-        #expect(clap(&detector, at: plate, separation: 40, now: 0.3))
+    // `update` is mutating and `#expect` expands its argument into a closure
+    // that captures immutably, so every call is hoisted into a `let` first.
+
+    /// The whole gesture: hold still over the bin and it fires once the full
+    /// dwell has elapsed, and not a frame before.
+    @Test func holdingTheDwellFires() {
+        var detector = detector()
+
+        let atStart = detector.update(isHovering: true, now: 0)
+        let midway = detector.update(isHovering: true, now: 1.0)
+        let atDwell = detector.update(isHovering: true, now: 2.0)
+
+        #expect(!atStart)
+        #expect(!midway)
+        #expect(atDwell)
     }
 
-    /// Same clap, but away from the bowl. The gesture is deliberately local so
-    /// hands meeting anywhere else during play can't wipe the plate.
-    @Test func clappingAwayFromThePlateDoesNothing() {
-        var detector = ClapDetector()
-        let elsewhere = CGPoint(x: 500, y: 900)
-        _ = clap(&detector, at: elsewhere, separation: 300, now: 0)
-        #expect(!clap(&detector, at: elsewhere, separation: 40, now: 0.3))
+    /// Moving off the bin part-way through starts the next attempt from zero,
+    /// so a hand brushing past twice can never add up to a discard.
+    @Test func movingAwayResetsTheDwell() {
+        var detector = detector()
+        _ = detector.update(isHovering: true, now: 0)
+        _ = detector.update(isHovering: true, now: 1.9)
+        _ = detector.update(isHovering: false, now: 2.0)   // hand leaves
+
+        // Steps land on halves so the accumulated total is exact — summing
+        // tenths drifts just under the dwell and the last frame never fires.
+        let restarted = detector.update(isHovering: true, now: 3.0)
+        let partway = detector.update(isHovering: true, now: 4.5)
+        let completed = detector.update(isHovering: true, now: 5.0)
+
+        #expect(!restarted)
+        #expect(!partway, "only 1.5s into the fresh dwell")
+        #expect(completed)
     }
 
-    /// Both hands ferrying ingredients into the bowl end up close together over
-    /// the plate — the clap pose exactly. Filling the plate must not bin it.
-    @Test func handsHoldingIngredientsNeverClap() {
-        var detector = ClapDetector()
-        _ = clap(&detector, at: plate, separation: 300, empty: false, now: 0)
-        #expect(!clap(&detector, at: plate, separation: 40, empty: false, now: 0.3))
+    /// A hand left resting on the bin discards once, not on every frame for as
+    /// long as it sits there.
+    @Test func firesOnceWhileTheHandStaysPut() {
+        var detector = detector()
+        _ = detector.update(isHovering: true, now: 0)
+
+        let first = detector.update(isHovering: true, now: 2.0)
+        let second = detector.update(isHovering: true, now: 4.0)
+        let third = detector.update(isHovering: true, now: 10.0)
+
+        #expect(first)
+        #expect(!second, "a parked hand must not discard over and over")
+        #expect(!third)
     }
 
-    /// Holding the hands together must fire once, not every frame.
-    @Test func heldTogetherFiresOnlyOnce() {
-        var detector = ClapDetector()
-        _ = clap(&detector, at: plate, separation: 300, now: 0)
-        #expect(clap(&detector, at: plate, separation: 40, now: 0.3))
-        #expect(!clap(&detector, at: plate, separation: 40, now: 0.35))
-        #expect(!clap(&detector, at: plate, separation: 40, now: 2.0), "still not re-armed")
+    /// Leaving and coming back is a deliberate second discard.
+    @Test func leavingRearmsForASecondDiscard() {
+        var detector = detector()
+        _ = detector.update(isHovering: true, now: 0)
+        let first = detector.update(isHovering: true, now: 2.0)
+
+        _ = detector.update(isHovering: false, now: 2.5)    // hand leaves
+        _ = detector.update(isHovering: true, now: 3.0)
+        let second = detector.update(isHovering: true, now: 5.0)
+
+        #expect(first)
+        #expect(second)
     }
 
-    /// Parting the hands and clapping again is a second discard.
-    @Test func separatingReArmsTheGesture() {
-        var detector = ClapDetector()
-        _ = clap(&detector, at: plate, separation: 300, now: 0)
-        #expect(clap(&detector, at: plate, separation: 40, now: 0.3))
-        _ = clap(&detector, at: plate, separation: 300, now: 1.5)    // apart again
-        #expect(clap(&detector, at: plate, separation: 40, now: 1.8))
+    /// Pausing stops SpriteKit calling `update(_:)` at all, so `now` jumps
+    /// seconds ahead on resume. A hand resting over the bin across a pause must
+    /// not have its dwell completed for it. Uses the shipped cap, not the test one.
+    @Test func aPausedSceneDoesNotCompleteTheDwell() {
+        var detector = HoverDetector()
+        _ = detector.update(isHovering: true, now: 0)
+
+        let afterPause = detector.update(isHovering: true, now: 30)
+
+        #expect(!afterPause)
     }
 
-    /// Starting with the hands already together must not fire — otherwise
-    /// simply raising both hands into frame would discard the plate.
-    @Test func handsAlreadyTogetherOnFirstFrameDoNotFire() {
-        var detector = ClapDetector()
-        #expect(!clap(&detector, at: plate, separation: 40, now: 0))
+    /// `progress` drives the ring around the bin, so it has to track the dwell
+    /// and clear the moment the hand leaves.
+    @Test func progressTracksTheDwellAndClearsOnLeaving() {
+        var detector = detector()
+        _ = detector.update(isHovering: true, now: 0)
+        _ = detector.update(isHovering: true, now: 1.0)
+        #expect(abs(detector.progress - 0.5) < 0.001)
+
+        _ = detector.update(isHovering: false, now: 1.1)
+        #expect(detector.progress == 0)
+    }
+}
+
+struct FormatRankingTests {
+
+    /// Every resolution of one sensor reports the same field of view, so this
+    /// last term is what actually chooses the format. Ranking it lowest-first
+    /// is what fed a 640×480 image to a full-screen Retina preview.
+    @Test func higherResolutionWinsAtEqualFieldOfView() {
+        let low = HandPoseManager.ranking(horizontalFieldOfView: 54, width: 640, height: 480)
+        let high = HandPoseManager.ranking(horizontalFieldOfView: 54, width: 1920, height: 1440)
+
+        #expect(high > low)
     }
 
-    /// A hand leaving frame disarms, so the gesture can't complete across a
-    /// gap where only one hand was visible.
-    @Test func disarmingBlocksACompletingClap() {
-        var detector = ClapDetector()
-        _ = clap(&detector, at: plate, separation: 300, now: 0)
-        detector.disarm()
-        #expect(!clap(&detector, at: plate, separation: 40, now: 0.3))
+    /// A 4:3 format sees more vertically than a 16:9 one at the same
+    /// horizontal angle, and the game is played in portrait — so height beats
+    /// raw pixel count even though the 16:9 format is nominally larger.
+    @Test func tallerFrameOutranksResolution() {
+        let fourThree = HandPoseManager.ranking(horizontalFieldOfView: 54, width: 640, height: 480)
+        let sixteenNine = HandPoseManager.ranking(horizontalFieldOfView: 54, width: 1920, height: 1080)
+
+        #expect(fourThree > sixteenNine)
     }
 
-    /// Distances scale with apparent hand size, so the same gesture works up
-    /// close and far away.
-    @Test func thresholdsScaleWithHandSize() {
-        var far = ClapDetector()
-        let smallSpan: CGFloat = 40
-        func step(_ separation: CGFloat, _ now: TimeInterval) -> Bool {
-            far.update(
-                left: CGPoint(x: plate.x - separation / 2, y: plate.y),
-                right: CGPoint(x: plate.x + separation / 2, y: plate.y),
-                span: smallSpan, bothHandsEmpty: true,
-                target: plate, targetRadius: plateReach, now: now
-            )
-        }
-        _ = step(120, 0)                       // 3× span apart → arms
-        #expect(step(20, 0.3))                 // 0.5× span → clap
+    /// Horizontal angle dominates both other terms: seeing the player's hands
+    /// at all matters more than seeing them sharply.
+    @Test func widerLensOutranksEverythingElse() {
+        let narrowButSharp = HandPoseManager.ranking(horizontalFieldOfView: 54, width: 1920, height: 1440)
+        let wideButSoft = HandPoseManager.ranking(horizontalFieldOfView: 106, width: 640, height: 480)
+
+        #expect(wideButSoft > narrowButSharp)
+    }
+
+    /// A format that reports nothing usable must not outrank a real one.
+    @Test func unusableFormatRanksLast() {
+        let broken = HandPoseManager.ranking(horizontalFieldOfView: 0, width: 0, height: 0)
+        let real = HandPoseManager.ranking(horizontalFieldOfView: 54, width: 640, height: 480)
+
+        #expect(real > broken)
+    }
+}
+
+struct ZoomClampTests {
+
+    /// The framing presets are multiples of the *hardware floor*, not literal
+    /// zoom factors — 1.0 has to land on the floor wherever that sits, or the
+    /// "widest" preset silently crops in on devices whose floor is below 1.
+    @Test func wideMultipleLandsOnTheHardwareFloor() {
+        #expect(HandPoseManager.zoomFactor(multiple: 1.0, widest: 0.5, maximum: 8) == 0.5)
+        #expect(HandPoseManager.zoomFactor(multiple: 1.0, widest: 1.0, maximum: 8) == 1.0)
+    }
+
+    /// The 1× preset is exactly twice the widest view — the same 2× crop
+    /// Apple's Camera app uses to get 1× out of an ultra-wide front sensor.
+    @Test func normalMultipleDoublesTheFloor() {
+        #expect(HandPoseManager.zoomFactor(multiple: 2.0, widest: 0.5, maximum: 8) == 1.0)
+    }
+
+    /// Setting `videoZoomFactor` outside the format's range raises, so both
+    /// ends are clamped rather than trusted.
+    @Test func clampsToBothEnds() {
+        #expect(HandPoseManager.zoomFactor(multiple: 0.1, widest: 1.0, maximum: 8) == 1.0)
+        #expect(HandPoseManager.zoomFactor(multiple: 100, widest: 1.0, maximum: 8) == 8)
     }
 }
 
@@ -400,24 +477,24 @@ struct HandIdentityTests {
 struct GameLoopTests {
 
     @Test func recipesCarryTheSpecifiedScores() {
-        #expect(Recipe.ayamMayo.scoreValue == 15)
-        #expect(Recipe.ayamKeju.scoreValue == 15)
+        #expect(Recipe.chickenMayonnaise.scoreValue == 15)
+        #expect(Recipe.chickenCheese.scoreValue == 15)
         #expect(Recipe.salad.scoreValue == 20)
-        #expect(Recipe.ayamGeprek.scoreValue == 25)
+        #expect(Recipe.chickenGeprek.scoreValue == 25)
     }
 
     /// Swiping down retries the *same* dish — it must not skip to another
     /// recipe or touch the score.
     @Test func discardKeepsTheSameRecipeAndScore() {
-        let manager = GameStateManager(recipes: [.ayamGeprek])
+        let manager = GameStateManager(recipes: [.chickenGeprek])
         manager.start()
-        manager.addIngredientToPlate(.keju) // wrong ingredient
+        manager.addIngredientToPlate(.cheese) // wrong ingredient
         #expect(manager.plateContents.count == 1)
 
         manager.discardPlate()
 
         #expect(manager.plateContents.isEmpty)
-        #expect(manager.currentRecipe == .ayamGeprek)
+        #expect(manager.currentRecipe == .chickenGeprek)
         #expect(manager.score == 0)
     }
 
@@ -437,7 +514,7 @@ struct GameLoopTests {
     @Test func discardBumpsTokenSoTheSceneCanAnimate() {
         let manager = GameStateManager(recipes: [.salad])
         manager.start()
-        manager.addIngredientToPlate(.tomat)
+        manager.addIngredientToPlate(.tomato)
         let tokenBefore = manager.discardToken
 
         manager.discardPlate()
@@ -448,9 +525,9 @@ struct GameLoopTests {
     /// The "Play Again does nothing" bug: restarting has to reset the score and
     /// the plate, and bump the token GameScene keys its board wipe off.
     @Test func restartResetsEverythingAndBumpsResetToken() {
-        let manager = GameStateManager(recipes: [.ayamMayo])
+        let manager = GameStateManager(recipes: [.chickenMayonnaise])
         manager.start()
-        manager.addIngredientToPlate(.ayam)
+        manager.addIngredientToPlate(.chicken)
         let tokenBefore = manager.resetToken
 
         manager.restart()
@@ -464,9 +541,9 @@ struct GameLoopTests {
     }
 
     @Test func servingAwardsTheRecipesOwnScore() async throws {
-        let manager = GameStateManager(recipes: [.ayamGeprek])
+        let manager = GameStateManager(recipes: [.chickenGeprek])
         manager.start()
-        for ingredient in Recipe.ayamGeprek.ingredients {
+        for ingredient in Recipe.chickenGeprek.ingredients {
             manager.addIngredientToPlate(ingredient)
         }
         #expect(manager.state == .dishComplete)
@@ -477,13 +554,13 @@ struct GameLoopTests {
         let cue = try #require(manager.swipeCueDirection)
         manager.handleSwipe(cue)
 
-        #expect(manager.score == 25, "Ayam Geprek is worth 25, not a flat 1")
+        #expect(manager.score == 25, "Chicken Geprek is worth 25, not a flat 1")
     }
 
     @Test func swipingTheWrongWayScoresNothing() async throws {
-        let manager = GameStateManager(recipes: [.ayamMayo])
+        let manager = GameStateManager(recipes: [.chickenMayonnaise])
         manager.start()
-        for ingredient in Recipe.ayamMayo.ingredients {
+        for ingredient in Recipe.chickenMayonnaise.ingredients {
             manager.addIngredientToPlate(ingredient)
         }
         try await Task.sleep(for: .milliseconds(1200))
@@ -497,10 +574,10 @@ struct GameLoopTests {
 
     /// A wrong ingredient must not complete the dish.
     @Test func wrongIngredientDoesNotComplete() {
-        let manager = GameStateManager(recipes: [.ayamMayo])
+        let manager = GameStateManager(recipes: [.chickenMayonnaise])
         manager.start()
-        manager.addIngredientToPlate(.ayam)
-        manager.addIngredientToPlate(.keju) // should have been mayo
+        manager.addIngredientToPlate(.chicken)
+        manager.addIngredientToPlate(.cheese) // should have been mayo
         #expect(manager.state == .cooking)
     }
 }
@@ -508,26 +585,26 @@ struct GameLoopTests {
 struct RecipeMatchingTests {
 
     @Test func exactMultisetMatches() {
-        #expect(GameStateManager.matches(plateContents: [.ayam, .sambal, .timun], recipe: .ayamGeprek))
+        #expect(GameStateManager.matches(plateContents: [.chicken, .chili, .cucumber], recipe: .chickenGeprek))
     }
 
     @Test func orderDoesNotMatter() {
-        #expect(GameStateManager.matches(plateContents: [.timun, .ayam, .sambal], recipe: .ayamGeprek))
+        #expect(GameStateManager.matches(plateContents: [.cucumber, .chicken, .chili], recipe: .chickenGeprek))
     }
 
     @Test func extraIngredientFails() {
-        #expect(!GameStateManager.matches(plateContents: [.selada, .timun, .tomat, .mayonaise, .keju], recipe: .salad))
+        #expect(!GameStateManager.matches(plateContents: [.lettuce, .cucumber, .tomato, .mayonnaise, .cheese], recipe: .salad))
     }
 
     @Test func missingIngredientFails() {
-        #expect(!GameStateManager.matches(plateContents: [.selada, .timun], recipe: .salad))
+        #expect(!GameStateManager.matches(plateContents: [.lettuce, .cucumber], recipe: .salad))
     }
 
-    /// Ayam Mayo and Ayam Keju share a chicken but differ by one item, so a
+    /// Chicken Mayonnaise and Chicken Cheese share a chicken but differ by one item, so a
     /// plate for one must never satisfy the other.
     @Test func similarRecipesDoNotCrossMatch() {
-        #expect(!GameStateManager.matches(plateContents: [.ayam, .keju], recipe: .ayamMayo))
-        #expect(!GameStateManager.matches(plateContents: [.ayam, .mayonaise], recipe: .ayamKeju))
+        #expect(!GameStateManager.matches(plateContents: [.chicken, .cheese], recipe: .chickenMayonnaise))
+        #expect(!GameStateManager.matches(plateContents: [.chicken, .mayonnaise], recipe: .chickenCheese))
     }
 
     /// Every recipe's own ingredient list must satisfy it — cheap guard against

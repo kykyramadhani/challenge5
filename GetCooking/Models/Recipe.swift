@@ -33,7 +33,7 @@ extension Recipe {
         name: "Salad",
         ingredients: [.lettuce, .cucumber, .tomato, .mayonnaise],
         scoreValue: 20,
-        finishedDishImageName: "Salad"
+        finishedDishImageName: "salad"
     )
 
     static let chickenGeprek = Recipe(

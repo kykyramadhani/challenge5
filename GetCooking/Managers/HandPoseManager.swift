@@ -54,20 +54,46 @@ final class HandPoseManager: NSObject, ObservableObject {
     /// Left at 1.0 the player can stand back and still have both hands, the
     /// counter and their torso in frame, which is what the grab-and-drag game
     /// needs — the default zoom AVFoundation picks is noticeably tighter.
+    ///
+    /// Driven by `fieldOfView` once the HUD toggle is used.
     var previewZoomFactor: CGFloat = 1.0
+
+    /// The two framings the HUD toggle compares.
+    ///
+    /// Deliberately a zoom crop rather than a lens swap: a front camera is a
+    /// single ultra-wide sensor, and Apple's own Camera app produces its
+    /// 0.5×/1× choice by cropping into it too. Swapping `AVCaptureDevice`s
+    /// would do nothing here, since there is only one front device to pick.
+    enum FieldOfView: CaseIterable {
+        /// Everything the sensor can see — what the game ships with.
+        case wide
+        /// The 2× crop of it that reads as a conventional 1× selfie camera.
+        case normal
+
+        /// Multiple of the hardware's widest zoom.
+        var zoomMultiple: CGFloat { self == .wide ? 1.0 : 2.0 }
+        var label: String { self == .wide ? "0.5×" : "1×" }
+    }
+
+    @Published private(set) var fieldOfView: FieldOfView = .wide
 
     /// How the feed is fitted to the screen.
     ///
-    /// `.resizeAspect` shows the *entire* frame — the widest view the camera
-    /// has, the way Photo Booth shows it — with letterbox bars wherever the
-    /// frame's aspect doesn't match the screen's. `.resizeAspectFill` fills the
-    /// screen instead and throws away everything that overflows, which on a
-    /// 19.5:9 phone is close to 40% of a 4:3 frame: no amount of widening the
-    /// lens survives that crop, so fitting is the default.
+    /// `.resizeAspectFill` scales the frame to cover the screen and crops
+    /// whatever overflows. `.resizeAspect` would show the *entire* frame
+    /// instead, but leaves letterbox bars wherever the frame's aspect doesn't
+    /// match the screen's — and nothing paints those bars, so they pick up the
+    /// SwiftUI background and render as a white slab under the plate and bin.
+    ///
+    /// Filling costs roughly 7% of the frame's width on an iPad, which is
+    /// cheap. It costs close to 40% on a 19.5:9 phone, where it starts pushing
+    /// the player's hands out of frame.
+    /// ponytail: one gravity for every device; choose it per screen aspect at
+    /// runtime if this ever ships on phones.
     ///
     /// Both `CameraPreviewView` and the hand → screen mapping below read this
     /// one property, so the skeleton can never disagree with the image.
-    var previewGravity: AVLayerVideoGravity = .resizeAspect
+    var previewGravity: AVLayerVideoGravity = .resizeAspectFill
 
     /// Whether to switch Center Stage off for this app.
     ///
@@ -235,6 +261,49 @@ final class HandPoseManager: NSObject, ObservableObject {
     /// Call after consuming `lastSwipe` so the same swipe isn't handled twice.
     func clearSwipe() {
         lastSwipe = nil
+    }
+
+    /// Flips the preview between the widest view and a conventional 1× crop,
+    /// for comparing how much of the room each framing actually gets.
+    ///
+    /// Takes effect on the live session — `videoZoomFactor` is settable while
+    /// running, so nothing has to be torn down. `previewZoomFactor` is kept in
+    /// step so a later reconfigure lands on the same framing.
+    func toggleFieldOfView() {
+        let next: FieldOfView = fieldOfView == .wide ? .normal : .wide
+        fieldOfView = next
+        previewZoomFactor = next.zoomMultiple
+        applyZoom(next.zoomMultiple)
+    }
+
+    /// Applies a zoom given as a multiple of the hardware's widest setting,
+    /// clamped to what the active format actually allows.
+    private func applyZoom(_ multiple: CGFloat) {
+        sessionQueue.async { [weak self] in
+            guard let self,
+                  let device = (self.captureSession.inputs.first as? AVCaptureDeviceInput)?.device
+            else { return }
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                let widest = device.minAvailableVideoZoomFactor
+                device.videoZoomFactor = Self.zoomFactor(
+                    multiple: multiple,
+                    widest: widest,
+                    maximum: device.maxAvailableVideoZoomFactor
+                )
+                #if DEBUG
+                print("""
+                    [HandPoseManager] zoom ×\(multiple) → \(device.videoZoomFactor) \
+                    (floor \(widest)), \(Int(device.activeFormat.videoFieldOfView))° h-FOV
+                    """)
+                #endif
+            } catch {
+                #if DEBUG
+                print("[HandPoseManager] couldn't change zoom: \(error.localizedDescription)")
+                #endif
+            }
+        }
     }
 
     // MARK: - Coordinate mapping
@@ -430,7 +499,9 @@ final class HandPoseManager: NSObject, ObservableObject {
     /// 4:3 format beats a 16:9 one of the same width. A 16:9 format is usually
     /// the *same* horizontal view with the top and bottom sliced off, so the
     /// tie-break is a free gain in portrait and costs nothing in landscape.
-    /// Lowest resolution wins any remaining tie, to keep Vision cheap.
+    /// Highest resolution wins any remaining tie — the preview is full-screen
+    /// on a Retina panel, so a small format is visibly soft. The cost stays
+    /// bounded by `maximumCaptureWidth`, which is what keeps Vision affordable.
     static func selectWidestFormat(
         on device: AVCaptureDevice,
         zoom: CGFloat,
@@ -467,9 +538,10 @@ final class HandPoseManager: NSObject, ObservableObject {
             // the difference between a head-and-shoulders crop and a view with
             // both hands in it.
             let widestZoom = device.minAvailableVideoZoomFactor
-            device.videoZoomFactor = min(
-                max(widestZoom * max(zoom, 0.01), widestZoom),
-                device.maxAvailableVideoZoomFactor
+            device.videoZoomFactor = zoomFactor(
+                multiple: zoom,
+                widest: widestZoom,
+                maximum: device.maxAvailableVideoZoomFactor
             )
 
             #if DEBUG
@@ -491,21 +563,50 @@ final class HandPoseManager: NSObject, ObservableObject {
         }
     }
 
+    /// Turns a zoom given as a *multiple of the widest the hardware allows*
+    /// into an actual `videoZoomFactor`, clamped to the active format.
+    ///
+    /// The multiple is what the rest of the code reasons in: 1.0 is "as wide
+    /// as this camera goes" wherever the floor happens to sit, which differs
+    /// per device and moves when Center Stage is on. Dropping below the floor
+    /// or above the ceiling raises, so both ends are clamped.
+    static func zoomFactor(multiple: CGFloat, widest: CGFloat, maximum: CGFloat) -> CGFloat {
+        min(max(widest * max(multiple, 0.01), widest), maximum)
+    }
+
     /// How much of the room a format sees, as `(horizontal°, vertical°,
-    /// -pixelWidth)` — compared lexicographically, so each term only breaks a
+    /// pixelWidth)` — compared lexicographically, so each term only breaks a
     /// tie in the one before it.
+    static func ranking(of format: AVCaptureDevice.Format) -> (CGFloat, CGFloat, CGFloat) {
+        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+        return ranking(
+            horizontalFieldOfView: CGFloat(format.videoFieldOfView),
+            width: dimensions.width,
+            height: dimensions.height
+        )
+    }
+
+    /// The ordering itself, split out from the `AVCaptureDevice.Format`
+    /// overload above because a format can't be constructed in a test.
     ///
     /// AVFoundation reports only the horizontal angle; the vertical one follows
     /// from the frame's aspect ratio through the same pinhole projection.
-    static func ranking(of format: AVCaptureDevice.Format) -> (CGFloat, CGFloat, CGFloat) {
-        let horizontal = CGFloat(format.videoFieldOfView)
-        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-        guard dimensions.width > 0, horizontal > 0 else { return (horizontal, 0, 0) }
+    ///
+    /// Resolution ranks **highest-first**. Every resolution of one sensor
+    /// reports the same field of view, so this last term is what actually
+    /// picks the format — ranking it lowest-first is what fed a 640×480 image
+    /// to a full-screen Retina preview and made the feed look blurry.
+    static func ranking(
+        horizontalFieldOfView horizontal: CGFloat,
+        width: Int32,
+        height: Int32
+    ) -> (CGFloat, CGFloat, CGFloat) {
+        guard width > 0, horizontal > 0 else { return (horizontal, 0, CGFloat(width)) }
 
-        let aspect = CGFloat(dimensions.height) / CGFloat(dimensions.width)
+        let aspect = CGFloat(height) / CGFloat(width)
         let halfHorizontal = horizontal * .pi / 360   // degrees → half-angle in radians
         let vertical = 2 * atan(tan(halfHorizontal) * aspect) * 180 / .pi
-        return (horizontal, vertical, -CGFloat(dimensions.width))
+        return (horizontal, vertical, CGFloat(width))
     }
 
     /// True when the app is running on a Mac rather than an iPhone/iPad.

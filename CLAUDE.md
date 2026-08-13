@@ -83,9 +83,10 @@ GetCooking/
                                  plate commit/release/discard (extension)
     Components/
       IngredientNode.swift      SKNode: food sprite + bubble overlay sprite
-    ClapDetector.swift          standalone two-hand clap gesture detector
-                                 (kept out of GameScene so it's unit-testable
-                                 without a live SpriteKit view)
+    HoverDetector.swift         standalone dwell-timer gesture detector, used
+                                 for "hold a hand over the bin to dump the
+                                 plate" (kept out of GameScene so it's
+                                 unit-testable without a live SpriteKit view)
 
   Support/               Small stateless helpers
     CGPoint+Distance.swift   vc_distance / vc_clamped (vc_ prefix avoids
@@ -173,14 +174,6 @@ lighting, not treated as fixed.
 
 ## Known issues
 
-- **`GetCookingTests.swift` does not compile against current models.** It
-  references `Recipe.ayamMayo`, `.ayamKeju`, `.ayamGeprek` and
-  `Ingredient.ayam`, `.keju`, `.sambal`, `.timun`, `.selada`, `.tomat`,
-  `.mayonaise` (Indonesian names) — the current `Ingredient`/`Recipe` types
-  use English names (`chicken`, `cheese`, `chili`, `cucumber`, `lettuce`,
-  `mayonnaise`, `tomato` / `chickenMayonnaise`, `chickenCheese`, `salad`,
-  `chickenGeprek`). Looks like a rename happened after the tests were
-  written. Needs a find/replace pass before the test target will build.
 - `Resources/*.png` (loose files, e.g. `Resources/Cheese.png`) duplicate what's
   already in `Assets.xcassets/*.imageset/` and don't appear to be read by any
   code — `TrimmedArt` always loads by name via `UIImage(named:)`, which reads
@@ -194,9 +187,18 @@ lighting, not treated as fixed.
   `GameStateManager`/`HandPoseManager` where the state machine and the
   hand-math live in one file each, not spread thin.
 - Anything gnarly (coordinate mapping, finger-extension ratio, swipe
-  detection, clap arming) is pulled out as a `static func` or a standalone
-  struct (`ClapDetector`) specifically so it's unit-testable without
+  detection, hover dwell) is pulled out as a `static func` or a standalone
+  struct (`HoverDetector`) specifically so it's unit-testable without
   spinning up SpriteKit/AVFoundation/Vision.
+- `#expect` expands its argument into a closure that captures immutably, so
+  a `mutating` call has to be hoisted into a `let` before the macro — see
+  `HoverDetectorTests`.
+- An asset's lookup name is its **imageset folder name**, not the PNG inside
+  it (`Contents.json`'s `filename` points at the PNG independently), and
+  catalog lookups are **case-sensitive** even though macOS's filesystem is
+  not. `ArtAssetTests.everyReferencedAssetExists` walks every
+  `Ingredient.imageName` and `Recipe.finishedDishImageName` to catch drift —
+  three assets had already silently gone blank this way.
 - Distance/clamp helpers are prefixed `vc_` (`CGPoint.vc_distance`,
   `CGFloat.vc_clamped`) to avoid colliding with other `distance(to:)`
   extensions in scope (there's a second, private one inside

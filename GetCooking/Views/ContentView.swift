@@ -63,6 +63,16 @@ struct ContentView: View {
                                 value: "\(gameStateManager.remainingTime)",
                                 tint: gameStateManager.remainingTime <= 10 ? .red : .primary
                             )
+                            // Debug affordance: A/B the widest framing against
+                            // a conventional 1× crop while playing.
+                            Button {
+                                handPoseManager.toggleFieldOfView()
+                            } label: {
+                                StatBadge(icon: "camera.viewfinder",
+                                          value: handPoseManager.fieldOfView.label)
+                            }
+                            .buttonStyle(.plain)
+
                             PauseButton(isPaused: gameStateManager.isPaused) {
                                 gameStateManager.togglePause()
                             }

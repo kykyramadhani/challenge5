@@ -4,7 +4,7 @@
 //
 //  Handles everything after a dish is complete: showing the finished
 //  dish image, the bell swipe cue, the plate slide-out animation,
-//  plate discard (clap), and committing/releasing ingredients.
+//  plate discard (trash hover), and committing/releasing ingredients.
 //
 
 import SpriteKit
@@ -122,8 +122,8 @@ extension GameScene {
         }
     }
 
-    /// Flings the plate's contents outward when the player claps
-    /// to discard, then respawns the same recipe's ingredients.
+    /// Flings the plate's contents outward when the player holds a hand over
+    /// the bin to discard, then respawns the same recipe's ingredients.
     func discardPlateContents(gameStateManager: GameStateManager) {
         let contents = plateIngredients()
         for (index, node) in contents.enumerated() {
