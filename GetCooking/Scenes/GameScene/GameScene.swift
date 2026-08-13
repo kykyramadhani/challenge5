@@ -36,7 +36,12 @@ final class GameScene: SKScene {
     var ingredientRadius: CGFloat { (shortEdge * 0.17).vc_clamped(to: 68...100) }
 
     let grabSlack: CGFloat = 30
-    let spawnInterval: TimeInterval = 1.0
+
+    /// Gap between one bubble popping in and the next. Staggered rather than
+    /// all-at-once so the table fills in visibly, but a recipe plus its two
+    /// decoys is up to six bubbles — at a full second each the player spent
+    /// the first six seconds of the round waiting for the board.
+    let spawnInterval: TimeInterval = 0.35
     let spawnActionKey = "spawnSequence"
 
     // MARK: - Scene nodes
