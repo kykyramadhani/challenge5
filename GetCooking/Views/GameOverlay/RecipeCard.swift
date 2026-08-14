@@ -15,29 +15,21 @@ import SwiftUI
 struct RecipeCard: View {
     let recipe: Recipe
 
+    private static let iconSize: CGFloat = 100
+    private static let iconSpacing: CGFloat = 24
+
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
 //            Text(recipe.name)
 //                .font(.system(size: 32, weight: .bold))
 //                .foregroundStyle(.accent)
 
-            HStack(spacing: 24) {
-                ForEach(Array(recipe.ingredients.enumerated()), id: \.offset) {
-                    _,
-                    ingredient in
-                    VStack(spacing: 3) {
-                        Image(
-                            uiImage: TrimmedArt.image(
-                                named: ingredient.imageName
-                            ) ?? UIImage()
-                        )
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 100, height: 100)
-                        .shadow(color: .black.opacity(0.55), radius: 4, y: 2)
-                    }
-                }
-            }
+            // The reserve sets the width; the real icons are centred on top of
+            // it. Sizing to the longest possible recipe is what stops the score
+            // and heart cards from sliding whenever the dish changes, and
+            // overlaying keeps a short recipe centred rather than pushed left.
+            widthReserve
+                .overlay { ingredientRow }
         }
         .padding(.horizontal, 30)
         .padding(.vertical, 20)
@@ -49,6 +41,30 @@ struct RecipeCard: View {
             )
         )
 
+    }
+
+    /// The dish's actual ingredients.
+    private var ingredientRow: some View {
+        HStack(spacing: Self.iconSpacing) {
+            ForEach(Array(recipe.ingredients.enumerated()), id: \.offset) { _, ingredient in
+                Image(uiImage: TrimmedArt.image(named: ingredient.imageName) ?? UIImage())
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Self.iconSize, height: Self.iconSize)
+                    .shadow(color: .black.opacity(0.55), radius: 4, y: 2)
+            }
+        }
+    }
+
+    /// Invisible row at the widest a recipe can be, laid out with the same
+    /// metrics as the real one so the two can never disagree.
+    private var widthReserve: some View {
+        HStack(spacing: Self.iconSpacing) {
+            ForEach(0..<Recipe.maxIngredientCount, id: \.self) { _ in
+                Color.clear
+                    .frame(width: Self.iconSize, height: Self.iconSize)
+            }
+        }
     }
 }
 

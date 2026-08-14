@@ -96,8 +96,41 @@ final class HandPoseManager: NSObject, ObservableObject {
     var minimumCaptureWidth: Int32 = 640
     var maximumCaptureWidth: Int32 = 1920
 
-    /// How many hands to track at once.
+    /// How many hands to actually play with — one player, two hands.
     var maximumHandCount = 2
+
+    /// How many hands Vision may report before the single-player filter runs.
+    ///
+    /// Deliberately higher than `maximumHandCount`: a bystander's hand can
+    /// out-score the player's second hand, and if Vision is only ever allowed
+    /// to return two then the hand that gets dropped is the player's own. The
+    /// filter needs spare candidates to choose between.
+    var handCandidateLimit = 4
+
+    /// Whether hands are gated on the body they are attached to.
+    ///
+    /// This is what keeps a bystander out of the game. Costs a second Vision
+    /// pass per frame; turn it off to get that back.
+    var tracksSinglePlayer = true
+
+    /// How far a hand's own wrist may sit from a body's wrist and still count
+    /// as that body's, as a multiple of that body's shoulder span.
+    ///
+    /// Expressed against shoulder span rather than in absolute units so it
+    /// holds at any distance from the camera. Generous, because the two
+    /// detectors disagree slightly about where a wrist is.
+    var wristMatchTolerance: CGFloat = 0.6
+
+    /// How much larger or smaller than the anchor hand another hand may
+    /// measure and still count as the same person's.
+    ///
+    /// Only used as the fallback when no body is found at all — see
+    /// `onePersonHandIndices`.
+    var samePersonScaleTolerance: CGFloat = 1.7
+
+    /// Furthest another hand may sit from the anchor, in normalized units, in
+    /// the same no-body fallback.
+    var samePersonMaxSpan: CGFloat = 0.7
 
     /// Minimum Vision joint confidence to trust a point.
     var jointConfidenceThreshold: Float = 0.25
@@ -167,6 +200,10 @@ final class HandPoseManager: NSObject, ObservableObject {
     private let sessionQueue = DispatchQueue(label: "com.visionchef.camera.session")
     private let videoQueue = DispatchQueue(label: "com.visionchef.camera.video")
     private let handPoseRequest = VNDetectHumanHandPoseRequest()
+
+    /// Runs alongside the hand request on the same frame, so the two share one
+    /// decode of the image rather than each paying for their own.
+    private let bodyPoseRequest = VNDetectHumanBodyPoseRequest()
     private var isConfigured = false
 
     private weak var previewLayer: AVCaptureVideoPreviewLayer?
@@ -199,7 +236,7 @@ final class HandPoseManager: NSObject, ObservableObject {
 
     override init() {
         super.init()
-        handPoseRequest.maximumHandCount = maximumHandCount
+        handPoseRequest.maximumHandCount = handCandidateLimit
     }
 
     // MARK: - Public control
@@ -207,7 +244,7 @@ final class HandPoseManager: NSObject, ObservableObject {
     /// Requests camera permission (if needed) and starts the capture session.
     /// Safe to call multiple times. Call from the main thread (e.g. `.onAppear`).
     func start() {
-        handPoseRequest.maximumHandCount = maximumHandCount
+        handPoseRequest.maximumHandCount = handCandidateLimit
 
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
@@ -647,7 +684,11 @@ final class HandPoseManager: NSObject, ObservableObject {
 
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up)
         do {
-            try handler.perform([handPoseRequest])
+            // One handler, both requests: the image is decoded once.
+            // ponytail: body pose every frame; bodies move far slower than
+            // hands, so run it every 2nd or 3rd frame if this costs too much.
+            try handler.perform(tracksSinglePlayer ? [handPoseRequest, bodyPoseRequest]
+                                                   : [handPoseRequest])
         } catch {
             publishNoHands()
             return
@@ -672,13 +713,43 @@ final class HandPoseManager: NSObject, ObservableObject {
             return
         }
 
-        let hands = matchToTrackedHands(classifications, now: now)
+        // Everyone else in the room is ignored from here on.
+        let bodies = tracksSinglePlayer
+            ? (bodyPoseRequest.results ?? []).compactMap {
+                Self.bodyCandidate(from: $0, jointConfidenceThreshold: jointConfidenceThreshold)
+            }
+            : []
+
+        let keep = Self.playerHandIndices(
+            handWrists: classifications.map(\.wrist),
+            bodies: bodies,
+            wristTolerance: wristMatchTolerance,
+            limit: maximumHandCount
+        ) ?? Self.onePersonHandIndices(
+            // No body to anchor on — a torso cropped out of frame, or the
+            // detector losing the player for a frame. Falling back to the
+            // geometric guess keeps the game playable; blanking every hand
+            // because a shoulder went missing would not.
+            positions: classifications.map(\.location),
+            palmLengths: classifications.map(\.palmLength),
+            maxSpan: samePersonMaxSpan,
+            scaleTolerance: samePersonScaleTolerance,
+            limit: maximumHandCount
+        )
+
+        let hands = matchToTrackedHands(keep.map { classifications[$0] }, now: now)
         DispatchQueue.main.async { self.hands = hands }
     }
 
     /// Result of classifying a single Vision hand observation.
     private struct Classification {
         let location: CGPoint // normalized, Vision space — palm centre
+        /// The hand's own wrist joint. Matched against the *body* detector's
+        /// wrists to work out whose arm this hand is on.
+        let wrist: CGPoint
+        /// Wrist → knuckles, normalized. Doubles as a distance-from-camera
+        /// cue: the same hand twice as far away measures half as long.
+        let palmLength: CGFloat
         let extendedFingerCount: Int
         let skeleton: [[CGPoint]]
     }
@@ -739,9 +810,169 @@ final class HandPoseManager: NSObject, ObservableObject {
 
         return Classification(
             location: centre,
+            wrist: wrist,
+            palmLength: palmLength,
             extendedFingerCount: extendedCount,
             skeleton: skeleton
         )
+    }
+
+    /// One person's worth of body joints, cut down to what the hand filter
+    /// needs. Plain data, so the matching below can be tested without
+    /// fabricating a `VNHumanBodyPoseObservation`.
+    struct BodyCandidate {
+        /// Whichever wrists Vision was confident about — 0, 1 or 2 of them.
+        let wrists: [CGPoint]
+        /// Apparent shoulder span: how near this person is, and the yardstick
+        /// the wrist tolerance is measured in.
+        let scale: CGFloat
+    }
+
+    /// Reduces a Vision body observation to wrists plus a size.
+    ///
+    /// Shoulder span rather than a bounding box of the joints: it barely moves
+    /// with pose, whereas a bounding box grows the moment someone raises their
+    /// arms, which would read as them stepping towards the camera.
+    static func bodyCandidate(
+        from observation: VNHumanBodyPoseObservation,
+        jointConfidenceThreshold: Float
+    ) -> BodyCandidate? {
+        guard let points = try? observation.recognizedPoints(.all) else { return nil }
+
+        func point(_ name: VNHumanBodyPoseObservation.JointName) -> CGPoint? {
+            guard let joint = points[name], joint.confidence >= jointConfidenceThreshold else {
+                return nil
+            }
+            return CGPoint(x: joint.location.x, y: joint.location.y)
+        }
+
+        let wrists = [point(.leftWrist), point(.rightWrist)].compactMap { $0 }
+        guard !wrists.isEmpty else { return nil }
+
+        // Shoulders first; a turned or hunched body can lose one, and neck to
+        // hip is a good enough stand-in for sizing the tolerance.
+        let scale: CGFloat
+        if let left = point(.leftShoulder), let right = point(.rightShoulder) {
+            scale = left.distance(to: right)
+        } else if let neck = point(.neck), let root = point(.root) {
+            scale = neck.distance(to: root)
+        } else {
+            return nil
+        }
+        guard scale > 0 else { return nil }
+
+        return BodyCandidate(wrists: wrists, scale: scale)
+    }
+
+    /// Picks the hands belonging to the player, using the bodies Vision found
+    /// in the same frame.
+    ///
+    /// The player is the **nearest** body — the widest shoulders on screen. A
+    /// hand is kept only when it sits near one of that body's wrists *and* is
+    /// not nearer to somebody else's.
+    ///
+    /// Matching wrist-to-wrist is what makes this hold when the player has only
+    /// one hand up, which pure geometry could not: with nothing of the player's
+    /// to compare against, a lone bystander hand looks exactly like a second
+    /// player hand. Here it is near *their* wrist, so it is theirs.
+    ///
+    /// Returns nil when no usable body was found — the caller's signal to fall
+    /// back rather than blank every hand on screen.
+    static func playerHandIndices(
+        handWrists: [CGPoint],
+        bodies: [BodyCandidate],
+        wristTolerance: CGFloat,
+        limit: Int
+    ) -> [Int]? {
+        guard limit > 0 else { return [] }
+
+        let usable = bodies.filter { $0.scale > 0 && !$0.wrists.isEmpty }
+        guard let player = usable.indices.max(by: { usable[$0].scale < usable[$1].scale })
+        else { return nil }
+
+        let reach = usable[player].scale * wristTolerance
+
+        func nearestWrist(of body: Int, to hand: CGPoint) -> CGFloat {
+            usable[body].wrists.map { $0.distance(to: hand) }.min() ?? .greatestFiniteMagnitude
+        }
+
+        let matched: [(index: Int, distance: CGFloat)] = handWrists.indices.compactMap { index in
+            let hand = handWrists[index]
+
+            let toPlayer = nearestWrist(of: player, to: hand)
+            guard toPlayer <= reach else { return nil }
+
+            // Nearer to someone else's wrist means it is on their arm, even if
+            // it also happens to fall inside the player's reach.
+            let toOthers = usable.indices
+                .filter { $0 != player }
+                .map { nearestWrist(of: $0, to: hand) }
+                .min() ?? .greatestFiniteMagnitude
+            guard toPlayer <= toOthers else { return nil }
+
+            return (index, toPlayer)
+        }
+
+        return matched
+            .sorted { $0.distance < $1.distance }
+            .prefix(limit)
+            .map(\.index)
+    }
+
+    /// Narrows a frame's hands down to the ones that plausibly belong to a
+    /// single person, on geometry alone.
+    ///
+    /// The fallback for when no body is detected. Kept because it degrades
+    /// better than showing nothing, but `playerHandIndices` is the real filter.
+    ///
+    /// Anchored on the **largest palm**, which is the hand nearest the lens and
+    /// therefore the person the iPad is pointed at. Another hand joins it when
+    /// it measures a similar size (so it is at a similar distance) and sits
+    /// close enough to hang off the same body.
+    ///
+    /// Apparent hand size is the load-bearing signal here. Someone standing
+    /// behind the player measures visibly smaller, and no amount of arm-waving
+    /// changes that, whereas position alone can't tell a second player from the
+    /// player's own outstretched hand.
+    ///
+    /// ponytail: geometry only, no notion of *whose* body a hand is on. If two
+    /// people stand shoulder to shoulder at the same distance this will happily
+    /// mix them; pairing hands to torsos needs `VNDetectHumanRectanglesRequest`
+    /// (cheap) or `VNDetectHumanBodyPoseRequest` (a second inference pass per
+    /// frame) — see the note in this method's tests.
+    ///
+    /// Returns indices into the input, anchor first, at most `limit` of them.
+    static func onePersonHandIndices(
+        positions: [CGPoint],
+        palmLengths: [CGFloat],
+        maxSpan: CGFloat,
+        scaleTolerance: CGFloat,
+        limit: Int
+    ) -> [Int] {
+        guard limit > 0, positions.count == palmLengths.count,
+              let anchor = palmLengths.indices.max(by: { palmLengths[$0] < palmLengths[$1] }),
+              palmLengths[anchor] > 0,
+              scaleTolerance >= 1
+        else { return [] }
+
+        let anchorPalm = palmLengths[anchor]
+        let anchorPosition = positions[anchor]
+
+        func distanceToAnchor(_ index: Int) -> CGFloat {
+            positions[index].distance(to: anchorPosition)
+        }
+
+        let sameBody = positions.indices.filter { index in
+            guard index != anchor else { return false }
+            let ratio = palmLengths[index] / anchorPalm
+            guard ratio >= 1 / scaleTolerance, ratio <= scaleTolerance else { return false }
+            return distanceToAnchor(index) <= maxSpan
+        }
+
+        // Nearest first, so if more hands qualify than can be played with, the
+        // ones dropped are the least likely to be the player's own.
+        let ranked = sameBody.sorted { distanceToAnchor($0) < distanceToAnchor($1) }
+        return [anchor] + ranked.prefix(limit - 1)
     }
 
     /// How many fingertips sit at least `threshold` palm-lengths from the

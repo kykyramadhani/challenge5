@@ -9,6 +9,10 @@ import SwiftUI
 
 struct PostGame: View {
     var score: Int
+
+    /// How long the player lasted before running out of lives.
+    var survivedSeconds: Int
+
     var onRestart: () -> Void
     var onMainMenu: () -> Void
 
@@ -36,8 +40,11 @@ struct PostGame: View {
                         Text("SURVIVED")
                             .font(.system(size: 40, weight: .medium))
 
-                        Text("02:46")
-                            .font(.system(size: 128, weight: .bold))
+                        Text(
+                            Duration.seconds(survivedSeconds)
+                                .formatted(.time(pattern: .minuteSecond(padMinuteToLength: 2)))
+                        )
+                        .font(.system(size: 128, weight: .bold))
                     }
                 }
                 .frame(height: 500)
@@ -63,5 +70,5 @@ struct PostGame: View {
 }
 
 #Preview {
-    PostGame(score: 1000, onRestart: {}, onMainMenu: {})
+    PostGame(score: 1000, survivedSeconds: 166, onRestart: {}, onMainMenu: {})
 }
