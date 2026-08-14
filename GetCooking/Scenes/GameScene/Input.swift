@@ -155,7 +155,7 @@ extension GameScene {
         guard !handPoints.isEmpty else { return nil }
 
         var best: (node: IngredientNode, distance: CGFloat)?
-        for node in children.compactMap({ $0 as? IngredientNode })
+        for node in tableIngredients()
         where !node.isOnPlate && node.heldBy == nil {
             let reach = node.radius + grabSlack
             guard let nearest = handPoints.map({ $0.vc_distance(to: node.position) }).min(),

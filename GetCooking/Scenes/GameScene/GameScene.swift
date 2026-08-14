@@ -43,6 +43,9 @@ final class GameScene: SKScene {
     /// the first six seconds of the round waiting for the board.
     let spawnInterval: TimeInterval = 0.35
     let spawnActionKey = "spawnSequence"
+    /// Separate from `spawnActionKey` so discarding a plate mid-spawn cancels
+    /// neither the queued spawns nor, in reverse, the bubbles coming back.
+    let returnActionKey = "returnToTable"
 
     // MARK: - Scene nodes
 
@@ -143,7 +146,7 @@ final class GameScene: SKScene {
 
         if gameStateManager.discardToken != lastDiscardToken {
             lastDiscardToken = gameStateManager.discardToken
-            discardPlateContents(gameStateManager: gameStateManager)
+            returnPlateContentsToTable()
         }
 
         let state = gameStateManager.state
