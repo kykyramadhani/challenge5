@@ -61,25 +61,12 @@ struct GameplayView: View {
 
                         Spacer()
 
-                        HeartCard(hearts: 3)
+                        HeartCard(
+                            hearts: gameStateManager.lives,
+                            total: gameStateManager.startingLives
+                        )
 
                         Spacer()
-
-//                        HStack(spacing: 8) {
-//                            StatBadge(
-//                                icon: "star.fill",
-//                                value: "\(gameStateManager.score)"
-//                            )
-//                            StatBadge(
-//                                icon: "timer",
-//                                value: "\(gameStateManager.remainingTime)",
-//                                tint: gameStateManager.remainingTime <= 10
-//                                    ? .red : .primary
-//                            )
-//                            PauseButton(isPaused: gameStateManager.isPaused) {
-//                                gameStateManager.togglePause()
-//                            }
-//                        }
                     }
 
                     Spacer()
@@ -89,6 +76,7 @@ struct GameplayView: View {
                 if gameStateManager.state == .gameOver {
                     PostGame(
                         score: gameStateManager.score,
+                        survivedSeconds: gameStateManager.elapsedTime,
                         onRestart: { gameStateManager.restart() },
                         onMainMenu: { sceneManager.goToMainMenu() }
                     )

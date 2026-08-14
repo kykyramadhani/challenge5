@@ -36,6 +36,14 @@ final class GameScene: SKScene {
     var resetRadius: CGFloat { (shortEdge * 0.09).vc_clamped(to: 38...60) }
     var ingredientRadius: CGFloat { (shortEdge * 0.17).vc_clamped(to: 68...100) }
 
+    /// Countdown pie for the current dish. Sized and placed off the plate so
+    /// it reads as belonging to it, tucked against the lower right where it
+    /// clears both the bubbles and the finished dish.
+    var dishTimerRadius: CGFloat { plateRadius * 0.36 }
+    var dishTimerHome: CGPoint {
+        CGPoint(x: plateHome.x + plateRadius, y: plateHome.y - plateRadius * 0.85)
+    }
+
     let grabSlack: CGFloat = 30
 
     /// Gap between one bubble popping in and the next. Staggered rather than
@@ -51,6 +59,7 @@ final class GameScene: SKScene {
     // MARK: - Scene nodes
     var plateNode: PlateNode!
     var resetNode: ResetButtonNode!
+    var dishTimerNode: DishTimerNode!
     
     /// Arc drawn around the bin while a discard dwell is charging.
     var resetProgressNode: SKShapeNode?
@@ -103,7 +112,22 @@ final class GameScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         consumeSwipe()
         syncWithGameState(force: false)
+        updateDishTimer()
         updateHandInput(now: currentTime)
+    }
+
+    /// Drives the countdown pie beside the plate.
+    ///
+    /// Read straight off the manager each frame rather than observed: the
+    /// fraction changes continuously, and publishing it would re-render the
+    /// entire SwiftUI HUD for a shape only SpriteKit draws.
+    func updateDishTimer() {
+        guard let gameStateManager, gameStateManager.isTimingDish else {
+            dishTimerNode?.isHidden = true
+            return
+        }
+        dishTimerNode?.isHidden = false
+        dishTimerNode?.update(fraction: gameStateManager.dishTimeFraction)
     }
 
     /// Reads the latest swipe from HandPoseManager and forwards it to
