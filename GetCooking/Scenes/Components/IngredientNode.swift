@@ -10,7 +10,16 @@ import SpriteKit
 
 final class IngredientNode: SKNode {
     let ingredient: Ingredient
-    var isOnPlate = false
+
+    /// Whether this ingredient is sitting in the plate.
+    ///
+    /// Setting it hides the bubble shell — once plated the ingredient should
+    /// read as food on a plate, not as something still floating and grabbable.
+    /// Hidden rather than removed so the node survives going back to the table.
+    var isOnPlate = false {
+        didSet { bubble?.isHidden = isOnPlate }
+    }
+
     /// `HandData.id` of the hand currently holding this, so the other hand
     /// can't grab the same bubble out from under it.
     var heldBy: Int?
@@ -18,6 +27,9 @@ final class IngredientNode: SKNode {
     /// Radius of the bubble. Set by the scene from the screen size — hand
     /// tracking is far too jittery for a small target to be grabbable.
     let radius: CGFloat
+
+    /// The glassy shell drawn over the food. Nil only if the art is missing.
+    private var bubble: SKSpriteNode?
 
     /// How much of the bubble's width the food is allowed to fill. Kept under
     /// 1 so the art sits inside the glassy rim instead of overrunning it.
@@ -42,6 +54,7 @@ final class IngredientNode: SKNode {
             bubble.size = Self.aspectFit(bubbleTexture.size(), into: radius * 2)
             bubble.zPosition = 1
             addChild(bubble)
+            self.bubble = bubble
         }
 
         zPosition = 2
