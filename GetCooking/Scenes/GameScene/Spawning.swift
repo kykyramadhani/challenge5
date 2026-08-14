@@ -32,23 +32,43 @@ extension GameScene {
         run(.sequence(steps), withKey: spawnActionKey)
     }
 
+    /// The overshoot a bubble does as it settles, whether it was just spawned
+    /// or has just floated back off the plate. Shared so the two entrances
+    /// read as the same object arriving.
+    static let bubbleSettle = SKAction.sequence([
+        .scale(to: 1.15, duration: 0.18),
+        .scale(to: 1.0, duration: 0.08)
+    ])
+
+    /// The mirror of `bubbleSettle`: a bubble shrinking away before it is
+    /// replaced somewhere else. Callers time the replacement off this action's
+    /// own `duration`, so the two can never drift apart.
+    static let bubbleVanish = SKAction.group([
+        .scale(to: 0, duration: 0.18),
+        .fadeOut(withDuration: 0.18)
+    ])
+
+    /// Every ingredient loose on the table. The plate's own contents are
+    /// children of `plateContainer`, so they are never in here.
+    func tableIngredients() -> [IngredientNode] {
+        children.compactMap { $0 as? IngredientNode }
+    }
+
     /// Adds a single ingredient bubble with a pop-in animation.
     func popIn(_ ingredient: Ingredient, at point: CGPoint) {
         let node = IngredientNode(ingredient: ingredient, radius: ingredientRadius)
         node.position = point
         node.setScale(0)
         addChild(node)
-        node.run(.sequence([
-            .scale(to: 1.15, duration: 0.18),
-            .scale(to: 1.0, duration: 0.08)
-        ]))
+        node.run(Self.bubbleSettle)
     }
 
     /// Removes every ingredient from the table and plate, and cancels
     /// any queued spawn actions.
     func clearTableIngredientNodes() {
         removeAction(forKey: spawnActionKey)
-        children.compactMap { $0 as? IngredientNode }.forEach { $0.removeFromParent() }
+        removeAction(forKey: returnActionKey)
+        tableIngredients().forEach { $0.removeFromParent() }
         plateIngredients().forEach { $0.removeFromParent() }
         abandonAllDrags()
     }
@@ -69,7 +89,11 @@ extension GameScene {
 
     /// Generates random non-overlapping positions for ingredient
     /// bubbles, keeping clear of the plate, trash bin, and HUD.
-    func scatterPoints(count: Int) -> [CGPoint] {
+    ///
+    /// `avoiding` holds spots that are already taken but aren't being placed
+    /// here — bubbles left floating while the plate is returned to the table.
+    /// They constrain the spacing without being handed back to the caller.
+    func scatterPoints(count: Int, avoiding occupied: [CGPoint] = []) -> [CGPoint] {
         guard size.width > 0, size.height > 0 else {
             return Array(repeating: .zero, count: count)
         }
@@ -90,7 +114,9 @@ extension GameScene {
                 let candidate = CGPoint(x: .random(in: xRange), y: .random(in: yRange))
                 guard candidate.vc_distance(to: plateHome) > minDistanceFromPlate else { continue }
                 guard candidate.vc_distance(to: resetNode.position) > resetRadius + ingredientRadius else { continue }
-                guard points.allSatisfy({ $0.vc_distance(to: candidate) > spacing }) else { continue }
+                guard occupied.allSatisfy({ $0.vc_distance(to: candidate) > spacing }),
+                      points.allSatisfy({ $0.vc_distance(to: candidate) > spacing })
+                else { continue }
                 points.append(candidate)
             }
             return points.count == count ? points : nil

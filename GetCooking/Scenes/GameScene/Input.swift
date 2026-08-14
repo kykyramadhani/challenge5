@@ -65,9 +65,9 @@ extension GameScene {
                 }
             }
 
-            // Drag while fist is held.
+            // Drag while fist is held, pinned inside the frame.
             if state == .fist, let held = tracker.held {
-                held.position = cursor
+                held.position = Self.clamped(cursor, radius: held.radius, in: size)
                 if held.position.vc_distance(to: plateHome) <= plateRadius + held.radius * 0.5 {
                     
                     commitToPlate(held, gameStateManager: gameStateManager)
@@ -156,7 +156,7 @@ extension GameScene {
         guard !handPoints.isEmpty else { return nil }
 
         var best: (node: IngredientNode, distance: CGFloat)?
-        for node in children.compactMap({ $0 as? IngredientNode })
+        for node in tableIngredients()
         where !node.isOnPlate && node.heldBy == nil {
             let reach = node.radius + grabSlack
             guard let nearest = handPoints.map({ $0.vc_distance(to: node.position) }).min(),
@@ -166,6 +166,26 @@ extension GameScene {
             }
         }
         return best?.node
+    }
+
+    // MARK: - Play area
+
+    /// Pins a point far enough inside the scene that a bubble of `radius`
+    /// stays fully on screen.
+    ///
+    /// The cursor itself is deliberately *not* clamped — a hand reaching past
+    /// the edge of the camera's view maps to a point outside the scene, and
+    /// that is honest about where the hand is. It's the ingredient that must
+    /// not follow it out, because once a bubble leaves the frame there is no
+    /// way to reach it again.
+    ///
+    /// `max` on the upper bound because a scene narrower than two radii would
+    /// otherwise build a reversed range, which traps at runtime.
+    static func clamped(_ point: CGPoint, radius: CGFloat, in size: CGSize) -> CGPoint {
+        CGPoint(
+            x: point.x.vc_clamped(to: radius...max(radius, size.width - radius)),
+            y: point.y.vc_clamped(to: radius...max(radius, size.height - radius))
+        )
     }
 
     // MARK: - Cursors
