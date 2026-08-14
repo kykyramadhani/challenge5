@@ -49,33 +49,18 @@ final class HandPoseManager: NSObject, ObservableObject {
     var cameraPosition: AVCaptureDevice.Position = .front
 
     /// Digital zoom, as a multiple of the *widest* zoom the hardware supports.
-    /// 1.0 means "as wide as this camera goes"; 1.5 would crop in by half again.
+    /// 1.0 would be "as wide as this camera goes".
     ///
-    /// Left at 1.0 the player can stand back and still have both hands, the
-    /// counter and their torso in frame, which is what the grab-and-drag game
-    /// needs — the default zoom AVFoundation picks is noticeably tighter.
+    /// Pinned to 2.0, which is the conventional **1×** selfie framing: a front
+    /// camera is a single ultra-wide sensor, and Apple's own Camera app gets
+    /// its 1× the same way, by cropping 2× into the sensor rather than
+    /// switching lens. The full-wide view is deliberately not offered — it
+    /// distorts faces at the edges and puts the player further away than the
+    /// grab targets are tuned for.
     ///
-    /// Driven by `fieldOfView` once the HUD toggle is used.
-    var previewZoomFactor: CGFloat = 1.0
-
-    /// The two framings the HUD toggle compares.
-    ///
-    /// Deliberately a zoom crop rather than a lens swap: a front camera is a
-    /// single ultra-wide sensor, and Apple's own Camera app produces its
-    /// 0.5×/1× choice by cropping into it too. Swapping `AVCaptureDevice`s
-    /// would do nothing here, since there is only one front device to pick.
-    enum FieldOfView: CaseIterable {
-        /// Everything the sensor can see — what the game ships with.
-        case wide
-        /// The 2× crop of it that reads as a conventional 1× selfie camera.
-        case normal
-
-        /// Multiple of the hardware's widest zoom.
-        var zoomMultiple: CGFloat { self == .wide ? 1.0 : 2.0 }
-        var label: String { self == .wide ? "0.5×" : "1×" }
-    }
-
-    @Published private(set) var fieldOfView: FieldOfView = .wide
+    /// The crop costs resolution, which is why `selectWidestFormat` picks the
+    /// largest format available rather than the cheapest.
+    var previewZoomFactor: CGFloat = 2.0
 
     /// How the feed is fitted to the screen.
     ///
@@ -261,49 +246,6 @@ final class HandPoseManager: NSObject, ObservableObject {
     /// Call after consuming `lastSwipe` so the same swipe isn't handled twice.
     func clearSwipe() {
         lastSwipe = nil
-    }
-
-    /// Flips the preview between the widest view and a conventional 1× crop,
-    /// for comparing how much of the room each framing actually gets.
-    ///
-    /// Takes effect on the live session — `videoZoomFactor` is settable while
-    /// running, so nothing has to be torn down. `previewZoomFactor` is kept in
-    /// step so a later reconfigure lands on the same framing.
-    func toggleFieldOfView() {
-        let next: FieldOfView = fieldOfView == .wide ? .normal : .wide
-        fieldOfView = next
-        previewZoomFactor = next.zoomMultiple
-        applyZoom(next.zoomMultiple)
-    }
-
-    /// Applies a zoom given as a multiple of the hardware's widest setting,
-    /// clamped to what the active format actually allows.
-    private func applyZoom(_ multiple: CGFloat) {
-        sessionQueue.async { [weak self] in
-            guard let self,
-                  let device = (self.captureSession.inputs.first as? AVCaptureDeviceInput)?.device
-            else { return }
-            do {
-                try device.lockForConfiguration()
-                defer { device.unlockForConfiguration() }
-                let widest = device.minAvailableVideoZoomFactor
-                device.videoZoomFactor = Self.zoomFactor(
-                    multiple: multiple,
-                    widest: widest,
-                    maximum: device.maxAvailableVideoZoomFactor
-                )
-                #if DEBUG
-                print("""
-                    [HandPoseManager] zoom ×\(multiple) → \(device.videoZoomFactor) \
-                    (floor \(widest)), \(Int(device.activeFormat.videoFieldOfView))° h-FOV
-                    """)
-                #endif
-            } catch {
-                #if DEBUG
-                print("[HandPoseManager] couldn't change zoom: \(error.localizedDescription)")
-                #endif
-            }
-        }
     }
 
     // MARK: - Coordinate mapping
