@@ -8,15 +8,10 @@
 //
 
 import Foundation
-import Combine
 
-enum AppScreen {
-    case mainMenu
-    case game
-}
-
-final class SceneManager: ObservableObject {
-    @Published var currentScreen: AppScreen = .mainMenu
+@Observable
+final class SceneManager {
+    var currentScreen: AppScreen = .mainMenu
 
     func startGame() {
         currentScreen = .game

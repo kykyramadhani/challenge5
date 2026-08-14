@@ -13,21 +13,20 @@ import SpriteKit
 import SwiftUI
 
 struct GameplayView: View {
-    @ObservedObject var sceneManager: SceneManager
+    @Bindable var sceneManager: SceneManager
+
     @StateObject private var handPoseManager = HandPoseManager()
     @StateObject private var gameStateManager = GameStateManager()
+
     @State private var scene = GameScene(size: CGSize(width: 1024, height: 768))
     @State private var showHandSkeleton = true
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                // Layer 1 — camera feed
                 CameraPreviewView(handPoseManager: handPoseManager)
                     .ignoresSafeArea()
 
-                // Layer 1.5 — live hand skeleton, painted onto the camera feed.
-                // Set `showHandSkeleton = false` to hide it during real play.
                 if showHandSkeleton {
                     HandSkeletonView(handPoseManager: handPoseManager)
                         .ignoresSafeArea()
@@ -35,7 +34,8 @@ struct GameplayView: View {
 
                 SpriteView(
                     scene: scene,
-                    options: [.allowsTransparency, .ignoresSiblingOrder]
+                    options: [
+                        .allowsTransparency, .ignoresSiblingOrder]
                 )
                 .ignoresSafeArea()
                 .background(.clear)
@@ -49,29 +49,42 @@ struct GameplayView: View {
                 }
 
                 VStack {
-                    HStack(alignment: .top) {
-                        RecipeCardView(recipe: gameStateManager.currentRecipe)
-                        Spacer(minLength: 12)
-                        HStack(spacing: 8) {
-                            StatBadge(
-                                icon: "star.fill",
-                                value: "\(gameStateManager.score)"
-                            )
-                            StatBadge(
-                                icon: "timer",
-                                value: "\(gameStateManager.remainingTime)",
-                                tint: gameStateManager.remainingTime <= 10
-                                    ? .red : .primary
-                            )
-                            PauseButton(isPaused: gameStateManager.isPaused) {
-                                gameStateManager.togglePause()
-                            }
-                        }
+                    HStack(alignment: .center) {
+
+                        Spacer()
+
+                        PointCard(score: gameStateManager.score)
+
+                        Spacer()
+
+                        RecipeCard(recipe: gameStateManager.currentRecipe)
+
+                        Spacer()
+
+                        HeartCard(hearts: 3)
+
+                        Spacer()
+
+//                        HStack(spacing: 8) {
+//                            StatBadge(
+//                                icon: "star.fill",
+//                                value: "\(gameStateManager.score)"
+//                            )
+//                            StatBadge(
+//                                icon: "timer",
+//                                value: "\(gameStateManager.remainingTime)",
+//                                tint: gameStateManager.remainingTime <= 10
+//                                    ? .red : .primary
+//                            )
+//                            PauseButton(isPaused: gameStateManager.isPaused) {
+//                                gameStateManager.togglePause()
+//                            }
+//                        }
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 10)
+
                     Spacer()
                 }
+                    .ignoresSafeArea()
 
                 if gameStateManager.state == .gameOver {
                     PostGame(
@@ -87,7 +100,9 @@ struct GameplayView: View {
                     CameraPermissionDeniedOverlay()
                 }
             }
+            
         }
+
         .onAppear {
             handPoseManager.start()
             gameStateManager.start()
@@ -102,4 +117,8 @@ struct GameplayView: View {
             scene.isPaused = (state == .gameOver)
         }
     }
+}
+
+#Preview {
+    GameplayView(sceneManager: SceneManager.init())
 }

@@ -11,7 +11,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var sceneManager = SceneManager()
+    @State private var sceneManager = SceneManager()
 
     var body: some View {
         switch sceneManager.currentScreen {
