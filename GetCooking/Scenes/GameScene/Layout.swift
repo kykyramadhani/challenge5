@@ -15,7 +15,7 @@ extension GameScene {
         addChild(plate)
         plateNode = plate
 
-        let reset = ResetButtonNode()
+        let reset = ResetButtonNode(radius: resetRadius)
         addChild(reset)
         resetNode = reset
 

@@ -8,13 +8,15 @@
 import SpriteKit
 
 final class ResetButtonNode: SKNode {
+    let resetRadius: CGFloat
     private let circle: SKShapeNode
     private let arrow: SKSpriteNode
-    private let label: SKLabelNode
 
-    override init() {
+    init(radius: CGFloat) {
+        self.resetRadius = radius
+        
         // Circle
-        circle = SKShapeNode(circleOfRadius: 100)
+        circle = SKShapeNode(circleOfRadius: resetRadius)
         circle.fillColor = SKColor(
             red: 0.56,
             green: 0.51,
@@ -25,7 +27,7 @@ final class ResetButtonNode: SKNode {
         
         // Arrow
         let config = UIImage.SymbolConfiguration(
-            pointSize: 90,
+            pointSize: 50,
             weight: .bold
         )
         
@@ -40,17 +42,12 @@ final class ResetButtonNode: SKNode {
             texture: SKTexture(image: image)
         )
         
-        // Label
-        label = SKLabelNode(text: "Reset")
-        
         super.init()
         
         addChild(circle)
         addChild(arrow)
-        addChild(label)
         
         setupArrow()
-        setupLabel()
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -61,23 +58,6 @@ final class ResetButtonNode: SKNode {
         arrow.color = .white
         arrow.colorBlendFactor = 1.0
         
-        arrow.position = CGPoint(
-            x: 0,
-            y: 0
-        )
-    }
-
-    private func setupLabel() {
-        label.fontName = "Baloo 2"
-        label.fontSize = 52
-        label.fontColor = .black
-        
-        label.horizontalAlignmentMode = .center
-        label.verticalAlignmentMode = .center
-        
-        label.position = CGPoint(
-            x: 0,
-            y: 150
-        )
+        arrow.position = .zero
     }
 }
