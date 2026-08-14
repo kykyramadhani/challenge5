@@ -15,6 +15,12 @@ extension GameScene {
     /// Replaces the ingredient bubbles with the finished dish image
     /// on top of the plate.
     func showFinishedDish(_ recipe: Recipe) {
+        ScuffleCloudAnimator.play(
+            on: self,
+            at: plateHome,
+            width: plateRadius * 3
+        )
+
         if let texture = TrimmedArt.texture(named: recipe.finishedDishImageName)
         {
             let dish = SKSpriteNode(texture: texture)
@@ -45,13 +51,13 @@ extension GameScene {
         if direction == .left {
             // Final position
             targetX = bell.size.width / 2
-            
+
             // Start outside the left edge
             startX = -bell.size.width / 2
         } else {
             // Final position
             targetX = size.width - bell.size.width / 2
-            
+
             // Start outside the right edge
             startX = size.width + bell.size.width / 2
         }
@@ -69,9 +75,12 @@ extension GameScene {
         bell.zPosition = 4
         addChild(bell)
 
-        let animation = BellAnimation.entrance(direction: direction, to: targetPosition)
+        let animation = BellAnimation.entrance(
+            direction: direction,
+            to: targetPosition
+        )
         bell.run(animation)
-        
+
         swipeCueNode = bell
     }
 
@@ -152,11 +161,15 @@ extension GameScene {
 
         // Land clear of the bubbles that are already out, so returning a plate
         // never stacks two ingredients on the same spot.
-        let returning = Array(zip(
-            contents.map(\.ingredient),
-            scatterPoints(count: contents.count,
-                          avoiding: tableIngredients().map(\.position))
-        ))
+        let returning = Array(
+            zip(
+                contents.map(\.ingredient),
+                scatterPoints(
+                    count: contents.count,
+                    avoiding: tableIngredients().map(\.position)
+                )
+            )
+        )
 
         // Clear the plate first — each bubble shrinks away where it sat.
         for node in contents {
@@ -167,14 +180,17 @@ extension GameScene {
 
         // Then they re-enter as fresh bubbles, through the same `popIn` a
         // spawned ingredient uses, so both arrivals look identical.
-        run(.sequence([
-            .wait(forDuration: Self.bubbleVanish.duration),
-            .run { [weak self] in
-                for (ingredient, destination) in returning {
-                    self?.popIn(ingredient, at: destination)
-                }
-            }
-        ]), withKey: returnActionKey)
+        run(
+            .sequence([
+                .wait(forDuration: Self.bubbleVanish.duration),
+                .run { [weak self] in
+                    for (ingredient, destination) in returning {
+                        self?.popIn(ingredient, at: destination)
+                    }
+                },
+            ]),
+            withKey: returnActionKey
+        )
     }
 
     /// All IngredientNodes currently sitting inside the plate container.

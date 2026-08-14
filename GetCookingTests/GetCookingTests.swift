@@ -449,6 +449,205 @@ struct ZoomClampTests {
     }
 }
 
+/// Gating hands on the body they are attached to.
+struct PlayerBodyMatchTests {
+
+    private func body(
+        wrists: [(CGFloat, CGFloat)],
+        shoulders scale: CGFloat
+    ) -> HandPoseManager.BodyCandidate {
+        HandPoseManager.BodyCandidate(
+            wrists: wrists.map { CGPoint(x: $0.0, y: $0.1) },
+            scale: scale
+        )
+    }
+
+    private func keep(
+        hands: [(CGFloat, CGFloat)],
+        bodies: [HandPoseManager.BodyCandidate],
+        limit: Int = 2
+    ) -> [Int]? {
+        HandPoseManager.playerHandIndices(
+            handWrists: hands.map { CGPoint(x: $0.0, y: $0.1) },
+            bodies: bodies,
+            wristTolerance: 0.6,
+            limit: limit
+        )
+    }
+
+    /// Both of the player's hands land on their own wrists.
+    @Test func bothOfThePlayersHandsAreKept() {
+        let kept = keep(
+            hands: [(0.40, 0.50), (0.60, 0.50)],
+            bodies: [body(wrists: [(0.40, 0.50), (0.60, 0.50)], shoulders: 0.30)]
+        )
+
+        #expect(kept.map(Set.init) == Set([0, 1]))
+    }
+
+    /// The case geometry could not do: the player has **one** hand up, so
+    /// there is nothing of theirs to compare a stray hand against. The
+    /// bystander's hand is near their own wrist, so it is theirs, and it goes.
+    @Test func aBystanderIsRejectedEvenWithOnlyOnePlayerHandUp() {
+        let kept = keep(
+            hands: [(0.45, 0.50), (0.80, 0.55)],
+            bodies: [
+                body(wrists: [(0.45, 0.50)], shoulders: 0.30),  // player, near
+                body(wrists: [(0.80, 0.55)], shoulders: 0.12)   // bystander, far
+            ]
+        )
+
+        #expect(kept == [0])
+    }
+
+    /// Even at the same distance — which defeated the geometric filter — the
+    /// hand goes to whichever body's wrist it actually sits on.
+    @Test func twoPeopleSideBySideAreSeparated() {
+        let kept = keep(
+            hands: [(0.35, 0.50), (0.62, 0.50)],
+            bodies: [
+                body(wrists: [(0.35, 0.50)], shoulders: 0.26),  // player
+                body(wrists: [(0.62, 0.50)], shoulders: 0.25)   // neighbour
+            ]
+        )
+
+        #expect(kept == [0], "the neighbour's hand belongs to the neighbour")
+    }
+
+    /// The player is whoever is nearest, not whoever Vision listed first.
+    @Test func theNearestBodyIsThePlayer() {
+        let kept = keep(
+            hands: [(0.20, 0.50), (0.75, 0.50)],
+            bodies: [
+                body(wrists: [(0.20, 0.50)], shoulders: 0.10),  // far, listed first
+                body(wrists: [(0.75, 0.50)], shoulders: 0.32)   // near
+            ]
+        )
+
+        #expect(kept == [1])
+    }
+
+    /// A hand nowhere near any wrist is noise, not a player.
+    @Test func aHandOffAnyBodyIsDropped() {
+        let kept = keep(
+            hands: [(0.05, 0.95)],
+            bodies: [body(wrists: [(0.50, 0.50)], shoulders: 0.20)]
+        )
+
+        #expect(kept?.isEmpty == true)
+    }
+
+    /// Never more hands than the game can play with.
+    @Test func neverReturnsMoreThanTheLimit() {
+        let kept = keep(
+            hands: [(0.40, 0.50), (0.45, 0.50), (0.50, 0.50)],
+            bodies: [body(wrists: [(0.40, 0.50), (0.50, 0.50)], shoulders: 0.40)]
+        )
+
+        #expect(kept?.count == 2)
+    }
+
+    /// No body at all is *not* "no hands" — it tells the caller to fall back,
+    /// so a cropped torso can't freeze the game.
+    @Test func noBodyAsksTheCallerToFallBack() {
+        #expect(keep(hands: [(0.5, 0.5)], bodies: []) == nil)
+    }
+
+    /// A body with no confident wrists is no use for matching either.
+    @Test func aBodyWithoutWristsIsNotUsable() {
+        #expect(keep(hands: [(0.5, 0.5)], bodies: [body(wrists: [], shoulders: 0.3)]) == nil)
+    }
+}
+
+/// The geometry-only fallback, used when no body is detected at all.
+struct OnePersonHandTests {
+
+    /// Shipped numbers.
+    private func keep(
+        _ hands: [(x: CGFloat, y: CGFloat, palm: CGFloat)],
+        limit: Int = 2
+    ) -> [Int] {
+        HandPoseManager.onePersonHandIndices(
+            positions: hands.map { CGPoint(x: $0.x, y: $0.y) },
+            palmLengths: hands.map(\.palm),
+            maxSpan: 0.7,
+            scaleTolerance: 1.7,
+            limit: limit
+        )
+    }
+
+    /// Both of one player's hands survive, however they are ordered.
+    @Test func bothOfThePlayersHandsAreKept() {
+        let kept = keep([(0.4, 0.5, 0.12), (0.6, 0.5, 0.12)])
+
+        #expect(kept.count == 2)
+        #expect(Set(kept) == [0, 1])
+    }
+
+    /// The whole point: someone further back measures smaller, so they lose to
+    /// the player even while Vision is happily reporting them.
+    @Test func aBystanderFurtherBackIsDropped() {
+        let kept = keep([
+            (0.4, 0.5, 0.12),   // player
+            (0.6, 0.5, 0.12),   // player
+            (0.85, 0.6, 0.05)   // bystander, half the apparent size
+        ])
+
+        #expect(Set(kept) == [0, 1], "the bystander must not be tracked")
+    }
+
+    /// A hand the right size but right across the frame is somebody else's.
+    @Test func aHandTooFarAcrossTheFrameIsDropped() {
+        let kept = keep([(0.9, 0.05, 0.12), (0.05, 0.95, 0.12)])
+
+        #expect(kept.count == 1)
+    }
+
+    /// One hand alone is still the player.
+    @Test func aLoneHandIsKept() {
+        #expect(keep([(0.5, 0.5, 0.1)]) == [0])
+    }
+
+    /// Reaching one arm towards the camera makes that hand measurably bigger.
+    /// The depth window has to tolerate that or the game drops the hand the
+    /// player is actively reaching with.
+    @Test func oneHandReachingForwardIsStillTheSamePlayer() {
+        let kept = keep([(0.45, 0.5, 0.10), (0.55, 0.5, 0.16)])
+
+        #expect(kept.count == 2, "1.6× is within the depth window")
+    }
+
+    /// Never hand back more than the game can play with, even when a crowd
+    /// qualifies.
+    @Test func neverReturnsMoreThanTheLimit() {
+        let kept = keep([
+            (0.40, 0.5, 0.12), (0.50, 0.5, 0.12),
+            (0.60, 0.5, 0.12), (0.70, 0.5, 0.12)
+        ])
+
+        #expect(kept.count == 2)
+    }
+
+    @Test func noHandsInMeansNoHandsOut() {
+        #expect(keep([]).isEmpty)
+    }
+
+    /// A hand with no usable palm measurement can't be placed in depth, so it
+    /// can't anchor anything either.
+    @Test func unmeasurableHandsAreIgnored() {
+        #expect(keep([(0.5, 0.5, 0)]).isEmpty)
+    }
+
+    /// Why this is only the fallback: on geometry alone two people side by
+    /// side at the same distance are indistinguishable. `PlayerBodyMatchTests`
+    /// covers the same case correctly, because it knows whose wrist is whose.
+    @Test func mixesTwoPeopleAtTheSameDistance() {
+        let kept = keep([(0.35, 0.5, 0.12), (0.55, 0.5, 0.12)])
+
+        #expect(kept.count == 2, "the body-pose filter is what fixes this")
+    }
+}
+
 struct HandIdentityTests {
 
     private let radius: CGFloat = 0.28
@@ -574,7 +773,8 @@ struct GameLoopTests {
 
         #expect(manager.plateContents.isEmpty)
         #expect(manager.score == 0)
-        #expect(manager.remainingTime == manager.roundDuration)
+        #expect(manager.lives == manager.startingLives)
+        #expect(manager.elapsedTime == 0)
         #expect(manager.state == .cooking)
         #expect(manager.resetToken == tokenBefore + 1,
                 "GameScene clears the board off this token; without it the old ingredients stay")
@@ -619,6 +819,171 @@ struct GameLoopTests {
         manager.addIngredientToPlate(.chicken)
         manager.addIngredientToPlate(.cheese) // should have been mayo
         #expect(manager.state == .cooking)
+    }
+}
+
+struct DishTimerGeometryTests {
+
+    private let radius: CGFloat = 50
+
+    /// Tolerance in points. The arc is drawn as Béziers, so the bounds land a
+    /// hair off the ideal circle.
+    private let slack: CGFloat = 0.5
+
+    @Test func aFullClockCoversTheWholeDisc() {
+        let box = DishTimerNode.wedgePath(radius: radius, fraction: 1).boundingBoxOfPath
+
+        #expect(abs(box.width - radius * 2) < slack)
+        #expect(abs(box.height - radius * 2) < slack)
+    }
+
+    /// Spent time is eaten clockwise from 12 o'clock, so half a clock is the
+    /// *left* half of the disc. This is what pins the start angle and the
+    /// sweep direction — mirror either one and this fails.
+    @Test func halfAClockIsTheLeftHalf() {
+        let box = DishTimerNode.wedgePath(radius: radius, fraction: 0.5).boundingBoxOfPath
+
+        #expect(abs(box.minX + radius) < slack, "reaches the left edge")
+        #expect(abs(box.maxX) < slack, "stops at the centre line")
+        #expect(abs(box.height - radius * 2) < slack, "spans the full height")
+    }
+
+    /// An empty clock draws nothing, leaving the white dial and its rim — the
+    /// timer reads as spent rather than as having disappeared.
+    @Test func anEmptyClockDrawsNothing() {
+        let box = DishTimerNode.wedgePath(radius: radius, fraction: 0).boundingBoxOfPath
+
+        #expect(box.width < slack)
+    }
+}
+
+struct DishTimeLimitTests {
+
+    /// Each dish carries its own assembly budget, so pin the shipped numbers.
+    @Test func everyRecipeDeclaresItsOwnLimit() {
+        #expect(Recipe.chickenMayonnaise.timeLimit == 10)
+        #expect(Recipe.chickenCheese.timeLimit == 10)
+        #expect(Recipe.chickenGeprek.timeLimit == 15)
+        #expect(Recipe.salad.timeLimit == 20)
+    }
+
+    /// Every recipe must be worth some time, or it would fail the instant it
+    /// was dealt.
+    @Test func everyRecipeGetsTimeOnTheClock() {
+        for recipe in Recipe.all {
+            #expect(recipe.timeLimit > 0, "\(recipe.name) has no time limit")
+        }
+    }
+}
+
+@MainActor
+struct LivesTests {
+
+    /// Running the clock out costs a life but keeps the run going, with the
+    /// score intact — the player is being set back, not reset.
+    @Test func aTimedOutDishCostsOneLifeAndDealsAnother() {
+        let manager = GameStateManager(recipes: Recipe.all)
+        manager.start()
+        let recipeBefore = manager.currentRecipe
+
+        manager.failDish()
+
+        #expect(manager.lives == manager.startingLives - 1)
+        #expect(manager.score == 0)
+        #expect(manager.state == .cooking)
+        #expect(manager.currentRecipe != recipeBefore)
+        #expect(manager.plateContents.isEmpty)
+    }
+
+    /// The scene has no state change to notice here — a dish can time out
+    /// while already `.cooking` — so the token is the only signal that the
+    /// board must be wiped for the new recipe.
+    @Test func aTimedOutDishBumpsTheResetToken() {
+        let manager = GameStateManager(recipes: Recipe.all)
+        manager.start()
+        let tokenBefore = manager.resetToken
+
+        manager.failDish()
+
+        #expect(manager.resetToken == tokenBefore + 1)
+    }
+
+    /// The run ends on the last life, and only then — this is the sole way to
+    /// reach `.gameOver` now that the round countdown is gone.
+    @Test func losingTheLastLifeEndsTheRun() {
+        let manager = GameStateManager(recipes: Recipe.all, startingLives: 2)
+        manager.start()
+
+        manager.failDish()
+        #expect(manager.state == .cooking, "one life left, still playing")
+
+        manager.failDish()
+
+        #expect(manager.lives == 0)
+        #expect(manager.state == .gameOver)
+    }
+
+    /// Nothing should keep draining lives after the run is over.
+    @Test func failingAfterGameOverChangesNothing() {
+        let manager = GameStateManager(recipes: Recipe.all, startingLives: 1)
+        manager.start()
+        manager.failDish()
+        #expect(manager.state == .gameOver)
+
+        manager.failDish()
+
+        #expect(manager.lives == 0, "lives must not go negative")
+    }
+
+    /// The clock covers assembly only. Once the plate matches, the ring goes
+    /// away and the dish can no longer time out — otherwise a slow swipe would
+    /// cost the life the player just cooked their way out of.
+    @Test func theClockStopsOnceTheDishIsAssembled() {
+        let manager = GameStateManager(recipes: [.chickenMayonnaise])
+        manager.start()
+        #expect(manager.isTimingDish)
+
+        for ingredient in Recipe.chickenMayonnaise.ingredients {
+            manager.addIngredientToPlate(ingredient)
+        }
+
+        #expect(manager.state == .dishComplete)
+        #expect(!manager.isTimingDish, "serving is not timed")
+    }
+
+    /// ...and picks up again for the next dish, with that dish's own budget.
+    @Test func theClockRestartsForTheNextRecipe() async throws {
+        let manager = GameStateManager(recipes: [.chickenMayonnaise, .salad])
+        manager.start()
+        for ingredient in manager.currentRecipe.ingredients {
+            manager.addIngredientToPlate(ingredient)
+        }
+        try await Task.sleep(for: .milliseconds(1200))
+        #expect(!manager.isTimingDish)
+
+        let cue = try #require(manager.swipeCueDirection)
+        manager.handleSwipe(cue)
+
+        #expect(manager.isTimingDish, "the next dish is on the clock")
+        #expect(manager.dishTimeLimit == manager.currentRecipe.timeLimit)
+        #expect(manager.dishTimeFraction > 0.9, "a fresh dish starts near full")
+    }
+
+    /// Serving is scored and does *not* cost a life, so a clean run keeps all
+    /// three hearts however long it lasts.
+    @Test func servingDoesNotCostALife() async throws {
+        let manager = GameStateManager(recipes: [.chickenMayonnaise, .chickenCheese])
+        manager.start()
+        for ingredient in manager.currentRecipe.ingredients {
+            manager.addIngredientToPlate(ingredient)
+        }
+        try await Task.sleep(for: .milliseconds(1200))
+
+        let cue = try #require(manager.swipeCueDirection)
+        manager.handleSwipe(cue)
+
+        #expect(manager.lives == manager.startingLives)
+        #expect(manager.score > 0)
     }
 }
 
