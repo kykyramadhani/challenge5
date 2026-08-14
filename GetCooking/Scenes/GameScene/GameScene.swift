@@ -9,19 +9,20 @@
 //  that reacts to GameStateManager transitions.
 //
 //  The remaining logic is split across extension files:
-//    GameScene+Layout.swift     – plate, trash bin, positioning
+//    GameScene+Layout.swift     – plate, reset, positioning
 //    GameScene+Spawning.swift   – ingredient bubble creation & placement
 //    GameScene+Serving.swift    – finished dish, bell cue, serve animation
 //    GameScene+HandInput.swift  – hand tracking, grab/release, cursors
 //
 
 import SpriteKit
-import UIKit
+import SwiftUI
 
 final class GameScene: SKScene {
-
+    
     // MARK: - Injected dependencies
-
+    //
+    // Weak so that when the game is finished, it will be de allocated from the memory.
     weak var gameStateManager: GameStateManager?
     weak var handPoseManager: HandPoseManager?
 
@@ -32,7 +33,7 @@ final class GameScene: SKScene {
 
     var shortEdge: CGFloat { min(size.width, size.height) }
     var plateRadius: CGFloat { (shortEdge * 0.17).vc_clamped(to: 70...150) }
-    var trashRadius: CGFloat { (shortEdge * 0.09).vc_clamped(to: 38...60) }
+    var resetRadius: CGFloat { (shortEdge * 0.09).vc_clamped(to: 38...60) }
     var ingredientRadius: CGFloat { (shortEdge * 0.17).vc_clamped(to: 68...100) }
 
     let grabSlack: CGFloat = 30
@@ -40,33 +41,20 @@ final class GameScene: SKScene {
     let spawnActionKey = "spawnSequence"
 
     // MARK: - Scene nodes
-
-    var plateContainer: SKNode!
-    var plateSprite: SKSpriteNode?
-    var plateNode: SKShapeNode?
-    var trashNode: SKShapeNode!
-    var trashLabel: SKLabelNode?
+    var plateNode: PlateNode!
+    var resetNode: ResetButtonNode!
+    
     /// Arc drawn around the bin while a discard dwell is charging.
-    var trashProgressNode: SKShapeNode?
+    var resetProgressNode: SKShapeNode?
     var finishedDishNode: SKNode?
     var swipeCueNode: SKNode?
 
     // MARK: - Hand tracking state
-
-    enum HandState { case unknown, open, fist }
-
-    struct HandTracker {
-        var previousState: HandState = .unknown
-        var held: IngredientNode?
-        var lastSeen: TimeInterval = 0
-    }
-
     var trackers: [Int: HandTracker] = [:]
     var cursorNodes: [Int: SKShapeNode] = [:]
-    var trashHoverDetector = HoverDetector()
+    var resetHoverDetector = HoverDetector()
 
     // MARK: - State-machine bookkeeping
-
     var lastKnownState: GameState?
     var lastResetToken: Int = 0
     var lastDiscardToken: Int = 0
@@ -79,15 +67,17 @@ final class GameScene: SKScene {
     }
 
     // MARK: - Lifecycle
-
     override init(size: CGSize) {
         super.init(size: size)
         scaleMode = .resizeFill
         backgroundColor = .clear
     }
-
+    
+    // When initializing for .sks
     required init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
+        scaleMode = .resizeFill
+        backgroundColor = .clear
     }
 
     override func didMove(to view: SKView) {
@@ -123,7 +113,6 @@ final class GameScene: SKScene {
     }
 
     // MARK: - State machine
-
     /// Polled once per frame. Compares the current GameState against the
     /// last-seen state and runs the appropriate scene transition.
     func syncWithGameState(force: Bool) {

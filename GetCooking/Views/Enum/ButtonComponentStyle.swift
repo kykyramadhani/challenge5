@@ -17,7 +17,7 @@ enum ButtonComponentStyle {
         case .primary:
             return Color("Primary")
         case .text:
-            return .BG
+            return Color.black
         }
     }
     
@@ -26,7 +26,7 @@ enum ButtonComponentStyle {
         case .primary:
             return .BG
         case .text:
-            return .white
+            return .secondary
         }
     }
 }

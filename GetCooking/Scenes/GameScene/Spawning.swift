@@ -8,7 +8,6 @@
 import SpriteKit
 
 extension GameScene {
-
     /// Spawns the recipe's required ingredients plus a couple of
     /// random decoys so the trash bin has a purpose.
     func spawnIngredientsIfNeeded(for recipe: Recipe) {
@@ -63,7 +62,7 @@ extension GameScene {
         swipeCueNode = nil
         spawnedRecipeName = nil
         trackers.removeAll()
-        plateContainer?.position = plateHome
+        plateNode?.position = plateHome
     }
 
     // MARK: - Placement helpers
@@ -90,7 +89,7 @@ extension GameScene {
                 tries += 1
                 let candidate = CGPoint(x: .random(in: xRange), y: .random(in: yRange))
                 guard candidate.vc_distance(to: plateHome) > minDistanceFromPlate else { continue }
-                guard candidate.vc_distance(to: trashNode.position) > trashRadius + ingredientRadius else { continue }
+                guard candidate.vc_distance(to: resetNode.position) > resetRadius + ingredientRadius else { continue }
                 guard points.allSatisfy({ $0.vc_distance(to: candidate) > spacing }) else { continue }
                 points.append(candidate)
             }

@@ -8,11 +8,26 @@
 import SwiftUI
 
 struct PointCard: View {
+    var score: Int
+    
     var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+        HStack {
+            Image(systemName: "star.fill")
+                .font(.system(size: 36, weight: .bold))
+
+            Text("\(score) pts")
+                .font(.system(size: 36, weight: .bold))
+        }
+        .padding(.horizontal, 40)
+        .padding(.vertical, 22)
+        .foregroundStyle(.black)
+        .background(
+            Capsule()
+                .fill(Color("Primary"))
+        )
     }
 }
 
 #Preview {
-    PointCard()
+    PointCard(score: 10)
 }

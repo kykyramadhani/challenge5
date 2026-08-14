@@ -8,11 +8,27 @@
 import SwiftUI
 
 struct HeartCard: View {
+    var hearts : Int
+    
     var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+        HStack {
+            ForEach(1...hearts, id: \.self) {_ in
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 36, weight: .bold))
+                    .foregroundStyle(.accent)
+                
+            }
+        }
+        .padding(.horizontal, 40)
+        .padding(.vertical, 22)
+        .foregroundStyle(.black)
+        .background(
+            Capsule()
+                .fill(Color("Primary"))
+        )
     }
 }
 
 #Preview {
-    HeartCard()
+    HeartCard(hearts: 3)
 }

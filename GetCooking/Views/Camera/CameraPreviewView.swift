@@ -29,7 +29,6 @@ struct CameraPreviewView: UIViewRepresentable {
             connection.isVideoMirrored = true // natural "selfie" view
         }
         
-
         // Rotation is driven by the manager's RotationCoordinator, which needs
         // this layer to compute the horizon-level preview angle.
         handPoseManager.attach(previewLayer: layer)

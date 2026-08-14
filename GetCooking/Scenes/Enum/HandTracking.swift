@@ -6,3 +6,11 @@
 //
 
 import Foundation
+
+enum HandState { case unknown, open, fist }
+
+struct HandTracker {
+    var previousState: HandState = .unknown
+    var held: IngredientNode?
+    var lastSeen: TimeInterval = 0
+}

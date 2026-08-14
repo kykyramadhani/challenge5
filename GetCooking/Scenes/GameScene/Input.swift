@@ -27,7 +27,7 @@ extension GameScene {
               gameStateManager.state == .cooking else {
             abandonAllDrags()
             hideAllCursors()
-            trashHoverDetector.reset()
+            resetHoverDetector.reset()
             updateTrashProgress(0)
             return
         }
@@ -69,6 +69,7 @@ extension GameScene {
             if state == .fist, let held = tracker.held {
                 held.position = cursor
                 if held.position.vc_distance(to: plateHome) <= plateRadius + held.radius * 0.5 {
+                    
                     commitToPlate(held, gameStateManager: gameStateManager)
                     tracker.held = nil
                 }
@@ -96,18 +97,18 @@ extension GameScene {
     /// one hand, and holding still over the bin is not something the player
     /// does by accident while ferrying ingredients into the bowl.
     func detectTrashHover(_ hands: [FrameHand], gameStateManager: GameStateManager, now: TimeInterval) {
-        let reach = trashRadius + grabSlack
+        let reach = resetRadius + grabSlack
 
         // Open *and* empty: on the frame a hand opens to drop a bubble it is
         // still recorded as holding, so this keeps the release itself from
         // counting as the opening frame of a dwell.
         let isHovering = hands.contains {
             $0.isOpen && !$0.isHolding
-                && $0.cursor.vc_distance(to: trashNode.position) <= reach
+                && $0.cursor.vc_distance(to: resetNode.position) <= reach
         }
 
-        let fired = trashHoverDetector.update(isHovering: isHovering, now: now)
-        updateTrashProgress(trashHoverDetector.progress)
+        let fired = resetHoverDetector.update(isHovering: isHovering, now: now)
+        updateTrashProgress(resetHoverDetector.progress)
         if fired { gameStateManager.discardPlate() }
     }
 
@@ -115,13 +116,13 @@ extension GameScene {
     /// two-second wait is invisible and reads as the gesture not working.
     func updateTrashProgress(_ progress: CGFloat) {
         guard progress > 0 else {
-            trashProgressNode?.removeFromParent()
-            trashProgressNode = nil
+            resetProgressNode?.removeFromParent()
+            resetProgressNode = nil
             return
         }
 
         let ring: SKShapeNode
-        if let existing = trashProgressNode {
+        if let existing = resetProgressNode {
             ring = existing
         } else {
             ring = SKShapeNode()
@@ -130,15 +131,15 @@ extension GameScene {
             ring.lineCap = .round
             ring.fillColor = .clear
             ring.zPosition = 2
-            trashNode.addChild(ring)
-            trashProgressNode = ring
+            resetNode.addChild(ring)
+            resetProgressNode = ring
         }
 
         // Sweeps clockwise from 12 o'clock, the way a countdown reads.
         let path = CGMutablePath()
         path.addArc(
             center: .zero,
-            radius: trashRadius + 8,
+            radius: resetRadius + 8,
             startAngle: .pi / 2,
             endAngle: .pi / 2 - .pi * 2 * progress,
             clockwise: true

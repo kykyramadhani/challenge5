@@ -35,5 +35,5 @@ struct ButtonComponent: View {
 }
 
 #Preview {
-    ButtonComponent(name: "Main Menu", icon: "house.fill", action: {}, buttonStyle: .primary)
+    ButtonComponent(name: "Main Menu", icon: "house.fill", action: {}, buttonStyle: .text)
 }

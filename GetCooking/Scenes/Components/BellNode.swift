@@ -6,13 +6,26 @@
 //
 
 import SwiftUI
+import SpriteKit
 
-struct BellNode: View {
-    var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+final class BellNode: SKNode {
+    private let bell: SKSpriteNode
+    public let size: CGSize = CGSize(width: 165, height: 200)
+    
+    init(direction: SwipeDirection) {
+        let imageName = direction == .left
+            ? "LeftBell"
+            : "RightBell"
+        
+        bell = SKSpriteNode(imageNamed: imageName)
+        
+        super.init()
+        
+        bell.size = self.size
+        addChild(bell)
     }
-}
-
-#Preview {
-    BellNode()
+    
+    required init?(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 }
