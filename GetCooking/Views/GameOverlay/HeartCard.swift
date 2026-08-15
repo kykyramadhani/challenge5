@@ -22,7 +22,7 @@ struct HeartCard: View {
             ForEach(0..<max(total, hearts), id: \.self) { index in
                 Image(systemName: index < hearts ? "heart.fill" : "heart")
                     .font(.system(size: 36, weight: .bold))
-                    .foregroundStyle(.accent)
+                    .foregroundStyle(.appAccent)
             }
         }
         .padding(.horizontal, 40)
@@ -30,7 +30,7 @@ struct HeartCard: View {
         .foregroundStyle(.black)
         .background(
             Capsule()
-                .fill(Color("Primary"))
+                .fill(.appPrimary)
         )
     }
 }

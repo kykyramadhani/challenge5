@@ -8,18 +8,26 @@
 //  each time the player starts a game.
 //
 
+import Combine
 import SwiftUI
 
 struct ContentView: View {
     @State private var sceneManager = SceneManager()
 
     var body: some View {
-        switch sceneManager.currentScreen {
-        case .mainMenu:
-            MainMenuView { sceneManager.startGame() }
-        case .game:
-            GameplayView(sceneManager: sceneManager)
+        NavigationStack(path: $sceneManager.path) {
+            MainMenuView(sceneManager: sceneManager)
+                .navigationDestination(for: GameOption.self) { game in
+                    GameOpening(game: game, sceneManager: sceneManager)
+                }
+                .navigationDestination(for: String.self) { destination in
+                    if destination == "gameplay" {
+                        GameplayView(sceneManager: sceneManager)
+                            .navigationBarBackButtonHidden(true)
+                    }
+                }
         }
+        .tint(.appSecondaryText)
     }
 }
 

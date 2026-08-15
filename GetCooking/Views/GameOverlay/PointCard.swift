@@ -23,7 +23,7 @@ struct PointCard: View {
         .foregroundStyle(.black)
         .background(
             Capsule()
-                .fill(Color("Primary"))
+                .fill(.appPrimary)
         )
     }
 }

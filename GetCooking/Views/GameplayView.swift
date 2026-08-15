@@ -78,7 +78,7 @@ struct GameplayView: View {
                         score: gameStateManager.score,
                         survivedSeconds: gameStateManager.elapsedTime,
                         onRestart: { gameStateManager.restart() },
-                        onMainMenu: { sceneManager.goToMainMenu() }
+                        sceneManager: sceneManager 
                     )
                 }
 

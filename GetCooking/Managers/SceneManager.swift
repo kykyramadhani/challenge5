@@ -8,16 +8,24 @@
 //
 
 import Foundation
+import SwiftUI
 
 @Observable
 final class SceneManager {
-    var currentScreen: AppScreen = .mainMenu
+    var path = NavigationPath()
+    var selectedGame : GameOption?
 
-    func startGame() {
-        currentScreen = .game
+    func startGame(game: GameOption) {
+        guard game.isAvailable else { return }
+        selectedGame = game
+        path.append(game)
+    }
+
+    func goToGameplay() {
+        path.append("gameplay")
     }
 
     func goToMainMenu() {
-        currentScreen = .mainMenu
+        path = NavigationPath()
     }
 }

@@ -20,10 +20,6 @@ struct RecipeCard: View {
 
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
-//            Text(recipe.name)
-//                .font(.system(size: 32, weight: .bold))
-//                .foregroundStyle(.accent)
-
             // The reserve sets the width; the real icons are centred on top of
             // it. Sizing to the longest possible recipe is what stops the score
             // and heart cards from sliding whenever the dish changes, and
