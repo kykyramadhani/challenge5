@@ -22,7 +22,7 @@ extension GameScene {
     /// Reads every tracked hand, converts its joints from view space
     /// (top-left origin, y-down) to scene space (bottom-left, y-up),
     /// and runs the grab / drag / release / trash-hover logic.
-    func updateHandInput(now: TimeInterval) {
+    func updateHandInput(now: TimeInterval, delta: TimeInterval = 0) {
         guard let view, let handPoseManager, let gameStateManager,
               gameStateManager.state == .cooking else {
             abandonAllDrags()
@@ -65,20 +65,50 @@ extension GameScene {
                 }
             }
 
-            // Drag while fist is held, pinned inside the frame.
-            if state == .fist, let held = tracker.held {
-                held.position = Self.clamped(cursor, radius: held.radius, in: size)
+            // Carry: follow the hand whatever the pose reads as this frame.
+            // Gating this on `.fist` meant a single misread frame froze the
+            // bubble in mid-air — a visible stutter even when the release
+            // below rides that frame out.
+            //
+            // Eased rather than assigned, so the bubble glides between the
+            // tracker's 30Hz updates instead of stepping to each one.
+            if let held = tracker.held {
+                // Kept on screen, and kept off the reset button: carrying an
+                // ingredient over the control the player is about to need
+                // hides it, and used to delete the ingredient outright.
+                let target = Self.pushedOut(
+                    Self.clamped(cursor, radius: held.radius, in: size),
+                    awayFrom: resetNode.position,
+                    keepOut: resetRadius + held.radius
+                )
+                held.position = held.position.vc_eased(
+                    toward: target,
+                    by: Self.easing(base: dragSmoothing, delta: delta)
+                )
+
                 if held.position.vc_distance(to: plateHome) <= plateRadius + held.radius * 0.5 {
-                    
                     commitToPlate(held, gameStateManager: gameStateManager)
                     tracker.held = nil
+                    tracker.openSince = nil
                 }
             }
 
-            // Release when hand opens.
-            if state == .open, let held = tracker.held {
-                releaseOntoTable(held)
-                tracker.held = nil
+            // Release only once the hand has *stayed* open. Every frame reads
+            // as either fist or open with nothing in between, so acting on the
+            // first open frame drops ingredients the player never let go of.
+            if let held = tracker.held {
+                if state == .open {
+                    let openedAt = tracker.openSince ?? now
+                    tracker.openSince = openedAt
+
+                    if now - openedAt >= releaseDelay {
+                        releaseOntoTable(held)
+                        tracker.held = nil
+                        tracker.openSince = nil
+                    }
+                } else {
+                    tracker.openSince = nil
+                }
             }
 
             tracker.previousState = state
@@ -181,6 +211,53 @@ extension GameScene {
     ///
     /// `max` on the upper bound because a scene narrower than two radii would
     /// otherwise build a reversed range, which traps at runtime.
+    /// Largest frame gap that still eases normally. Past this the scene has
+    /// stalled, and closing a huge fraction of the gap in one go would snap a
+    /// carried bubble across the screen.
+    static let maxEasingDelta: TimeInterval = 0.1
+
+    /// Turns a per-60Hz-frame easing fraction into one for a frame that
+    /// actually lasted `delta`.
+    ///
+    /// `base` is how much of the remaining gap to close in one frame at 60Hz.
+    /// An iPad Pro draws at 120, where frames are half as long — closing the
+    /// same fraction each time would make a dragged bubble twice as twitchy on
+    /// the very device this is tuned on.
+    static func easing(base: CGFloat, delta: TimeInterval) -> CGFloat {
+        guard base > 0 else { return 0 }
+        guard base < 1 else { return 1 }
+
+        // No previous frame to measure against — take the base as given.
+        guard delta > 0 else { return base }
+
+        let elapsed = min(delta, maxEasingDelta)
+        return CGFloat(1 - pow(1 - Double(base), elapsed * 60))
+    }
+
+    /// Nudges a point out to the edge of a circular no-go zone, if it is
+    /// inside one.
+    ///
+    /// Applied after the screen clamp, so in the corner where the reset button
+    /// sits the on-screen rule wins — a bubble pinned just inside the zone is
+    /// a smaller problem than one shoved off the board.
+    static func pushedOut(
+        _ point: CGPoint,
+        awayFrom centre: CGPoint,
+        keepOut: CGFloat
+    ) -> CGPoint {
+        guard keepOut > 0 else { return point }
+
+        let offset = CGPoint(x: point.x - centre.x, y: point.y - centre.y)
+        let distance = hypot(offset.x, offset.y)
+        guard distance < keepOut else { return point }
+
+        // Dead centre leaves no direction to push along; up is as good as any.
+        guard distance > 0 else { return CGPoint(x: centre.x, y: centre.y + keepOut) }
+
+        let scale = keepOut / distance
+        return CGPoint(x: centre.x + offset.x * scale, y: centre.y + offset.y * scale)
+    }
+
     static func clamped(_ point: CGPoint, radius: CGFloat, in size: CGSize) -> CGPoint {
         CGPoint(
             x: point.x.vc_clamped(to: radius...max(radius, size.width - radius)),
@@ -220,9 +297,8 @@ extension GameScene {
     /// in mid-air forever. Hands holding an item get a 0.35s grace
     /// period so brief tracking dropouts don't release mid-drag.
     func retireVanishedHands(stillLive: Set<Int>, now: TimeInterval) {
-        let graceInterval: TimeInterval = 0.35
         for (id, tracker) in trackers where !stillLive.contains(id) {
-            if tracker.held != nil, now - tracker.lastSeen <= graceInterval {
+            if tracker.held != nil, now - tracker.lastSeen <= heldHandGrace {
                 cursorNodes[id]?.isHidden = true
                 continue
             }

@@ -9,5 +9,7 @@ import Foundation
 
 enum AppScreen {
     case mainMenu
+    /// Sitting the player at a workable distance before play starts.
+    case calibration
     case game
 }

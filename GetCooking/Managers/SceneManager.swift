@@ -13,7 +13,14 @@ import Foundation
 final class SceneManager {
     var currentScreen: AppScreen = .mainMenu
 
+    /// Play pressed. The player sits themselves in frame before the game
+    /// itself starts, so this opens the seat check rather than gameplay.
     func startGame() {
+        currentScreen = .calibration
+    }
+
+    /// Seat check passed.
+    func beginPlaying() {
         currentScreen = .game
     }
 
