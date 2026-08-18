@@ -46,6 +46,29 @@ final class GameScene: SKScene {
 
     let grabSlack: CGFloat = 30
 
+    /// How much of the gap to the hand a carried ingredient closes in one
+    /// 60Hz frame.
+    ///
+    /// The tracker publishes at camera rate (30Hz) while the scene draws at 60
+    /// or 120, so assigning the cursor straight to the node makes a dragged
+    /// bubble step rather than glide, and passes every last bit of tracking
+    /// jitter through to it.
+    var dragSmoothing: CGFloat = 0.5
+
+    /// How long a hand must keep reading as open before what it is carrying is
+    /// let go. Short enough to feel immediate, long enough to ride out the
+    /// stray frame where a fist is misread — see `HandTracker.openSince`.
+    var releaseDelay: TimeInterval = 0.18
+
+    /// How long a hand that is carrying something survives Vision losing it.
+    /// Longer than an empty hand gets, because dropping an ingredient is far
+    /// more disruptive than a cursor blinking out.
+    var heldHandGrace: TimeInterval = 0.35
+
+    /// Timestamp of the previous `update(_:)`, for frame-rate independent
+    /// easing. Zero until the first frame has been seen.
+    var lastUpdateTime: TimeInterval = 0
+
     /// Gap between one bubble popping in and the next. Staggered rather than
     /// all-at-once so the table fills in visibly, but a recipe plus its two
     /// decoys is up to six bubbles — at a full second each the player spent
@@ -110,10 +133,13 @@ final class GameScene: SKScene {
     // MARK: - Per-frame update
 
     override func update(_ currentTime: TimeInterval) {
+        let delta = lastUpdateTime > 0 ? currentTime - lastUpdateTime : 0
+        lastUpdateTime = currentTime
+
         consumeSwipe()
         syncWithGameState(force: false)
         updateDishTimer()
-        updateHandInput(now: currentTime)
+        updateHandInput(now: currentTime, delta: delta)
     }
 
     /// Drives the countdown pie beside the plate.

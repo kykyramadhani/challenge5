@@ -138,14 +138,15 @@ extension GameScene {
 
     /// Drops an ingredient back onto the table. If it lands on the
     /// trash bin, it's removed entirely.
+    /// Drops an ingredient back onto the table, wherever the hand left it.
+    ///
+    /// Nothing is destroyed here. This button used to be a bin, and releasing
+    /// over it deleted what you were holding — but it resets the plate now,
+    /// and a control that quietly eats an ingredient you dragged across it is
+    /// just a trap. `updateHandInput` keeps carried bubbles off it anyway.
     func releaseOntoTable(_ node: IngredientNode) {
         node.heldBy = nil
         node.zPosition = 2
-        if node.position.vc_distance(to: resetNode.position) <= resetRadius
-            + node.radius
-        {
-            node.removeFromParent()
-        }
     }
 
     /// Empties the plate by floating its contents back onto the table.
