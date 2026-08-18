@@ -2,13 +2,19 @@
 //  GameplayView.swift
 //  GetCooking
 //
-//  The 3-layer AR stack: camera feed, transparent SpriteKit scene,
-//  and SwiftUI HUD.
+//  Owns the whole in-game flow: first the seat check (for games that need it),
+//  then the 3-layer AR stack — camera feed, transparent SpriteKit scene, and
+//  SwiftUI HUD.
 //
-//  HandPoseManager is handed in — the seat check before this screen is
-//  already using the camera, and rebuilding the capture session here would
-//  stall the app at the worst possible moment. GameStateManager is owned
-//  here, so every run starts fresh.
+//  The seat check runs here as an internal phase rather than as its own
+//  navigation destination. That keeps a single, stable "gameplay" destination
+//  in the NavigationStack: the view swaps its *own* content from the seat check
+//  to the board once calibration passes, so the camera never re-mounts and the
+//  countdown's `.task` fires exactly once, when the board actually appears.
+//
+//  HandPoseManager is handed in — the seat check is already using the camera,
+//  and rebuilding the capture session here would stall the app at the worst
+//  possible moment. GameStateManager is owned here, so every run starts fresh.
 //
 
 import AVFoundation
@@ -24,6 +30,11 @@ struct GameplayView: View {
     @State private var scene = GameScene(size: CGSize(width: 1024, height: 768))
     @State private var showHandSkeleton = true
 
+    /// Flips once the player has passed the seat check. Local to this view, so
+    /// navigation state (SceneManager) stays purely about *which screen*, not
+    /// *how far into the screen* the player is.
+    @State private var hasCalibrated = false
+
     /// Seconds left on the "get ready" beat, counting 3 → 1 and then 0 once
     /// play has begun. The board is already up and the camera live; the game
     /// state machine simply stays `.idle` until this reaches zero, so nothing
@@ -32,18 +43,53 @@ struct GameplayView: View {
 
     private var isCountingDown: Bool { countdown > 0 }
 
+    /// The selected game asks for a seat check and the player hasn't passed it
+    /// yet. Games without calibration skip straight to the board.
+    private var needsCalibration: Bool {
+        sceneManager.selectedGame?.requiresCalibration ?? false
+    }
+
     var body: some View {
+        ZStack {
+            // Backmost layer for the whole screen. It sits *outside* the Group
+            // below, so it stays mounted across the seat-check → board swap —
+            // no camera re-mount, no re-created capture session (that's owned by
+            // HandPoseManager). Both the seat check and the board draw over it.
+            CameraPreviewView(handPoseManager: handPoseManager)
+                .ignoresSafeArea()
+            
+            // Camera comes from ContentView, already running.
+            if showHandSkeleton {
+                BodySkeletonView(handPoseManager: handPoseManager)
+                    .ignoresSafeArea()
+
+                HandSkeletonView(handPoseManager: handPoseManager)
+                    .ignoresSafeArea()
+            }
+
+            Group {
+                if needsCalibration && !hasCalibrated {
+                    SeatCalibrationView(handPoseManager: handPoseManager) {
+                        hasCalibrated = true
+                    }
+                } else {
+                    gameBody
+                }
+            }
+        }
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        // The capture session is started when this screen appears and stopped
+        // when the player leaves gameplay entirely. start() is idempotent, so
+        // the seat check and board calling it again is harmless; the preview
+        // above stays live across their swap because it never leaves the tree.
+        .onAppear { handPoseManager.start() }
+        .onDisappear { handPoseManager.stop() }
+    }
+
+    private var gameBody: some View {
         GeometryReader { proxy in
             ZStack {
-                // Camera comes from ContentView, already running.
-                if showHandSkeleton {
-                    BodySkeletonView(handPoseManager: handPoseManager)
-                        .ignoresSafeArea()
-
-                    HandSkeletonView(handPoseManager: handPoseManager)
-                        .ignoresSafeArea()
-                }
-
                 SpriteView(
                     scene: scene,
                     options: [
@@ -94,7 +140,7 @@ struct GameplayView: View {
                         score: gameStateManager.score,
                         survivedSeconds: gameStateManager.elapsedTime,
                         onRestart: { gameStateManager.restart() },
-                        sceneManager: sceneManager 
+                        sceneManager: sceneManager
                     )
                 }
 
@@ -109,11 +155,16 @@ struct GameplayView: View {
                     CameraPermissionDeniedOverlay()
                 }
             }
-            
         }
-
+        .onAppear {
+            // Idempotent: for a game that skipped calibration this actually
+            // starts the session; after a seat check it just confirms it's
+            // still running.
+            handPoseManager.start()
+        }
         .task {
-            // The camera is already running, handed over by the seat check.
+            // Runs when the board appears — i.e. after calibration. The camera
+            // is already live, handed over by the seat check.
             for step in stride(from: 3, through: 1, by: -1) {
                 countdown = step
                 do {
@@ -124,9 +175,6 @@ struct GameplayView: View {
             }
             countdown = 0
             gameStateManager.start()
-        }
-        .onDisappear {
-            handPoseManager.stop()
         }
         .onChange(of: gameStateManager.isPaused) { _, paused in
             scene.isPaused = paused

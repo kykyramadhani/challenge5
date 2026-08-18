@@ -64,11 +64,6 @@ struct SeatCalibrationView: View {
         // The camera itself is mounted by ContentView and stays put across the
         // handover to the game; this screen only draws over it.
         ZStack {
-            // The player needs to see what the tracker sees to know why they
-            // are not passing yet.
-            BodySkeletonView(handPoseManager: handPoseManager)
-                .ignoresSafeArea()
-
             GeometryReader { proxy in
                 let frame = Self.targetFrame(in: proxy.size)
 
@@ -106,6 +101,7 @@ struct SeatCalibrationView: View {
             }
         }
         .onAppear { handPoseManager.start() }
+        .navigationBarBackButtonHidden(true)
     }
 
     /// Orange underneath, green drawn over the top of it as the dwell fills —
@@ -124,7 +120,7 @@ struct SeatCalibrationView: View {
             RoundedRectangle(cornerRadius: Self.cornerRadius)
                 .trim(from: 0, to: progress)
                 .stroke(
-                    Color("Primary"),
+                    .appPrimary,
                     style: StrokeStyle(lineWidth: Self.borderWidth, lineCap: .round)
                 )
         }
