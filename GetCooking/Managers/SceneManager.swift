@@ -20,12 +20,18 @@ final class SceneManager {
     /// ContentView uses it to keep the shared camera mounted across the
     /// calibration → gameplay handover.
     var isInGameplayFlow = false
+    var isInTutorial = true
 
     func startGame(game: GameOption) {
         guard game.isAvailable else { return }
         selectedGame = game
         isInGameplayFlow = false
         path.append(game)
+    }
+
+    /// Walkthrough read, or skipped.
+    func finishTutorial() {
+        isInTutorial = false
     }
 
     /// Push the game screen. Calibration (if the game needs it) runs *inside*

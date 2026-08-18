@@ -458,6 +458,108 @@ struct ResetButtonExclusionTests {
     }
 }
 
+/// Laying the tutorial artwork out, and putting the Skip hit area on top of
+/// the button that is drawn into it.
+@MainActor
+struct TutorialLayoutTests {
+
+    /// Landscape iPad — wider than the 4:3 artwork.
+    private let landscape = CGSize(width: 1194, height: 834)
+
+    /// Portrait, where the same page has to letterbox the other way.
+    private let portrait = CGSize(width: 834, height: 1194)
+
+    /// Fitted, so the whole page is always visible — nothing is cropped away,
+    /// least of all the Skip button sitting near the edge.
+    @Test func thePageFitsInsideTheScreen() {
+        for screen in [landscape, portrait] {
+            let page = TutorialView.pageRect(in: screen)
+
+            #expect(page.width <= screen.width + 0.001)
+            #expect(page.height <= screen.height + 0.001)
+        }
+    }
+
+    /// Centred, and keeping the artwork's own 4:3 shape.
+    @Test func thePageIsCentredAndKeepsItsAspect() {
+        let page = TutorialView.pageRect(in: landscape)
+
+        #expect(abs(page.midX - landscape.width / 2) < 0.001)
+        #expect(abs(page.midY - landscape.height / 2) < 0.001)
+
+        let drawn = TutorialView.pageSize.width / TutorialView.pageSize.height
+        #expect(abs(page.width / page.height - drawn) < 0.001)
+    }
+
+    /// A screen already at 4:3 wastes nothing.
+    @Test func aMatchingScreenIsFilledCompletely() {
+        let exact = CGSize(width: 1366, height: 1024)
+        let page = TutorialView.pageRect(in: exact)
+
+        #expect(abs(page.width - exact.width) < 0.001)
+        #expect(abs(page.height - exact.height) < 0.001)
+    }
+
+    /// The point of the whole calculation: the hit area must land on the
+    /// artwork, not on the letterbox beside it.
+    @Test func theSkipHotspotSitsOnThePage() {
+        for screen in [landscape, portrait] {
+            let page = TutorialView.pageRect(in: screen)
+            let skip = TutorialView.skipRect(in: screen)
+
+            #expect(page.contains(CGPoint(x: skip.minX, y: skip.minY)))
+            #expect(page.contains(CGPoint(x: skip.maxX, y: skip.maxY)))
+        }
+    }
+
+    /// Bottom left, where the button is drawn.
+    @Test func theSkipHotspotIsBottomLeft() {
+        let page = TutorialView.pageRect(in: landscape)
+        let skip = TutorialView.skipRect(in: landscape)
+
+        #expect(skip.midX < page.midX, "left half")
+        #expect(skip.midY > page.midY, "lower half")
+    }
+
+    /// Same spot on the artwork whatever the screen, since it is measured
+    /// against the page rather than the screen.
+    @Test func theHotspotHoldsItsPlaceOnEveryScreen() {
+        for screen in [landscape, portrait, CGSize(width: 2048, height: 1536)] {
+            let page = TutorialView.pageRect(in: screen)
+            let skip = TutorialView.skipRect(in: screen)
+
+            let relativeX = (skip.midX - page.minX) / page.width
+            let relativeY = (skip.midY - page.minY) / page.height
+
+            #expect(abs(relativeX - TutorialView.skipHotspot.midX) < 0.001)
+            #expect(abs(relativeY - TutorialView.skipHotspot.midY) < 0.001)
+        }
+    }
+
+    /// Every page has to resolve to something drawable, or the walkthrough
+    /// shows a blank screen the player can only tap past.
+    @Test func everyPageHasArtwork() {
+        for step in 1...TutorialView.pageCount {
+            if TutorialView.animatedPages.contains(step) {
+                #expect(
+                    Bundle.main.url(forResource: "Tutorial\(step)", withExtension: "mp4") != nil,
+                    "missing clip for step \(step)"
+                )
+            } else {
+                #expect(
+                    UIImage(named: "Tutorial\(step)") != nil,
+                    "missing image for step \(step)"
+                )
+            }
+        }
+    }
+
+    /// A zero-sized container must not divide by zero.
+    @Test func anEmptyScreenIsHandled() {
+        #expect(TutorialView.pageRect(in: .zero) == .zero)
+    }
+}
+
 struct PlayAreaClampTests {
 
     private let screen = CGSize(width: 834, height: 1194)
