@@ -57,7 +57,7 @@ struct GameplayView: View {
             // HandPoseManager). Both the seat check and the board draw over it.
             CameraPreviewView(handPoseManager: handPoseManager)
                 .ignoresSafeArea()
-            
+
             // Camera comes from ContentView, already running.
             if showHandSkeleton {
                 BodySkeletonView(handPoseManager: handPoseManager)
@@ -68,12 +68,17 @@ struct GameplayView: View {
             }
 
             Group {
-                if needsCalibration && !hasCalibrated {
-                    SeatCalibrationView(handPoseManager: handPoseManager) {
-                        hasCalibrated = true
-                    }
+                if sceneManager.isInTutorial {
+                    TutorialView { sceneManager.finishTutorial() }
+                        .onAppear { handPoseManager.start() }
                 } else {
-                    gameBody
+                    if needsCalibration && !hasCalibrated {
+                        SeatCalibrationView(handPoseManager: handPoseManager) {
+                            hasCalibrated = true
+                        }
+                    } else {
+                        gameBody
+                    }
                 }
             }
         }
@@ -93,7 +98,8 @@ struct GameplayView: View {
                 SpriteView(
                     scene: scene,
                     options: [
-                        .allowsTransparency, .ignoresSiblingOrder]
+                        .allowsTransparency, .ignoresSiblingOrder,
+                    ]
                 )
                 .ignoresSafeArea()
                 .background(.clear)
@@ -133,7 +139,7 @@ struct GameplayView: View {
 
                     Spacer()
                 }
-                    .ignoresSafeArea()
+                .ignoresSafeArea()
 
                 if gameStateManager.state == .gameOver {
                     PostGame(
@@ -170,7 +176,7 @@ struct GameplayView: View {
                 do {
                     try await Task.sleep(for: .seconds(1))
                 } catch {
-                    return // view went away mid-count
+                    return  // view went away mid-count
                 }
             }
             countdown = 0
@@ -186,5 +192,8 @@ struct GameplayView: View {
 }
 
 #Preview {
-    GameplayView(sceneManager: SceneManager(), handPoseManager: HandPoseManager())
+    GameplayView(
+        sceneManager: SceneManager(),
+        handPoseManager: HandPoseManager()
+    )
 }
