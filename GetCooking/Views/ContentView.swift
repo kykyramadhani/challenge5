@@ -20,7 +20,12 @@ struct ContentView: View {
     @State private var sceneManager = SceneManager()
     @StateObject private var handPoseManager = HandPoseManager()
 
-    private var showsCamera: Bool { sceneManager.currentScreen != .mainMenu }
+    /// The tutorial is opaque artwork, so the preview would only burn power
+    /// behind it — but the session is still started there, so the camera is
+    /// warm by the time the seat check needs it.
+    private var showsCamera: Bool {
+        sceneManager.currentScreen == .calibration || sceneManager.currentScreen == .game
+    }
 
     var body: some View {
         ZStack {
@@ -38,6 +43,10 @@ struct ContentView: View {
             case .mainMenu:
                 MainMenuView { sceneManager.startGame() }
                     .onAppear { handPoseManager.stop() }
+
+            case .tutorial:
+                TutorialView { sceneManager.finishTutorial() }
+                    .onAppear { handPoseManager.start() }
 
             case .calibration:
                 SeatCalibrationView(handPoseManager: handPoseManager) {

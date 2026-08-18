@@ -13,9 +13,14 @@ import Foundation
 final class SceneManager {
     var currentScreen: AppScreen = .mainMenu
 
-    /// Play pressed. The player sits themselves in frame before the game
-    /// itself starts, so this opens the seat check rather than gameplay.
+    /// Play pressed. The walkthrough and the seat check both come before
+    /// gameplay, so this opens the first of them rather than the game.
     func startGame() {
+        currentScreen = .tutorial
+    }
+
+    /// Walkthrough read, or skipped.
+    func finishTutorial() {
         currentScreen = .calibration
     }
 
