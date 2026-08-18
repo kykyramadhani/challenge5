@@ -29,6 +29,13 @@ final class HandPoseManager: NSObject, ObservableObject {
     /// by `GameScene`, which calls `clearSwipe()` once handled.
     @Published private(set) var lastSwipe: SwipeDirection?
 
+    /// The player's upper body in normalized Vision space, nil when nobody is
+    /// tracked.
+    ///
+    /// Exactly one body ever appears here: the nearest. Other people in frame
+    /// are never published, however much of them Vision can see.
+    @Published private(set) var playerBody: BodyCandidate?
+
     /// Camera authorization state, surfaced so the UI can prompt the user.
     @Published private(set) var authorizationStatus: AVAuthorizationStatus = .notDetermined
 
@@ -110,8 +117,21 @@ final class HandPoseManager: NSObject, ObservableObject {
     /// Whether hands are gated on the body they are attached to.
     ///
     /// This is what keeps a bystander out of the game. Costs a second Vision
-    /// pass per frame; turn it off to get that back.
+    /// pass; turn it off to get that back entirely.
     var tracksSinglePlayer = true
+
+    /// Run the body detector on one frame in this many, reusing the last
+    /// result in between.
+    ///
+    /// A torso does not move like a hand. At a third of the rate the player's
+    /// shoulders are still where the filter thinks they are, and two thirds of
+    /// the second model's cost comes off the frame budget. Hand pose stays at
+    /// full rate — grabs are frame-sensitive in a way sitting still is not.
+    ///
+    /// Running both models flat out at 1920×1440 kept `videoQueue` busy enough
+    /// that main-thread work waiting on the capture pipeline stalled for
+    /// seconds at a time.
+    var bodyPoseFrameInterval = 3
 
     /// How far a hand's own wrist may sit from a body's wrist and still count
     /// as that body's, as a multiple of that body's shoulder span.
@@ -232,6 +252,15 @@ final class HandPoseManager: NSObject, ObservableObject {
     private var lastSwipeTime: TimeInterval = 0
     private var lastMeasuredBufferSize: CGSize = .zero
 
+    /// videoQueue-local copy of what was last published, so an unchanged body
+    /// doesn't hop onto the main queue every frame.
+    private var lastPublishedBody: BodyCandidate?
+
+    /// Bodies from the most recent frame that actually ran the detector, held
+    /// for the frames in between. See `bodyPoseFrameInterval`.
+    private var lastBodies: [BodyCandidate] = []
+    private var frameCounter = 0
+
     // MARK: - Init
 
     override init() {
@@ -305,6 +334,20 @@ final class HandPoseManager: NSObject, ObservableObject {
                                bufferSize: bufferSize, gravity: previewGravity)
             }
         }
+    }
+
+    /// The player's upper body in view space. Runs through the same mapping as
+    /// the hands, so the two can never disagree about where the player is.
+    func playerBody(in size: CGSize) -> BodyCandidate? {
+        playerBody?.mapped {
+            Self.viewPoint(fromNormalized: $0, viewSize: size,
+                           bufferSize: bufferSize, gravity: previewGravity)
+        }
+    }
+
+    /// The player's body as bone chains in view space, one chain per bone.
+    func bodyChains(in size: CGSize) -> [[CGPoint]] {
+        playerBody(in: size)?.chains ?? []
     }
 
     /// Every joint of a hand in view space, as a flat list.
@@ -682,16 +725,37 @@ final class HandPoseManager: NSObject, ObservableObject {
             DispatchQueue.main.async { self.bufferSize = measured }
         }
 
+        // One handler for whatever runs this frame: the image is decoded once.
+        let runsBodyPose = tracksSinglePlayer
+            && frameCounter % max(bodyPoseFrameInterval, 1) == 0
+        frameCounter &+= 1
+
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up)
         do {
-            // One handler, both requests: the image is decoded once.
-            // ponytail: body pose every frame; bodies move far slower than
-            // hands, so run it every 2nd or 3rd frame if this costs too much.
-            try handler.perform(tracksSinglePlayer ? [handPoseRequest, bodyPoseRequest]
-                                                   : [handPoseRequest])
+            try handler.perform(runsBodyPose ? [handPoseRequest, bodyPoseRequest]
+                                             : [handPoseRequest])
         } catch {
             publishNoHands()
             return
+        }
+
+        // Everyone else in the room is ignored from here on. Resolved before
+        // the hand guards below, so the skeleton keeps up with the player even
+        // in the frames where their hands are down or out of shot — otherwise
+        // the last body drawn would stay frozen on screen.
+        if runsBodyPose {
+            lastBodies = (bodyPoseRequest.results ?? []).compactMap {
+                Self.bodyCandidate(from: $0, jointConfidenceThreshold: jointConfidenceThreshold)
+            }
+        }
+        let bodies = tracksSinglePlayer ? lastBodies : []
+
+        // Publish the nearest body and only that one, so what is drawn is
+        // always exactly who the game is listening to.
+        let player = Self.nearestBody(in: bodies).map { bodies[$0] }
+        if player != lastPublishedBody {
+            lastPublishedBody = player
+            DispatchQueue.main.async { self.playerBody = player }
         }
 
         let observations = handPoseRequest.results ?? []
@@ -712,13 +776,6 @@ final class HandPoseManager: NSObject, ObservableObject {
             publishNoHands()
             return
         }
-
-        // Everyone else in the room is ignored from here on.
-        let bodies = tracksSinglePlayer
-            ? (bodyPoseRequest.results ?? []).compactMap {
-                Self.bodyCandidate(from: $0, jointConfidenceThreshold: jointConfidenceThreshold)
-            }
-            : []
 
         let keep = Self.playerHandIndices(
             handWrists: classifications.map(\.wrist),
@@ -820,19 +877,86 @@ final class HandPoseManager: NSObject, ObservableObject {
     /// One person's worth of body joints, cut down to what the hand filter
     /// needs. Plain data, so the matching below can be tested without
     /// fabricating a `VNHumanBodyPoseObservation`.
-    struct BodyCandidate {
+    /// One person's upper body, cut down to what the game needs. Plain data,
+    /// so the matching below can be tested without fabricating a
+    /// `VNHumanBodyPoseObservation`.
+    ///
+    /// Shoulders only, plus hips when they happen to be in shot. Legs are
+    /// never read: the player is framed from the chest up as often as not, and
+    /// a detector that needs legs would lose them every time they stepped in.
+    struct BodyCandidate: Equatable {
+        /// Nose, or an ear when the head is turned. Used by the seat check —
+        /// not drawn, since the skeleton is shoulders and hips.
+        let head: CGPoint?
+
+        let leftShoulder: CGPoint
+        let rightShoulder: CGPoint
+
+        /// Optional — visible only when the player is framed wide enough. Each
+        /// side stands alone, since a turned body can show just the one.
+        let leftHip: CGPoint?
+        let rightHip: CGPoint?
+
         /// Whichever wrists Vision was confident about — 0, 1 or 2 of them.
+        /// Empty is legitimate: the player is there, their hands are not.
         let wrists: [CGPoint]
+
         /// Apparent shoulder span: how near this person is, and the yardstick
         /// the wrist tolerance is measured in.
-        let scale: CGFloat
+        ///
+        /// Shoulder span rather than a bounding box of the joints. A box grows
+        /// the moment someone raises their arms — which would read as stepping
+        /// towards the camera — and grows again when their legs are in shot,
+        /// which would let a distant full-body bystander outrank a near player.
+        var scale: CGFloat { leftShoulder.distance(to: rightShoulder) }
+
+        /// The bones drawn on screen: the shoulder line, and the sides of the
+        /// torso down to whichever hips are visible.
+        var chains: [[CGPoint]] {
+            var chains = [[leftShoulder, rightShoulder]]
+            if let leftHip { chains.append([leftShoulder, leftHip]) }
+            if let rightHip { chains.append([rightShoulder, rightHip]) }
+            if let leftHip, let rightHip { chains.append([leftHip, rightHip]) }
+            return chains
+        }
+
+        /// The same body with every joint run through `transform` — used to
+        /// carry it from Vision's normalized space into view space, so it can
+        /// be checked against something the player can actually see.
+        func mapped(_ transform: (CGPoint) -> CGPoint) -> BodyCandidate {
+            BodyCandidate(
+                head: head.map(transform),
+                leftShoulder: transform(leftShoulder),
+                rightShoulder: transform(rightShoulder),
+                leftHip: leftHip.map(transform),
+                rightHip: rightHip.map(transform),
+                wrists: wrists.map(transform)
+            )
+        }
+
+        /// Whether the player is sitting the way the game needs: head,
+        /// shoulders and **both hands** inside `frame`, far enough back that
+        /// they all fit, close enough that the shoulders still span a decent
+        /// share of it.
+        ///
+        /// The rest of the body is free to fall outside — only what the game
+        /// actually tracks has to be in shot. Requiring both wrists is what
+        /// makes the guide pose meaningful: hands can only be up in the box
+        /// with the arms raised, which is the pose the silhouette shows.
+        func isAligned(in frame: CGRect, minimumShoulderSpan: CGFloat) -> Bool {
+            guard let head, wrists.count == 2 else { return false }
+
+            let required = [head, leftShoulder, rightShoulder] + wrists
+            guard required.allSatisfy(frame.contains) else { return false }
+
+            return scale >= minimumShoulderSpan
+        }
     }
 
-    /// Reduces a Vision body observation to wrists plus a size.
+    /// Reduces a Vision body observation to the upper body.
     ///
-    /// Shoulder span rather than a bounding box of the joints: it barely moves
-    /// with pose, whereas a bounding box grows the moment someone raises their
-    /// arms, which would read as them stepping towards the camera.
+    /// Both shoulders are required — they are the anchor and the yardstick.
+    /// Everything else is optional.
     static func bodyCandidate(
         from observation: VNHumanBodyPoseObservation,
         jointConfidenceThreshold: Float
@@ -846,22 +970,30 @@ final class HandPoseManager: NSObject, ObservableObject {
             return CGPoint(x: joint.location.x, y: joint.location.y)
         }
 
-        let wrists = [point(.leftWrist), point(.rightWrist)].compactMap { $0 }
-        guard !wrists.isEmpty else { return nil }
+        guard let leftShoulder = point(.leftShoulder),
+              let rightShoulder = point(.rightShoulder),
+              leftShoulder.distance(to: rightShoulder) > 0
+        else { return nil }
 
-        // Shoulders first; a turned or hunched body can lose one, and neck to
-        // hip is a good enough stand-in for sizing the tolerance.
-        let scale: CGFloat
-        if let left = point(.leftShoulder), let right = point(.rightShoulder) {
-            scale = left.distance(to: right)
-        } else if let neck = point(.neck), let root = point(.root) {
-            scale = neck.distance(to: root)
-        } else {
-            return nil
-        }
-        guard scale > 0 else { return nil }
+        return BodyCandidate(
+            // Nose first; an ear carries the head just as well once it turns.
+            head: point(.nose) ?? point(.leftEar) ?? point(.rightEar),
+            leftShoulder: leftShoulder,
+            rightShoulder: rightShoulder,
+            leftHip: point(.leftHip),
+            rightHip: point(.rightHip),
+            wrists: [point(.leftWrist), point(.rightWrist)].compactMap { $0 }
+        )
+    }
 
-        return BodyCandidate(wrists: wrists, scale: scale)
+    /// The body nearest the camera — the widest shoulders on screen.
+    ///
+    /// That one is the player. Everybody else in frame is ignored outright,
+    /// however much of them is visible.
+    static func nearestBody(in bodies: [BodyCandidate]) -> Int? {
+        bodies.indices
+            .filter { bodies[$0].scale > 0 }
+            .max { bodies[$0].scale < bodies[$1].scale }
     }
 
     /// Picks the hands belonging to the player, using the bodies Vision found
@@ -885,15 +1017,16 @@ final class HandPoseManager: NSObject, ObservableObject {
         limit: Int
     ) -> [Int]? {
         guard limit > 0 else { return [] }
+        guard let player = nearestBody(in: bodies) else { return nil }
 
-        let usable = bodies.filter { $0.scale > 0 && !$0.wrists.isEmpty }
-        guard let player = usable.indices.max(by: { usable[$0].scale < usable[$1].scale })
-        else { return nil }
+        let reach = bodies[player].scale * wristTolerance
 
-        let reach = usable[player].scale * wristTolerance
-
+        // A player with no visible wrists legitimately matches nothing: they
+        // are in frame, their hands are not. That returns an empty list rather
+        // than nil, so the caller does *not* fall back — falling back is what
+        // would let a bystander's hands in through the side door.
         func nearestWrist(of body: Int, to hand: CGPoint) -> CGFloat {
-            usable[body].wrists.map { $0.distance(to: hand) }.min() ?? .greatestFiniteMagnitude
+            bodies[body].wrists.map { $0.distance(to: hand) }.min() ?? .greatestFiniteMagnitude
         }
 
         let matched: [(index: Int, distance: CGFloat)] = handWrists.indices.compactMap { index in
@@ -904,8 +1037,8 @@ final class HandPoseManager: NSObject, ObservableObject {
 
             // Nearer to someone else's wrist means it is on their arm, even if
             // it also happens to fall inside the player's reach.
-            let toOthers = usable.indices
-                .filter { $0 != player }
+            let toOthers = bodies.indices
+                .filter { $0 != player && bodies[$0].scale > 0 }
                 .map { nearestWrist(of: $0, to: hand) }
                 .min() ?? .greatestFiniteMagnitude
             guard toPlayer <= toOthers else { return nil }

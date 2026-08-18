@@ -11,19 +11,6 @@ import Combine
 import Foundation
 import QuartzCore
 
-enum GameState: Equatable {
-    /// Before the game has started (e.g. waiting on camera permission).
-    case idle
-    /// Ingredients are on the table; the player is assembling the plate.
-    case cooking
-    /// The plate matched the active recipe; the finished dish is showing.
-    case dishComplete
-    /// A swipe-direction cue is showing; waiting for the player to serve.
-    case waitingForSwipe
-    /// The player ran out of lives; play is over until `restart()`.
-    case gameOver
-}
-
 final class GameStateManager: ObservableObject {
 
     @Published private(set) var state: GameState = .idle
@@ -94,6 +81,37 @@ final class GameStateManager: ObservableObject {
     /// full sweep its fraction is measured against.
     private(set) var dishTimeLimit: TimeInterval = 0
 
+    // MARK: - Difficulty ramp
+    //
+    // The run gets harder the longer it lasts: every few served dishes the
+    // assembly clock is squeezed, so the same recipes have to be built faster.
+    // This lives on served dishes, not elapsed time, so a player who takes it
+    // slow ramps up at the same rate as one who rushes — progress, not the
+    // wall clock, is what raises the stakes.
+
+    /// Dishes successfully served this run. Published so the HUD could show a
+    /// level later; it only changes once per dish, never per frame, so it
+    /// costs no per-frame re-render.
+    @Published private(set) var dishesCompleted: Int = 0
+
+    /// How many served dishes between each speed-up step.
+    private static let dishesPerSpeedUp = 5
+
+    /// How much the clock tightens at each step. 1.25 means each new tier gets
+    /// 1 / 1.25 = 80% of the time the previous tier had for the same dish.
+    private static let speedUpFactor: Double = 1.25
+
+    /// A floor on the squeezed time, so a very long run stays *hard* rather
+    /// than tipping into impossible. Tune or remove to taste.
+    private static let minimumDishTime: TimeInterval = 2.0
+
+    /// The compounding multiplier for the current tier: `speedUpFactor` raised
+    /// to the number of speed-up steps reached so far. 0–4 dishes → 1.0,
+    /// 5–9 → 1.25, 10–14 → 1.5625, and so on.
+    private var difficultyMultiplier: Double {
+        pow(Self.speedUpFactor, Double(dishesCompleted / Self.dishesPerSpeedUp))
+    }
+
     /// Whether the assembly clock is running.
     ///
     /// Only while `.cooking`. The moment the plate matches, the dish is safe:
@@ -141,6 +159,7 @@ final class GameStateManager: ObservableObject {
         isPaused = false
         playClock = 0
         elapsedTime = 0
+        dishesCompleted = 0
         currentRecipe = recipePool.randomElement()!
         beginDishClock()
         resetToken += 1
@@ -183,9 +202,10 @@ final class GameStateManager: ObservableObject {
         if isTimingDish, playClock >= dishDeadline { failDish() }
     }
 
-    /// Puts the current recipe's assembly clock on `playClock`.
+    /// Puts the current recipe's assembly clock on `playClock`, squeezed by
+    /// the current difficulty tier and never dropping below the floor.
     private func beginDishClock() {
-        dishTimeLimit = currentRecipe.timeLimit
+        dishTimeLimit = max(currentRecipe.timeLimit / difficultyMultiplier, Self.minimumDishTime)
         dishDeadline = playClock + dishTimeLimit
     }
 
@@ -237,6 +257,10 @@ final class GameStateManager: ObservableObject {
     func handleSwipe(_ direction: SwipeDirection) {
         guard state == .waitingForSwipe, direction == swipeCueDirection else { return }
         score += currentRecipe.scoreValue
+        // Counts only served dishes — a timed-out dish (failDish) doesn't ramp
+        // difficulty. startNewRound() reads the new count when it begins the
+        // next dish's clock, so the speed-up lands on the very next dish.
+        dishesCompleted += 1
         startNewRound()
     }
 

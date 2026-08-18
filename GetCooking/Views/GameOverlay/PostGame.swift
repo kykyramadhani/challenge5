@@ -9,22 +9,21 @@ import SwiftUI
 
 struct PostGame: View {
     var score: Int
-
-    /// How long the player lasted before running out of lives.
     var survivedSeconds: Int
-
     var onRestart: () -> Void
-    var onMainMenu: () -> Void
+    
+    var sceneManager: SceneManager
 
     var body: some View {
         ZStack {
-            Color.tertiary
-                .ignoresSafeArea()
+            if let imageName = sceneManager.selectedGame?.imageName {
+                BackgroundImage(imageName)
+            }
 
             VStack(spacing: .zero) {
                 HStack {
                     VStack {
-                        Text(score.formatted())
+                        Text(score.formatted(.number))
                             .font(.system(size: 128, weight: .bold))
 
                         Text("SCORE")
@@ -33,7 +32,7 @@ struct PostGame: View {
 
                     Divider()
                         .frame(width: 3)
-                        .background(.text)
+                        .background(.appText)
                         .padding(100)
 
                     VStack {
@@ -60,7 +59,7 @@ struct PostGame: View {
                     ButtonComponent(
                         name: "Main Menu",
                         icon: "house.fill",
-                        action: onMainMenu,
+                        action: sceneManager.goToMainMenu,
                         buttonStyle: .text
                     )
                 }
@@ -70,5 +69,5 @@ struct PostGame: View {
 }
 
 #Preview {
-    PostGame(score: 1000, survivedSeconds: 166, onRestart: {}, onMainMenu: {})
+    PostGame(score: 1000, survivedSeconds: 166, onRestart: {}, sceneManager: SceneManager.init())
 }

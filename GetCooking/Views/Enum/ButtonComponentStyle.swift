@@ -15,18 +15,18 @@ enum ButtonComponentStyle {
     var textColor: Color {
         switch self {
         case .primary:
-            return Color("Primary")
+            return .appPrimary
         case .text:
-            return Color.black
+            return .appBackground
         }
     }
     
     var bg: Color {
         switch self {
         case .primary:
-            return .BG
+            return .appBackground
         case .text:
-            return .secondary
+            return .appText
         }
     }
 }

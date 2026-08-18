@@ -346,6 +346,220 @@ struct HoverDetectorTests {
     }
 }
 
+/// Easing a carried ingredient toward the hand.
+struct DragEasingTests {
+
+    private let sixtyHz: TimeInterval = 1.0 / 60
+    private let oneTwentyHz: TimeInterval = 1.0 / 120
+
+    /// The base is defined as "one 60Hz frame", so at 60Hz it passes straight
+    /// through — otherwise the number in `dragSmoothing` would mean nothing.
+    @Test func aSixtyHertzFrameUsesTheBaseUnchanged() {
+        let eased = GameScene.easing(base: 0.5, delta: sixtyHz)
+
+        #expect(abs(eased - 0.5) < 0.0001)
+    }
+
+    /// The whole point: a ProMotion iPad draws twice as often, so each frame
+    /// must move the bubble less or the drag ends up twice as twitchy on the
+    /// device this is tuned on.
+    @Test func aShorterFrameEasesLess() {
+        let eased = GameScene.easing(base: 0.5, delta: oneTwentyHz)
+
+        #expect(eased < 0.5)
+        // Two 120Hz frames have to land where one 60Hz frame does.
+        let afterTwo = 1 - (1 - eased) * (1 - eased)
+        #expect(abs(afterTwo - 0.5) < 0.0001)
+    }
+
+    @Test func aLongerFrameEasesMore() {
+        #expect(GameScene.easing(base: 0.5, delta: 2 / 60.0) > 0.5)
+    }
+
+    /// After a stall, closing the whole gap at once would snap a carried
+    /// bubble across the screen.
+    @Test func aStalledFrameIsCapped() {
+        let stalled = GameScene.easing(base: 0.5, delta: 5)
+        let capped = GameScene.easing(base: 0.5, delta: GameScene.maxEasingDelta)
+
+        #expect(stalled == capped)
+        #expect(stalled < 1)
+    }
+
+    /// The first frame has no previous timestamp to measure against.
+    @Test func noPreviousFrameFallsBackToTheBase() {
+        #expect(GameScene.easing(base: 0.5, delta: 0) == 0.5)
+    }
+
+    @Test func degenerateBasesAreHandled() {
+        #expect(GameScene.easing(base: 0, delta: sixtyHz) == 0, "frozen")
+        #expect(GameScene.easing(base: 1, delta: sixtyHz) == 1, "snaps")
+    }
+
+    /// Easing must actually close the gap, and never overshoot it.
+    @Test func easingMovesTowardTheTargetWithoutOvershooting() {
+        let from = CGPoint(x: 0, y: 0)
+        let to = CGPoint(x: 100, y: 50)
+
+        let half = from.vc_eased(toward: to, by: 0.5)
+        #expect(half == CGPoint(x: 50, y: 25))
+
+        #expect(from.vc_eased(toward: to, by: 0) == from)
+        #expect(from.vc_eased(toward: to, by: 1) == to)
+    }
+}
+
+/// Keeping a carried ingredient out of the reset button.
+struct ResetButtonExclusionTests {
+
+    private let button = CGPoint(x: 900, y: 700)
+    private let keepOut: CGFloat = 150
+
+    @Test func aPointOutsideTheZoneIsLeftAlone() {
+        let clear = CGPoint(x: 400, y: 300)
+
+        #expect(GameScene.pushedOut(clear, awayFrom: button, keepOut: keepOut) == clear)
+    }
+
+    /// Pushed straight out along the line it came in on, to the edge exactly.
+    @Test func aPointInsideIsPushedToTheEdge() {
+        let inside = CGPoint(x: 950, y: 700) // 50pt to the right of centre
+
+        let pushed = GameScene.pushedOut(inside, awayFrom: button, keepOut: keepOut)
+
+        #expect(abs(pushed.x - (button.x + keepOut)) < 0.001)
+        #expect(abs(pushed.y - button.y) < 0.001)
+    }
+
+    /// Whatever comes out must be clear of the button, from any direction.
+    @Test func nothingSurvivesInsideTheZone() {
+        for angle in stride(from: 0.0, to: 2 * .pi, by: .pi / 6) {
+            let inside = CGPoint(
+                x: button.x + cos(angle) * 40,
+                y: button.y + sin(angle) * 40
+            )
+
+            let pushed = GameScene.pushedOut(inside, awayFrom: button, keepOut: keepOut)
+
+            #expect(pushed.vc_distance(to: button) >= keepOut - 0.001)
+        }
+    }
+
+    /// Dead centre has no direction to push along — it must still come out,
+    /// not divide by zero.
+    @Test func deadCentreStillEscapes() {
+        let pushed = GameScene.pushedOut(button, awayFrom: button, keepOut: keepOut)
+
+        #expect(abs(pushed.vc_distance(to: button) - keepOut) < 0.001)
+    }
+
+    @Test func aZeroZoneExcludesNothing() {
+        #expect(GameScene.pushedOut(button, awayFrom: button, keepOut: 0) == button)
+    }
+}
+
+/// Laying the tutorial artwork out, and putting the Skip hit area on top of
+/// the button that is drawn into it.
+@MainActor
+struct TutorialLayoutTests {
+
+    /// Landscape iPad — wider than the 4:3 artwork.
+    private let landscape = CGSize(width: 1194, height: 834)
+
+    /// Portrait, where the same page has to letterbox the other way.
+    private let portrait = CGSize(width: 834, height: 1194)
+
+    /// Fitted, so the whole page is always visible — nothing is cropped away,
+    /// least of all the Skip button sitting near the edge.
+    @Test func thePageFitsInsideTheScreen() {
+        for screen in [landscape, portrait] {
+            let page = TutorialView.pageRect(in: screen)
+
+            #expect(page.width <= screen.width + 0.001)
+            #expect(page.height <= screen.height + 0.001)
+        }
+    }
+
+    /// Centred, and keeping the artwork's own 4:3 shape.
+    @Test func thePageIsCentredAndKeepsItsAspect() {
+        let page = TutorialView.pageRect(in: landscape)
+
+        #expect(abs(page.midX - landscape.width / 2) < 0.001)
+        #expect(abs(page.midY - landscape.height / 2) < 0.001)
+
+        let drawn = TutorialView.pageSize.width / TutorialView.pageSize.height
+        #expect(abs(page.width / page.height - drawn) < 0.001)
+    }
+
+    /// A screen already at 4:3 wastes nothing.
+    @Test func aMatchingScreenIsFilledCompletely() {
+        let exact = CGSize(width: 1366, height: 1024)
+        let page = TutorialView.pageRect(in: exact)
+
+        #expect(abs(page.width - exact.width) < 0.001)
+        #expect(abs(page.height - exact.height) < 0.001)
+    }
+
+    /// The point of the whole calculation: the hit area must land on the
+    /// artwork, not on the letterbox beside it.
+    @Test func theSkipHotspotSitsOnThePage() {
+        for screen in [landscape, portrait] {
+            let page = TutorialView.pageRect(in: screen)
+            let skip = TutorialView.skipRect(in: screen)
+
+            #expect(page.contains(CGPoint(x: skip.minX, y: skip.minY)))
+            #expect(page.contains(CGPoint(x: skip.maxX, y: skip.maxY)))
+        }
+    }
+
+    /// Bottom left, where the button is drawn.
+    @Test func theSkipHotspotIsBottomLeft() {
+        let page = TutorialView.pageRect(in: landscape)
+        let skip = TutorialView.skipRect(in: landscape)
+
+        #expect(skip.midX < page.midX, "left half")
+        #expect(skip.midY > page.midY, "lower half")
+    }
+
+    /// Same spot on the artwork whatever the screen, since it is measured
+    /// against the page rather than the screen.
+    @Test func theHotspotHoldsItsPlaceOnEveryScreen() {
+        for screen in [landscape, portrait, CGSize(width: 2048, height: 1536)] {
+            let page = TutorialView.pageRect(in: screen)
+            let skip = TutorialView.skipRect(in: screen)
+
+            let relativeX = (skip.midX - page.minX) / page.width
+            let relativeY = (skip.midY - page.minY) / page.height
+
+            #expect(abs(relativeX - TutorialView.skipHotspot.midX) < 0.001)
+            #expect(abs(relativeY - TutorialView.skipHotspot.midY) < 0.001)
+        }
+    }
+
+    /// Every page has to resolve to something drawable, or the walkthrough
+    /// shows a blank screen the player can only tap past.
+    @Test func everyPageHasArtwork() {
+        for step in 1...TutorialView.pageCount {
+            if TutorialView.animatedPages.contains(step) {
+                #expect(
+                    Bundle.main.url(forResource: "Tutorial\(step)", withExtension: "mp4") != nil,
+                    "missing clip for step \(step)"
+                )
+            } else {
+                #expect(
+                    UIImage(named: "Tutorial\(step)") != nil,
+                    "missing image for step \(step)"
+                )
+            }
+        }
+    }
+
+    /// A zero-sized container must not divide by zero.
+    @Test func anEmptyScreenIsHandled() {
+        #expect(TutorialView.pageRect(in: .zero) == .zero)
+    }
+}
+
 struct PlayAreaClampTests {
 
     private let screen = CGSize(width: 834, height: 1194)
@@ -452,13 +666,22 @@ struct ZoomClampTests {
 /// Gating hands on the body they are attached to.
 struct PlayerBodyMatchTests {
 
+    /// Shoulders centred on `at`, `span` wide. Hips only when asked for —
+    /// they're optional in the model because the player is often framed from
+    /// the chest up.
     private func body(
         wrists: [(CGFloat, CGFloat)],
-        shoulders scale: CGFloat
+        shoulders span: CGFloat,
+        at centre: CGFloat = 0.5,
+        hips: Bool = false
     ) -> HandPoseManager.BodyCandidate {
         HandPoseManager.BodyCandidate(
-            wrists: wrists.map { CGPoint(x: $0.0, y: $0.1) },
-            scale: scale
+            head: nil, // irrelevant to wrist matching
+            leftShoulder: CGPoint(x: centre - span / 2, y: 0.70),
+            rightShoulder: CGPoint(x: centre + span / 2, y: 0.70),
+            leftHip: hips ? CGPoint(x: centre - span / 2, y: 0.40) : nil,
+            rightHip: hips ? CGPoint(x: centre + span / 2, y: 0.40) : nil,
+            wrists: wrists.map { CGPoint(x: $0.0, y: $0.1) }
         )
     }
 
@@ -553,9 +776,168 @@ struct PlayerBodyMatchTests {
         #expect(keep(hands: [(0.5, 0.5)], bodies: []) == nil)
     }
 
-    /// A body with no confident wrists is no use for matching either.
-    @Test func aBodyWithoutWristsIsNotUsable() {
-        #expect(keep(hands: [(0.5, 0.5)], bodies: [body(wrists: [], shoulders: 0.3)]) == nil)
+    /// The player is in frame with their hands down or out of shot. That
+    /// matches nothing — and must *not* report "no body", because falling back
+    /// to geometry is exactly the door a bystander's hands would come through.
+    @Test func aPlayerWithNoVisibleWristsMatchesNothingRatherThanFallingBack() {
+        let kept = keep(
+            hands: [(0.85, 0.55)],                       // a bystander's hand
+            bodies: [body(wrists: [], shoulders: 0.30)]  // player, hands down
+        )
+
+        #expect(kept == [], "empty, not nil")
+    }
+
+    /// The case called out explicitly: a bystander whose whole body is visible
+    /// still loses to a nearer player framed from the chest up. Scale is
+    /// shoulder span alone, so extra visible joints buy no advantage.
+    @Test func aFullBodyBystanderStillLosesToTheNearerPlayer() {
+        let kept = keep(
+            hands: [(0.45, 0.50), (0.85, 0.50)],
+            bodies: [
+                body(wrists: [(0.45, 0.50)], shoulders: 0.30, at: 0.45),
+                body(wrists: [(0.85, 0.50)], shoulders: 0.12, at: 0.85, hips: true)
+            ]
+        )
+
+        #expect(kept == [0])
+    }
+
+    /// Only ever one body is treated as the player, whoever else is in shot.
+    @Test func theNearestBodyIsTheOnlyOneChosen() {
+        let bodies = [
+            body(wrists: [], shoulders: 0.12, at: 0.2),
+            body(wrists: [], shoulders: 0.31, at: 0.5),
+            body(wrists: [], shoulders: 0.20, at: 0.8)
+        ]
+
+        #expect(HandPoseManager.nearestBody(in: bodies) == 1)
+    }
+}
+
+/// The seat check the player has to pass before the game starts.
+struct SeatCalibrationTests {
+
+    /// A 400×300 box at the middle of a 1000×800 screen.
+    private let frame = CGRect(x: 300, y: 250, width: 400, height: 300)
+
+    /// Shoulders must span at least a quarter of the box.
+    private var minimumSpan: CGFloat { frame.width * 0.25 }
+
+    /// Copying the guide pose: head and shoulders in the box, both hands up
+    /// beside the head. Hips sit *below* the box on purpose — the rest of the
+    /// body is allowed to fall outside it.
+    private func body(
+        centre: CGFloat = 500,
+        span: CGFloat = 200,
+        shoulderY: CGFloat = 420,
+        head: CGPoint? = CGPoint(x: 500, y: 320),
+        wrists: [CGPoint] = [CGPoint(x: 390, y: 330), CGPoint(x: 610, y: 330)]
+    ) -> HandPoseManager.BodyCandidate {
+        HandPoseManager.BodyCandidate(
+            head: head,
+            leftShoulder: CGPoint(x: centre - span / 2, y: shoulderY),
+            rightShoulder: CGPoint(x: centre + span / 2, y: shoulderY),
+            leftHip: CGPoint(x: centre - span / 2, y: 700),
+            rightHip: CGPoint(x: centre + span / 2, y: 700),
+            wrists: wrists
+        )
+    }
+
+    /// Hips out of the box are fine — only what the game tracks has to be in.
+    @Test func headShouldersAndBothHandsInTheBoxPasses() {
+        #expect(body().isAligned(in: frame, minimumShoulderSpan: minimumSpan))
+    }
+
+    /// Arms down: the hands drop below the box, which is what makes the guide
+    /// pose meaningful rather than decorative.
+    @Test func handsDownFails() {
+        let armsDown = body(wrists: [CGPoint(x: 390, y: 720), CGPoint(x: 610, y: 720)])
+
+        #expect(!armsDown.isAligned(in: frame, minimumShoulderSpan: minimumSpan))
+    }
+
+    /// One hand up is not the pose.
+    @Test func onlyOneHandUpFails() {
+        let oneHand = body(wrists: [CGPoint(x: 390, y: 330)])
+
+        #expect(!oneHand.isAligned(in: frame, minimumShoulderSpan: minimumSpan))
+    }
+
+    /// No head found — the player is out of shot or turned right away.
+    @Test func noHeadFails() {
+        #expect(!body(head: nil).isAligned(in: frame, minimumShoulderSpan: minimumSpan))
+    }
+
+    /// Head above the box: sitting too close, so it rides out of the top.
+    @Test func headAboveTheBoxFails() {
+        let tooClose = body(head: CGPoint(x: 500, y: 100))
+
+        #expect(!tooClose.isAligned(in: frame, minimumShoulderSpan: minimumSpan))
+    }
+
+    /// Shoulders off to one side, so the player is out of the box sideways.
+    @Test func aBodyOffToOneSideFails() {
+        #expect(!body(centre: 850).isAligned(in: frame, minimumShoulderSpan: minimumSpan))
+    }
+
+    /// Sitting too far back: everything fits, but there is too little of the
+    /// player left for the tracker to work with.
+    @Test func sittingTooFarAwayFails() {
+        let distant = body(span: 60)
+
+        #expect(distant.isAligned(in: frame, minimumShoulderSpan: 0), "fits the box")
+        #expect(!distant.isAligned(in: frame, minimumShoulderSpan: minimumSpan))
+    }
+
+    /// `CGRect.contains` excludes the far edge, so a hand resting exactly on
+    /// the bottom of the box counts as outside. Deliberate: at the boundary the
+    /// player is on the verge of dropping out of frame anyway.
+    @Test func aJointExactlyOnTheEdgeIsOutside() {
+        let onTheLine = body(wrists: [CGPoint(x: 390, y: frame.maxY), CGPoint(x: 610, y: 330)])
+
+        #expect(!onTheLine.isAligned(in: frame, minimumShoulderSpan: minimumSpan))
+    }
+}
+
+/// The upper-body skeleton that gets drawn.
+struct BodySkeletonTests {
+
+    private func body(hips: Bool) -> HandPoseManager.BodyCandidate {
+        HandPoseManager.BodyCandidate(
+            head: CGPoint(x: 0.5, y: 0.85), // never drawn — see the test below
+            leftShoulder: CGPoint(x: 0.4, y: 0.7),
+            rightShoulder: CGPoint(x: 0.6, y: 0.7),
+            leftHip: hips ? CGPoint(x: 0.42, y: 0.4) : nil,
+            rightHip: hips ? CGPoint(x: 0.58, y: 0.4) : nil,
+            wrists: []
+        )
+    }
+
+    /// Framed from the chest up: just the shoulder line, no dangling bones to
+    /// hips that were never seen.
+    @Test func shouldersAloneDrawOneBone() {
+        #expect(body(hips: false).chains == [[CGPoint(x: 0.4, y: 0.7), CGPoint(x: 0.6, y: 0.7)]])
+    }
+
+    /// Hips in shot close the torso: shoulder line, both sides, hip line.
+    @Test func hipsCloseTheTorso() {
+        #expect(body(hips: true).chains.count == 4)
+    }
+
+    /// Legs are never read, so nothing below the hips can ever be drawn.
+    @Test func nothingIsDrawnBelowTheHips() {
+        let lowest = body(hips: true).chains.flatMap { $0 }.map(\.y).min()
+
+        #expect(lowest == 0.4, "hip line is the bottom of the skeleton")
+    }
+
+    /// The head drives the seat check but is not part of the skeleton, so it
+    /// must never turn up in the drawn chains.
+    @Test func theHeadIsNotDrawn() {
+        let drawn = Set(body(hips: true).chains.flatMap { $0 })
+
+        #expect(!drawn.contains(CGPoint(x: 0.5, y: 0.85)))
     }
 }
 
@@ -984,6 +1366,45 @@ struct LivesTests {
 
         #expect(manager.lives == manager.startingLives)
         #expect(manager.score > 0)
+    }
+
+    /// Every five *served* dishes the assembly clock tightens by 1.25×, so the
+    /// same recipe has to be built in 80% of the time it had a tier earlier.
+    @Test func difficultyRampsEveryFiveServedDishes() async throws {
+        let manager = GameStateManager(recipes: [.chickenMayonnaise, .salad])
+        manager.start()
+
+        func serveOneDish() async throws {
+            for ingredient in manager.currentRecipe.ingredients {
+                manager.addIngredientToPlate(ingredient)
+            }
+            // Long enough for the reveal beat to hand over to the swipe cue.
+            try await Task.sleep(for: .milliseconds(1200))
+            let cue = try #require(manager.swipeCueDirection)
+            manager.handleSwipe(cue)
+        }
+
+        // Dishes 1–4 stay on the base budget for whatever recipe is up.
+        for _ in 0..<4 { try await serveOneDish() }
+        #expect(manager.dishesCompleted == 4)
+        #expect(manager.dishTimeLimit == manager.currentRecipe.timeLimit)
+
+        // The 5th serve crosses the first speed-up step, so the dish that
+        // starts right after gets 1 / 1.25 of its own recipe's time.
+        try await serveOneDish()
+        #expect(manager.dishesCompleted == 5)
+        #expect(abs(manager.dishTimeLimit - manager.currentRecipe.timeLimit / 1.25) < 0.0001)
+    }
+
+    /// A timed-out dish is not "done", so it must not advance the ramp.
+    @Test func failedDishesDoNotRampDifficulty() {
+        let manager = GameStateManager(recipes: [.chickenMayonnaise, .salad])
+        manager.start()
+
+        manager.failDish()
+
+        #expect(manager.dishesCompleted == 0)
+        #expect(manager.dishTimeLimit == manager.currentRecipe.timeLimit)
     }
 }
 
