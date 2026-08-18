@@ -30,6 +30,13 @@ struct GameplayView: View {
     @State private var scene = GameScene(size: CGSize(width: 1024, height: 768))
     @State private var showHandSkeleton = true
 
+    /// The quit control is normally invisible — the board is played with hands,
+    /// not touch, so a stray tap shouldn't do anything. Tapping the screen once
+    /// flips this on to reveal a Stop button; tapping away (or waiting a few
+    /// seconds) hides it again. This keeps a bail-out reachable during play
+    /// without putting a permanent button over the camera feed.
+    @State private var showStopButton = false
+
     /// Flips once the player has passed the seat check. Local to this view, so
     /// navigation state (SceneManager) stays purely about *which screen*, not
     /// *how far into the screen* the player is.
@@ -160,7 +167,51 @@ struct GameplayView: View {
                 {
                     CameraPermissionDeniedOverlay()
                 }
+
+                // Hidden quit control. Only live during actual play — the
+                // countdown and game-over screen have their own flow and
+                // shouldn't be interruptible this way.
+                if !isCountingDown && gameStateManager.state != .gameOver {
+                    // Full-screen invisible tap catcher. A tap toggles the Stop
+                    // button; when the button is showing, a tap that lands
+                    // *outside* it falls through to here and dismisses it.
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showStopButton.toggle()
+                            }
+                        }
+
+                    if showStopButton {
+                        // Top-left corner, clear of the score / recipe / hearts
+                        // HUD that runs across the top-center of the screen.
+                        VStack {
+                            Spacer()
+                            HStack {
+                                ButtonComponent(
+                                    name: "Stop",
+                                    icon: "xmark",
+                                    action: quitGame,
+                                    buttonStyle: .primary
+                                )
+                                .padding(40)
+
+                                Spacer()
+                            }
+                        }
+                        .transition(.opacity)
+                    }
+                }
             }
+        }
+        // Auto-hide the Stop button so a forgotten tap doesn't leave it sitting
+        // over the feed; each fresh reveal restarts the countdown via the id.
+        .task(id: showStopButton) {
+            guard showStopButton else { return }
+            try? await Task.sleep(for: .seconds(5))
+            withAnimation(.easeInOut(duration: 0.2)) { showStopButton = false }
         }
         .onAppear {
             // Idempotent: for a game that skipped calibration this actually
@@ -188,6 +239,14 @@ struct GameplayView: View {
         .onChange(of: gameStateManager.state) { _, state in
             scene.isPaused = (state == .gameOver)
         }
+    }
+
+    /// Bail out of the run entirely and go back to the main menu. Resetting the
+    /// navigation path tears down GameplayView, whose `.onDisappear` stops the
+    /// capture session; GameStateManager is owned here, so nothing carries over.
+    private func quitGame() {
+        showStopButton = false
+        sceneManager.goToMainMenu()
     }
 }
 

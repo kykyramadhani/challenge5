@@ -1367,6 +1367,45 @@ struct LivesTests {
         #expect(manager.lives == manager.startingLives)
         #expect(manager.score > 0)
     }
+
+    /// Every five *served* dishes the assembly clock tightens by 1.25×, so the
+    /// same recipe has to be built in 80% of the time it had a tier earlier.
+    @Test func difficultyRampsEveryFiveServedDishes() async throws {
+        let manager = GameStateManager(recipes: [.chickenMayonnaise, .salad])
+        manager.start()
+
+        func serveOneDish() async throws {
+            for ingredient in manager.currentRecipe.ingredients {
+                manager.addIngredientToPlate(ingredient)
+            }
+            // Long enough for the reveal beat to hand over to the swipe cue.
+            try await Task.sleep(for: .milliseconds(1200))
+            let cue = try #require(manager.swipeCueDirection)
+            manager.handleSwipe(cue)
+        }
+
+        // Dishes 1–4 stay on the base budget for whatever recipe is up.
+        for _ in 0..<4 { try await serveOneDish() }
+        #expect(manager.dishesCompleted == 4)
+        #expect(manager.dishTimeLimit == manager.currentRecipe.timeLimit)
+
+        // The 5th serve crosses the first speed-up step, so the dish that
+        // starts right after gets 1 / 1.25 of its own recipe's time.
+        try await serveOneDish()
+        #expect(manager.dishesCompleted == 5)
+        #expect(abs(manager.dishTimeLimit - manager.currentRecipe.timeLimit / 1.25) < 0.0001)
+    }
+
+    /// A timed-out dish is not "done", so it must not advance the ramp.
+    @Test func failedDishesDoNotRampDifficulty() {
+        let manager = GameStateManager(recipes: [.chickenMayonnaise, .salad])
+        manager.start()
+
+        manager.failDish()
+
+        #expect(manager.dishesCompleted == 0)
+        #expect(manager.dishTimeLimit == manager.currentRecipe.timeLimit)
+    }
 }
 
 struct RecipeMatchingTests {
