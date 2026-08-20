@@ -20,6 +20,7 @@
 import AVFoundation
 import SpriteKit
 import SwiftUI
+import UIKit
 
 struct GameplayView: View {
     @Bindable var sceneManager: SceneManager
@@ -95,8 +96,17 @@ struct GameplayView: View {
         // when the player leaves gameplay entirely. start() is idempotent, so
         // the seat check and board calling it again is harmless; the preview
         // above stays live across their swap because it never leaves the tree.
-        .onAppear { handPoseManager.start() }
-        .onDisappear { handPoseManager.stop() }
+        .onAppear {
+            handPoseManager.start()
+            // The game is played hands-free — no taps to keep the system's
+            // auto-lock timer from firing — so without this the screen dims
+            // and locks itself mid-round.
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
+        .onDisappear {
+            handPoseManager.stop()
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
     }
 
     private var gameBody: some View {
@@ -152,7 +162,7 @@ struct GameplayView: View {
                     PostGame(
                         score: gameStateManager.score,
                         survivedSeconds: gameStateManager.elapsedTime,
-                        onRestart: { gameStateManager.restart() },
+                        onRestart: replay,
                         sceneManager: sceneManager
                     )
                 }
@@ -219,9 +229,11 @@ struct GameplayView: View {
             // still running.
             handPoseManager.start()
         }
-        .task {
-            // Runs when the board appears — i.e. after calibration. The camera
-            // is already live, handed over by the seat check.
+        .task(id: gameStateManager.resetToken) {
+            // Runs when the board appears — i.e. after calibration — and again
+            // on every replay, keyed off resetToken since a replay that skips
+            // calibration (no calibration required) never remounts this view.
+            // The camera is already live, handed over by the seat check.
             for step in stride(from: 3, through: 1, by: -1) {
                 countdown = step
                 do {
@@ -239,6 +251,18 @@ struct GameplayView: View {
         .onChange(of: gameStateManager.state) { _, state in
             scene.isPaused = (state == .gameOver)
         }
+    }
+
+    /// Play Again: send the player back through the seat check (if the game
+    /// needs one) and the countdown, exactly like the first run. Flipping
+    /// `hasCalibrated` back swaps the Group to SeatCalibrationView, which
+    /// unmounts `gameBody` — so its `.task` reruns fresh once calibration
+    /// passes and the board reappears; for a game with no calibration step,
+    /// `gameBody` never unmounts, so the `.task(id:)` keyed on `resetToken` is
+    /// what reruns the countdown instead.
+    private func replay() {
+        if needsCalibration { hasCalibrated = false }
+        gameStateManager.restart()
     }
 
     /// Bail out of the run entirely and go back to the main menu. Resetting the

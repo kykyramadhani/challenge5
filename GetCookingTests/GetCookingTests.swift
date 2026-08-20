@@ -198,53 +198,6 @@ struct FistClassifierTests {
     }
 }
 
-struct SwipeDetectionTests {
-
-    /// Same numbers the manager ships with.
-    private func detect(from start: CGPoint, to end: CGPoint, over duration: TimeInterval) -> SwipeDirection? {
-        HandPoseManager.swipeDirection(
-            from: start, to: end, over: duration,
-            minimumDistance: 0.10, horizontalSpeed: 0.9, dominance: 1.25
-        )
-    }
-
-    /// A casual flick — 18% of the frame in a sixth of a second — has to land.
-    /// This is the whole point of the change: it was below the old 1.8 bar.
-    @Test func casualHorizontalFlickRegisters() {
-        #expect(detect(from: CGPoint(x: 0.4, y: 0.5), to: CGPoint(x: 0.58, y: 0.5), over: 0.16) == .right)
-        #expect(detect(from: CGPoint(x: 0.58, y: 0.5), to: CGPoint(x: 0.4, y: 0.5), over: 0.16) == .left)
-    }
-
-    /// Vertical motion is never a serve — reaching down for the bowl or up for
-    /// a high bubble must not fling the dish away.
-    @Test func verticalFlicksAreNotServes() {
-        #expect(detect(from: CGPoint(x: 0.5, y: 0.6), to: CGPoint(x: 0.5, y: 0.42), over: 0.16) == nil)
-        #expect(detect(from: CGPoint(x: 0.5, y: 0.42), to: CGPoint(x: 0.5, y: 0.6), over: 0.16) == nil)
-    }
-
-    /// Slow drift covers the distance but not the speed — reaching across the
-    /// table must not read as a swipe.
-    @Test func slowDriftIsNotASwipe() {
-        #expect(detect(from: CGPoint(x: 0.3, y: 0.5), to: CGPoint(x: 0.6, y: 0.5), over: 1.5) == nil)
-    }
-
-    /// Fast but tiny: jitter over a couple of frames clears the speed bar
-    /// easily, which is why a net-distance bar exists too.
-    @Test func fastJitterIsNotASwipe() {
-        #expect(detect(from: CGPoint(x: 0.5, y: 0.5), to: CGPoint(x: 0.52, y: 0.5), over: 0.05) == nil)
-    }
-
-    /// A 45° flick belongs to neither axis; acting on it would make serving and
-    /// discarding fire interchangeably.
-    @Test func diagonalFlickIsRejected() {
-        #expect(detect(from: CGPoint(x: 0.4, y: 0.6), to: CGPoint(x: 0.6, y: 0.4), over: 0.16) == nil)
-    }
-
-    @Test func tooShortAWindowIsIgnored() {
-        #expect(detect(from: CGPoint(x: 0.3, y: 0.5), to: CGPoint(x: 0.9, y: 0.5), over: 0.01) == nil)
-    }
-}
-
 struct HoverDetectorTests {
 
     /// The shipped `maxFrameGap` deliberately caps how much a single frame can
@@ -675,26 +628,30 @@ struct PlayerBodyMatchTests {
         at centre: CGFloat = 0.5,
         hips: Bool = false
     ) -> HandPoseManager.BodyCandidate {
-        HandPoseManager.BodyCandidate(
+        let points = wrists.map { CGPoint(x: $0.0, y: $0.1) }
+        return HandPoseManager.BodyCandidate(
             head: nil, // irrelevant to wrist matching
             leftShoulder: CGPoint(x: centre - span / 2, y: 0.70),
             rightShoulder: CGPoint(x: centre + span / 2, y: 0.70),
             leftHip: hips ? CGPoint(x: centre - span / 2, y: 0.40) : nil,
             rightHip: hips ? CGPoint(x: centre + span / 2, y: 0.40) : nil,
-            wrists: wrists.map { CGPoint(x: $0.0, y: $0.1) }
+            leftWrist: points.first,
+            rightWrist: points.count > 1 ? points[1] : nil
         )
     }
 
     private func keep(
         hands: [(CGFloat, CGFloat)],
         bodies: [HandPoseManager.BodyCandidate],
-        limit: Int = 2
+        limit: Int = 2,
+        requiredHand: HandSide? = nil
     ) -> [Int]? {
         HandPoseManager.playerHandIndices(
             handWrists: hands.map { CGPoint(x: $0.0, y: $0.1) },
             bodies: bodies,
             wristTolerance: 0.6,
-            limit: limit
+            limit: limit,
+            requiredHand: requiredHand
         )
     }
 
@@ -706,6 +663,32 @@ struct PlayerBodyMatchTests {
         )
 
         #expect(kept.map(Set.init) == Set([0, 1]))
+    }
+
+    /// One-hand mode: only the hand nearest the chosen wrist is kept, even
+    /// though both of the player's hands are up.
+    @Test func oneHandModeKeepsOnlyTheChosenSide() {
+        let kept = keep(
+            hands: [(0.40, 0.50), (0.60, 0.50)],
+            bodies: [body(wrists: [(0.40, 0.50), (0.60, 0.50)], shoulders: 0.30)],
+            limit: 1,
+            requiredHand: .left
+        )
+
+        #expect(kept == [0], "index 0 sits on the left wrist (0.40, 0.50)")
+    }
+
+    /// The other hand is dropped exactly like a bystander's — it just isn't
+    /// the wrist one-hand mode is listening to.
+    @Test func oneHandModeDropsTheOtherHandEvenWithoutABystander() {
+        let kept = keep(
+            hands: [(0.40, 0.50), (0.60, 0.50)],
+            bodies: [body(wrists: [(0.40, 0.50), (0.60, 0.50)], shoulders: 0.30)],
+            limit: 1,
+            requiredHand: .right
+        )
+
+        #expect(kept == [1], "index 1 sits on the right wrist (0.60, 0.50)")
     }
 
     /// The case geometry could not do: the player has **one** hand up, so
@@ -840,7 +823,8 @@ struct SeatCalibrationTests {
             rightShoulder: CGPoint(x: centre + span / 2, y: shoulderY),
             leftHip: CGPoint(x: centre - span / 2, y: 700),
             rightHip: CGPoint(x: centre + span / 2, y: 700),
-            wrists: wrists
+            leftWrist: wrists.first,
+            rightWrist: wrists.count > 1 ? wrists[1] : nil
         )
     }
 
@@ -857,11 +841,31 @@ struct SeatCalibrationTests {
         #expect(!armsDown.isAligned(in: frame, minimumShoulderSpan: minimumSpan))
     }
 
-    /// One hand up is not the pose.
+    /// One hand up is not the pose — by default, both are required.
     @Test func onlyOneHandUpFails() {
         let oneHand = body(wrists: [CGPoint(x: 390, y: 330)])
 
         #expect(!oneHand.isAligned(in: frame, minimumShoulderSpan: minimumSpan))
+    }
+
+    /// One-hand mode: raising the chosen hand alone is enough.
+    @Test func oneHandModePassesWithOnlyTheChosenHandUp() {
+        // Left wrist only — see the `body()` default order below.
+        let leftHandOnly = body(wrists: [CGPoint(x: 390, y: 330)])
+
+        #expect(leftHandOnly.isAligned(
+            in: frame, minimumShoulderSpan: minimumSpan, requiredHand: .left
+        ))
+    }
+
+    /// One-hand mode still checks *which* hand — raising the other one
+    /// doesn't satisfy it, otherwise the setting would mean nothing.
+    @Test func oneHandModeFailsWhenTheOtherHandIsUp() {
+        let leftHandOnly = body(wrists: [CGPoint(x: 390, y: 330)])
+
+        #expect(!leftHandOnly.isAligned(
+            in: frame, minimumShoulderSpan: minimumSpan, requiredHand: .right
+        ))
     }
 
     /// No head found — the player is out of shot or turned right away.
@@ -910,7 +914,8 @@ struct BodySkeletonTests {
             rightShoulder: CGPoint(x: 0.6, y: 0.7),
             leftHip: hips ? CGPoint(x: 0.42, y: 0.4) : nil,
             rightHip: hips ? CGPoint(x: 0.58, y: 0.4) : nil,
-            wrists: []
+            leftWrist: nil,
+            rightWrist: nil
         )
     }
 
@@ -1145,6 +1150,10 @@ struct GameLoopTests {
 
     /// The "Play Again does nothing" bug: restarting has to reset the score and
     /// the plate, and bump the token GameScene keys its board wipe off.
+    ///
+    /// Leaves `state` at `.idle` rather than `.cooking` — a replay has to sit
+    /// through the seat check and countdown again, and it's `start()` that
+    /// actually resumes play once that beat finishes (see below).
     @Test func restartResetsEverythingAndBumpsResetToken() {
         let manager = GameStateManager(recipes: [.chickenMayonnaise])
         manager.start()
@@ -1157,9 +1166,22 @@ struct GameLoopTests {
         #expect(manager.score == 0)
         #expect(manager.lives == manager.startingLives)
         #expect(manager.elapsedTime == 0)
-        #expect(manager.state == .cooking)
+        #expect(manager.state == .idle)
         #expect(manager.resetToken == tokenBefore + 1,
                 "GameScene clears the board off this token; without it the old ingredients stay")
+    }
+
+    /// `restart()` alone must not resume play — GameplayView's countdown is
+    /// what calls `start()` once it finishes, same as the very first run.
+    @Test func restartDoesNotResumePlayOnItsOwn() {
+        let manager = GameStateManager(recipes: [.chickenMayonnaise])
+        manager.start()
+        manager.restart()
+
+        #expect(manager.state == .idle)
+
+        manager.start()
+        #expect(manager.state == .cooking)
     }
 
     @Test func servingAwardsTheRecipesOwnScore() async throws {
@@ -1171,27 +1193,46 @@ struct GameLoopTests {
         #expect(manager.state == .dishComplete)
 
         try await Task.sleep(for: .milliseconds(1200)) // dish reveal beat
-        #expect(manager.state == .waitingForSwipe)
+        #expect(manager.state == .waitingToServe)
 
-        let cue = try #require(manager.swipeCueDirection)
-        manager.handleSwipe(cue)
+        manager.serveDish()
 
         #expect(manager.score == 25, "Chicken Geprek is worth 25, not a flat 1")
     }
 
-    @Test func swipingTheWrongWayScoresNothing() async throws {
+    /// Serving is gated on the bell having rung. The plate passes over plenty
+    /// of screen while ingredients are still being fetched, and none of that
+    /// may count as a delivery.
+    @Test func servingBeforeTheBellDoesNothing() {
         let manager = GameStateManager(recipes: [.chickenMayonnaise])
         manager.start()
-        for ingredient in Recipe.chickenMayonnaise.ingredients {
+        #expect(manager.state == .cooking)
+
+        manager.serveDish()
+
+        #expect(manager.score == 0)
+        #expect(manager.state == .cooking, "still cooking")
+    }
+
+    /// The bell picks an edge, and that edge is what the scene carries the
+    /// plate toward. It has to clear once the dish is gone, or the next round
+    /// would start with a stale target.
+    @Test func theBellRingsOnOneSideAndClearsAfterServing() async throws {
+        let manager = GameStateManager(recipes: [.chickenMayonnaise, .salad])
+        manager.start()
+        for ingredient in manager.currentRecipe.ingredients {
             manager.addIngredientToPlate(ingredient)
         }
         try await Task.sleep(for: .milliseconds(1200))
 
-        let cue = try #require(manager.swipeCueDirection)
-        manager.handleSwipe(cue == .left ? .right : .left)
+        #expect(manager.state == .waitingToServe)
+        let side = try #require(manager.bellSide)
+        #expect(side == .left || side == .right)
 
-        #expect(manager.score == 0)
-        #expect(manager.state == .waitingForSwipe, "still waiting for the right swipe")
+        manager.serveDish()
+
+        #expect(manager.bellSide == nil)
+        #expect(manager.state == .cooking)
     }
 
     /// A wrong ingredient must not complete the dish.
@@ -1242,11 +1283,16 @@ struct DishTimerGeometryTests {
 struct DishTimeLimitTests {
 
     /// Each dish carries its own assembly budget, so pin the shipped numbers.
+    ///
+    /// They all sit at 30s today, and the difficulty ramp squeezes that as the
+    /// run goes on rather than the recipes differing from each other. The
+    /// field is still per-recipe, so a fiddly dish can be given more room
+    /// without touching the others.
     @Test func everyRecipeDeclaresItsOwnLimit() {
-        #expect(Recipe.chickenMayonnaise.timeLimit == 10)
-        #expect(Recipe.chickenCheese.timeLimit == 10)
-        #expect(Recipe.chickenGeprek.timeLimit == 15)
-        #expect(Recipe.salad.timeLimit == 20)
+        #expect(Recipe.chickenMayonnaise.timeLimit == 30)
+        #expect(Recipe.chickenCheese.timeLimit == 30)
+        #expect(Recipe.chickenGeprek.timeLimit == 30)
+        #expect(Recipe.salad.timeLimit == 30)
     }
 
     /// Every recipe must be worth some time, or it would fail the instant it
@@ -1343,8 +1389,7 @@ struct LivesTests {
         try await Task.sleep(for: .milliseconds(1200))
         #expect(!manager.isTimingDish)
 
-        let cue = try #require(manager.swipeCueDirection)
-        manager.handleSwipe(cue)
+        manager.serveDish()
 
         #expect(manager.isTimingDish, "the next dish is on the clock")
         #expect(manager.dishTimeLimit == manager.currentRecipe.timeLimit)
@@ -1361,8 +1406,7 @@ struct LivesTests {
         }
         try await Task.sleep(for: .milliseconds(1200))
 
-        let cue = try #require(manager.swipeCueDirection)
-        manager.handleSwipe(cue)
+        manager.serveDish()
 
         #expect(manager.lives == manager.startingLives)
         #expect(manager.score > 0)
@@ -1380,8 +1424,7 @@ struct LivesTests {
             }
             // Long enough for the reveal beat to hand over to the swipe cue.
             try await Task.sleep(for: .milliseconds(1200))
-            let cue = try #require(manager.swipeCueDirection)
-            manager.handleSwipe(cue)
+            manager.serveDish()
         }
 
         // Dishes 1–4 stay on the base budget for whatever recipe is up.

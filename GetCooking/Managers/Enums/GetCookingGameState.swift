@@ -14,8 +14,8 @@ enum GameState: Equatable {
     case cooking
     /// The plate matched the active recipe; the finished dish is showing.
     case dishComplete
-    /// A swipe-direction cue is showing; waiting for the player to serve.
-    case waitingForSwipe
+    /// The bell has rung; waiting for the player to carry the plate to it.
+    case waitingToServe
     /// The player ran out of lives; play is over until `restart()`.
     case gameOver
 }

@@ -17,7 +17,9 @@ final class GameStateManager: ObservableObject {
     @Published private(set) var currentRecipe: Recipe
     @Published private(set) var score: Int = 0
     @Published private(set) var plateContents: [Ingredient] = []
-    @Published private(set) var swipeCueDirection: SwipeDirection?
+    /// Which edge the bell rang on, and so which way the plate has to be
+    /// carried. Nil whenever no dish is waiting to be served.
+    @Published private(set) var bellSide: SwipeDirection?
 
     /// Seconds survived so far. The run has no clock to beat — it ends when
     /// the lives run out — so this counts *up*, and is what PostGame reports.
@@ -115,8 +117,8 @@ final class GameStateManager: ObservableObject {
     /// Whether the assembly clock is running.
     ///
     /// Only while `.cooking`. The moment the plate matches, the dish is safe:
-    /// the ring disappears and serving it is untimed, so a slow swipe can
-    /// never cost the life the player just earned their way out of.
+    /// the ring disappears and serving it is untimed, so a slow walk to the
+    /// bell can never cost the life the player just earned their way out of.
     var isTimingDish: Bool { state == .cooking }
 
     /// How much of the current dish's clock is left, 1 down to 0.
@@ -149,22 +151,24 @@ final class GameStateManager: ObservableObject {
     }
 
     /// Wipes everything back to a brand-new run: score, lives, plate, clocks,
-    /// recipe. Bumping `resetToken` is what tells `GameScene` to clear the board.
+    /// recipe. Bumping `resetToken` is what tells `GameScene` to clear the
+    /// board. Leaves `state` at `.idle` rather than starting play immediately
+    /// — a replay has to sit through the seat check and countdown again just
+    /// like the first run, and `start()` is what actually kicks the clock off
+    /// once that beat is done.
     func restart() {
         timer?.invalidate()
         score = 0
         lives = startingLives
         plateContents = []
-        swipeCueDirection = nil
+        bellSide = nil
         isPaused = false
         playClock = 0
         elapsedTime = 0
         dishesCompleted = 0
         currentRecipe = recipePool.randomElement()!
-        beginDishClock()
         resetToken += 1
-        state = .cooking
-        startTimer()
+        state = .idle
     }
 
     // MARK: - Timer + pause
@@ -252,10 +256,13 @@ final class GameStateManager: ObservableObject {
 
     // MARK: - Serving
 
-    /// Attempts to serve the finished dish. Succeeds only while waiting for
-    /// a swipe and only when the swipe direction matches the shown cue.
-    func handleSwipe(_ direction: SwipeDirection) {
-        guard state == .waitingForSwipe, direction == swipeCueDirection else { return }
+    /// Serves the finished dish.
+    ///
+    /// Called by `GameScene` once the player has carried the plate all the way
+    /// to the bell. Arriving there *is* the action, so there is nothing to
+    /// check against here — `bellSide` only decides which edge it is carried to.
+    func serveDish() {
+        guard state == .waitingToServe else { return }
         score += currentRecipe.scoreValue
         // Counts only served dishes — a timed-out dish (failDish) doesn't ramp
         // difficulty. startNewRound() reads the new count when it begins the
@@ -269,7 +276,7 @@ final class GameStateManager: ObservableObject {
     /// How long the finished dish shows on its own before the swipe cue
     /// appears — gives `.dishComplete` a beat to actually be observed
     /// (GameScene polls `state` once per frame) instead of being skipped
-    /// straight through to `.waitingForSwipe`.
+    /// straight through to `.waitingToServe`.
     private static let dishRevealDuration: TimeInterval = 0.9
 
     private func checkForCompletion() {
@@ -277,14 +284,14 @@ final class GameStateManager: ObservableObject {
         state = .dishComplete
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.dishRevealDuration) { [weak self] in
             guard let self, self.state == .dishComplete else { return }
-            self.swipeCueDirection = Bool.random() ? .left : .right
-            self.state = .waitingForSwipe
+            self.bellSide = Bool.random() ? .left : .right
+            self.state = .waitingToServe
         }
     }
 
     private func startNewRound() {
         plateContents = []
-        swipeCueDirection = nil
+        bellSide = nil
         currentRecipe = nextRecipe()
         beginDishClock()
         state = .cooking

@@ -23,14 +23,21 @@ extension GameScene {
     /// (top-left origin, y-down) to scene space (bottom-left, y-up),
     /// and runs the grab / drag / release / trash-hover logic.
     func updateHandInput(now: TimeInterval, delta: TimeInterval = 0) {
+        // Hands are live for two phases now: cooking, where they move
+        // ingredients, and serving, where they carry the whole plate to the
+        // bell. Everything else parks them.
         guard let view, let handPoseManager, let gameStateManager,
-              gameStateManager.state == .cooking else {
+              gameStateManager.state == .cooking
+                || gameStateManager.state == .waitingToServe else {
             abandonAllDrags()
+            abandonPlateCarry()
             hideAllCursors()
             resetHoverDetector.reset()
             updateTrashProgress(0)
             return
         }
+
+        let isCooking = gameStateManager.state == .cooking
 
         let viewSize = view.bounds.size
         let hands = handPoseManager.hands
@@ -53,6 +60,21 @@ extension GameScene {
                                         isHolding: tracker.held != nil))
 
             updateCursorNode(for: hand.id, at: cursor, isFist: state == .fist)
+
+            guard isCooking else {
+                carryPlate(
+                    handID: hand.id,
+                    cursor: cursor,
+                    handPoints: handPoints,
+                    state: state,
+                    now: now,
+                    delta: delta,
+                    gameStateManager: gameStateManager
+                )
+                tracker.previousState = state
+                trackers[hand.id] = tracker
+                continue
+            }
 
             // Grab when the hand closes into a fist (from any prior state).
             if state == .fist, tracker.previousState != .fist, tracker.held == nil {
@@ -115,7 +137,107 @@ extension GameScene {
             trackers[hand.id] = tracker
         }
 
-        detectTrashHover(frameHands, gameStateManager: gameStateManager, now: now)
+        if isCooking {
+            detectTrashHover(frameHands, gameStateManager: gameStateManager, now: now)
+        } else {
+            resetHoverDetector.reset()
+            updateTrashProgress(0)
+        }
+    }
+
+    // MARK: - Carrying the plate to the bell
+
+    /// Grab the finished plate and walk it over to the bell.
+    ///
+    /// This replaced a swipe. A swipe asked the player to flick at empty air
+    /// in the right direction; carrying asks them to pick the plate up and
+    /// take it somewhere, which is both the same motion they already use for
+    /// ingredients and an obvious reading of what serving a dish means.
+    func carryPlate(
+        handID: Int,
+        cursor: CGPoint,
+        handPoints: [CGPoint],
+        state: HandState,
+        now: TimeInterval,
+        delta: TimeInterval,
+        gameStateManager: GameStateManager
+    ) {
+        guard let plateNode else { return }
+
+        // Pick it up: a fist closing anywhere on the plate takes it.
+        if state == .fist, plateHeldBy == nil,
+           handPoints.contains(where: {
+               $0.vc_distance(to: plateNode.position) <= plateRadius + grabSlack
+           }) {
+            plateHeldBy = handID
+            plateOpenSince = nil
+            plateNode.removeAllActions()
+        }
+
+        guard plateHeldBy == handID else { return }
+
+        // Carried with the same easing an ingredient gets, so both feel like
+        // the same object in the hand — and kept below the HUD, since the
+        // score and hearts cards are opaque and would swallow it whole.
+        let target = Self.clampedBelowHUD(
+            cursor,
+            radius: plateRadius,
+            in: size,
+            hudHeight: hudExclusion
+        )
+        plateNode.position = plateNode.position.vc_eased(
+            toward: target,
+            by: Self.easing(base: dragSmoothing, delta: delta)
+        )
+
+        // Reaching the bell *is* serving — there is nothing else to do there,
+        // so it fires on arrival rather than asking for a second gesture.
+        if let bell = bellNode,
+           plateNode.position.vc_distance(to: bell.position)
+            <= plateRadius + bell.size.width / 2 {
+            lastServeDirection = gameStateManager.bellSide
+            plateHeldBy = nil
+            plateOpenSince = nil
+            gameStateManager.serveDish()
+            return
+        }
+
+        // Let go short of the bell and the plate settles back home, ready to
+        // be picked up again. Same debounce as an ingredient, so one misread
+        // frame doesn't drop it halfway.
+        if state == .open {
+            let openedAt = plateOpenSince ?? now
+            plateOpenSince = openedAt
+
+            if now - openedAt >= releaseDelay {
+                releasePlateHome()
+            }
+        } else {
+            plateOpenSince = nil
+        }
+    }
+
+    /// Lets go of the plate and floats it back to the table, ready to be
+    /// picked up again.
+    func releasePlateHome() {
+        plateHeldBy = nil
+        plateOpenSince = nil
+
+        guard let plateNode else { return }
+        plateNode.removeAllActions()
+
+        let home = SKAction.move(to: plateHome, duration: 0.3)
+        home.timingMode = .easeOut
+        plateNode.run(home)
+    }
+
+    /// Puts the plate down where it belongs — the game left the serve phase
+    /// while somebody was still holding it.
+    func abandonPlateCarry() {
+        guard plateHeldBy != nil else { return }
+        plateHeldBy = nil
+        plateOpenSince = nil
+        plateNode?.position = plateHome
     }
 
     // MARK: - Trash hover
@@ -258,6 +380,23 @@ extension GameScene {
         return CGPoint(x: centre.x + offset.x * scale, y: centre.y + offset.y * scale)
     }
 
+    /// Clamps into the play area: on screen, and below the HUD.
+    ///
+    /// The score, recipe and hearts cards are drawn by SwiftUI *over* the
+    /// scene and are not transparent, so anything the player still has to see
+    /// or reach has to stay out from under them.
+    static func clampedBelowHUD(
+        _ point: CGPoint,
+        radius: CGFloat,
+        in size: CGSize,
+        hudHeight: CGFloat
+    ) -> CGPoint {
+        let onScreen = clamped(point, radius: radius, in: size)
+        let ceiling = max(radius, size.height - hudHeight - radius)
+
+        return CGPoint(x: onScreen.x, y: min(onScreen.y, ceiling))
+    }
+
     static func clamped(_ point: CGPoint, radius: CGFloat, in size: CGSize) -> CGPoint {
         CGPoint(
             x: point.x.vc_clamped(to: radius...max(radius, size.width - radius)),
@@ -303,6 +442,16 @@ extension GameScene {
                 continue
             }
             if let held = tracker.held { releaseOntoTable(held) }
+
+            // The plate needs the same treatment ingredients already got.
+            // Without this it stays owned by a hand that no longer exists:
+            // `carryPlate` only moves it for the owning id, and picking it up
+            // requires no owner at all, so nothing on screen can touch it
+            // again. Reaching for the HUD at the top of the screen pushes the
+            // hand out of the camera's view, which is exactly how players hit
+            // this.
+            if plateHeldBy == id { releasePlateHome() }
+
             trackers[id] = nil
             cursorNodes[id]?.removeFromParent()
             cursorNodes[id] = nil

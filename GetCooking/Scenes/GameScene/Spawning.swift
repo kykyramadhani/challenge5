@@ -78,8 +78,8 @@ extension GameScene {
         clearTableIngredientNodes()
         finishedDishNode?.removeFromParent()
         finishedDishNode = nil
-        swipeCueNode?.removeFromParent()
-        swipeCueNode = nil
+        bellNode?.removeFromParent()
+        bellNode = nil
         spawnedRecipeName = nil
         trackers.removeAll()
         plateNode?.position = plateHome
@@ -99,12 +99,11 @@ extension GameScene {
         }
 
         let margin = ingredientRadius + 12
-        let topExclusion = max(170, size.height * 0.16)
         let minDistanceFromPlate = plateRadius + ingredientRadius * 0.8
         let minDistanceBetweenPoints = ingredientRadius * 1.5
 
         let xRange = margin...max(margin, size.width - margin)
-        let yRange = margin...max(margin, size.height - topExclusion)
+        let yRange = margin...max(margin, size.height - hudExclusion)
 
         func attempt(spacing: CGFloat) -> [CGPoint]? {
             var points: [CGPoint] = []

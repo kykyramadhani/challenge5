@@ -44,6 +44,13 @@ final class GameScene: SKScene {
         CGPoint(x: plateHome.x + plateRadius, y: plateHome.y - plateRadius * 0.85)
     }
 
+    /// How deep the SwiftUI HUD reaches down from the top of the screen.
+    ///
+    /// The score, recipe and hearts cards are opaque and sit above the scene,
+    /// so nothing the player must see or reach may be placed under them —
+    /// spawned bubbles and a carried plate alike.
+    var hudExclusion: CGFloat { max(170, size.height * 0.16) }
+
     let grabSlack: CGFloat = 30
 
     /// How much of the gap to the hand a carried ingredient closes in one
@@ -87,7 +94,20 @@ final class GameScene: SKScene {
     /// Arc drawn around the bin while a discard dwell is charging.
     var resetProgressNode: SKShapeNode?
     var finishedDishNode: SKNode?
-    var swipeCueNode: SKNode?
+    var bellNode: BellNode?
+
+    // MARK: - Carrying the plate to the bell
+    //
+    // Only one plate exists, so this lives on the scene rather than in
+    // `HandTracker` — there is nothing per-hand to remember beyond which hand
+    // currently has it.
+
+    /// Which hand is carrying the plate, if any.
+    var plateHeldBy: Int?
+
+    /// When that hand first read as open, for the same release debounce that
+    /// ingredients use.
+    var plateOpenSince: TimeInterval?
 
     // MARK: - Hand tracking state
     var trackers: [Int: HandTracker] = [:]
@@ -136,7 +156,6 @@ final class GameScene: SKScene {
         let delta = lastUpdateTime > 0 ? currentTime - lastUpdateTime : 0
         lastUpdateTime = currentTime
 
-        consumeSwipe()
         syncWithGameState(force: false)
         updateDishTimer()
         updateHandInput(now: currentTime, delta: delta)
@@ -154,20 +173,6 @@ final class GameScene: SKScene {
         }
         dishTimerNode?.isHidden = false
         dishTimerNode?.update(fraction: gameStateManager.dishTimeFraction)
-    }
-
-    /// Reads the latest swipe from HandPoseManager and forwards it to
-    /// the state machine. If it was a successful serve, captures the
-    /// direction so the scene can animate the plate sliding out.
-    func consumeSwipe() {
-        guard let handPoseManager, let gameStateManager,
-              let direction = handPoseManager.lastSwipe else { return }
-        handPoseManager.clearSwipe()
-        let wasServing = gameStateManager.state == .waitingForSwipe
-        gameStateManager.handleSwipe(direction)
-        if wasServing, gameStateManager.state == .cooking {
-            lastServeDirection = direction
-        }
     }
 
     // MARK: - State machine
@@ -197,8 +202,8 @@ final class GameScene: SKScene {
             break
 
         case .cooking:
-            swipeCueNode?.removeFromParent()
-            swipeCueNode = nil
+            bellNode?.removeFromParent()
+            bellNode = nil
             if let direction = lastServeDirection {
                 lastServeDirection = nil
                 animateServe(direction: direction, then: gameStateManager.currentRecipe)
@@ -213,9 +218,9 @@ final class GameScene: SKScene {
             clearTableIngredientNodes()
             showFinishedDish(gameStateManager.currentRecipe)
 
-        case .waitingForSwipe:
-            if let direction = gameStateManager.swipeCueDirection {
-                showSwipeCue(direction: direction)
+        case .waitingToServe:
+            if let side = gameStateManager.bellSide {
+                showBell(on: side)
             }
 
         case .gameOver:

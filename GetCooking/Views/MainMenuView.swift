@@ -11,7 +11,8 @@ import SwiftUI
 
 struct MainMenuView: View {
     @Bindable var sceneManager: SceneManager
-    
+    @State private var showSettings = false
+
     private let games = GameOption.all
     var body: some View {
         ZStack {
@@ -52,8 +53,11 @@ struct MainMenuView: View {
             }
             
             SettingsButton {
-                print("Running")
+                showSettings = true
             }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
         }
     }
 }

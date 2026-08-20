@@ -2,9 +2,9 @@
 //  GameScene+Serving.swift
 //  GetCooking
 //
-//  Handles everything after a dish is complete: showing the finished
-//  dish image, the bell swipe cue, the plate slide-out animation,
-//  plate discard (trash hover), and committing/releasing ingredients.
+//  Handles everything after a dish is complete: showing the finished dish
+//  image, ringing the bell, carrying the plate off to it, plate discard
+//  (reset hover), and committing/releasing ingredients.
 //
 
 import SpriteKit
@@ -28,20 +28,24 @@ extension GameScene {
                 texture.size(),
                 into: plateRadius * 1.8
             )
-            dish.position = plateHome
+            // A child of the plate, not of the scene: the player is about to
+            // pick the plate up and carry it, and the meal has to travel with
+            // it rather than stay behind at the table.
+            dish.position = .zero
             dish.zPosition = 3
             dish.setScale(0)
-            addChild(dish)
+            plateNode.addChild(dish)
             dish.run(.scale(to: 1, duration: 0.25))
             finishedDishNode = dish
         }
     }
 
-    // MARK: - Bell swipe cue
-    /// Shows a ringing bell that nudges toward the serve direction,
-    /// telling the player which way to swipe.
-    func showSwipeCue(direction: SwipeDirection) {
-        swipeCueNode?.removeFromParent()
+    // MARK: - Bell
+
+    /// Rings the bell in from one edge. That edge is where the player has to
+    /// carry the plate to serve the dish.
+    func showBell(on direction: SwipeDirection) {
+        bellNode?.removeFromParent()
 
         let bell = BellNode(direction: direction)
 
@@ -81,23 +85,24 @@ extension GameScene {
         )
         bell.run(animation)
 
-        swipeCueNode = bell
+        bellNode = bell
     }
 
     // MARK: - Serve animation
 
-    /// Slides the plate and finished dish off-screen in the swipe
-    /// direction, then rebuilds a fresh plate and spawns the next
+    /// Takes the plate the rest of the way off screen once it has been
+    /// handed over at the bell, then brings out a fresh one and the next
     /// recipe's ingredients.
+    ///
+    /// The plate is already at the edge by this point — the player carried it
+    /// there — so this only finishes the journey. The dish rides along as a
+    /// child of the plate.
     func animateServe(direction: SwipeDirection, then nextRecipe: Recipe) {
         let slideX: CGFloat = direction == .left ? -size.width : size.width
         let slideOut = SKAction.moveBy(x: slideX, y: 0, duration: 0.35)
         slideOut.timingMode = .easeIn
 
-        let nodesToSlide = [plateNode, finishedDishNode].compactMap { $0 }
-        for node in nodesToSlide {
-            node.run(.sequence([slideOut, .removeFromParent()]))
-        }
+        plateNode?.run(.sequence([slideOut, .removeFromParent()]))
         finishedDishNode = nil
 
         run(
