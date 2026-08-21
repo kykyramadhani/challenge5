@@ -172,6 +172,10 @@ extension GameScene {
             plateHeldBy = handID
             plateOpenSince = nil
             plateNode.removeAllActions()
+            // Shrink on pick-up, so the plate is already tray-sized by the
+            // time it gets there — the player can see it will fit, instead of
+            // carrying a full-size plate at a well that looks too small.
+            plateNode.run(.scale(to: carriedPlateScale, duration: 0.25))
         }
 
         guard plateHeldBy == handID else { return }
@@ -179,9 +183,12 @@ extension GameScene {
         // Carried with the same easing an ingredient gets, so both feel like
         // the same object in the hand — and kept below the HUD, since the
         // score and hearts cards are opaque and would swallow it whole.
+        // Clamped at its *shrunken* radius, so it can be taken nearer the
+        // screen edge than a full-size plate could.
+        let carriedRadius = plateRadius * carriedPlateScale
         let target = Self.clampedBelowHUD(
             cursor,
-            radius: plateRadius,
+            radius: carriedRadius,
             in: size,
             hudHeight: hudExclusion
         )
@@ -190,14 +197,21 @@ extension GameScene {
             by: Self.easing(base: dragSmoothing, delta: delta)
         )
 
-        // Reaching the bell *is* serving — there is nothing else to do there,
+        // Reaching the tray *is* serving — there is nothing else to do there,
         // so it fires on arrival rather than asking for a second gesture.
         if let bell = bellNode,
            plateNode.position.vc_distance(to: bell.position)
-            <= plateRadius + bell.size.width / 2 {
+            <= carriedRadius + bell.size.width / 2 {
             lastServeDirection = gameStateManager.bellSide
             plateHeldBy = nil
             plateOpenSince = nil
+            // Drop it into the well and let the tray own it, so the plate is
+            // visibly sitting on the tray for the beat before it slides off.
+            bell.receive(
+                plateNode,
+                shrunkTo: min(bell.wellSize.width, bell.wellSize.height)
+                    / (plateRadius * 2)
+            )
             gameStateManager.serveDish()
             return
         }
@@ -218,7 +232,8 @@ extension GameScene {
     }
 
     /// Lets go of the plate and floats it back to the table, ready to be
-    /// picked up again.
+    /// picked up again — back at full size, since it only shrinks while it is
+    /// actually being carried to the tray.
     func releasePlateHome() {
         plateHeldBy = nil
         plateOpenSince = nil
@@ -228,7 +243,7 @@ extension GameScene {
 
         let home = SKAction.move(to: plateHome, duration: 0.3)
         home.timingMode = .easeOut
-        plateNode.run(home)
+        plateNode.run(.group([home, .scale(to: 1, duration: 0.3)]))
     }
 
     /// Puts the plate down where it belongs — the game left the serve phase
@@ -238,6 +253,7 @@ extension GameScene {
         plateHeldBy = nil
         plateOpenSince = nil
         plateNode?.position = plateHome
+        plateNode?.setScale(1)
     }
 
     // MARK: - Trash hover

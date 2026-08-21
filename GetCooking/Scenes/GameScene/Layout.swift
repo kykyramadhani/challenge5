@@ -19,13 +19,6 @@ extension GameScene {
         addChild(reset)
         resetNode = reset
 
-        // Above the plate and the bubbles, so a dish sitting on the plate
-        // never hides how much time is left on it.
-        let dishTimer = DishTimerNode(radius: dishTimerRadius)
-        dishTimer.zPosition = 5
-        addChild(dishTimer)
-        dishTimerNode = dishTimer
-
         layoutStaticNodes()
     }
 
@@ -34,9 +27,6 @@ extension GameScene {
         guard size.width > 0, size.height > 0 else { return }
 
         plateNode?.position = plateHome
-
-        dishTimerNode?.position = dishTimerHome
-        dishTimerNode?.resize(to: dishTimerRadius)
 
         // Reset button
         let inset: CGFloat = 120

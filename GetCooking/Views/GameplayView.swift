@@ -68,13 +68,13 @@ struct GameplayView: View {
                 .ignoresSafeArea()
 
             // Camera comes from ContentView, already running.
-            if showHandSkeleton {
-                BodySkeletonView(handPoseManager: handPoseManager)
-                    .ignoresSafeArea()
-
-                HandSkeletonView(handPoseManager: handPoseManager)
-                    .ignoresSafeArea()
-            }
+//            if showHandSkeleton {
+//                BodySkeletonView(handPoseManager: handPoseManager)
+//                    .ignoresSafeArea()
+//
+//                HandSkeletonView(handPoseManager: handPoseManager)
+//                    .ignoresSafeArena()
+//            }
 
             Group {
                 if sceneManager.isInTutorial {
@@ -135,14 +135,17 @@ struct GameplayView: View {
 
                         Spacer()
 
-                        PointCard(score: gameStateManager.score)
+                        PointCard(dishesServed: gameStateManager.dishesCompleted)
 
                         Spacer()
 
                         // Hidden rather than removed during the countdown: it
                         // still holds its width, so the score and hearts don't
                         // jump sideways the moment the first recipe lands.
-                        RecipeCard(recipe: gameStateManager.currentRecipe)
+                        RecipeCard(
+                            recipe: gameStateManager.currentRecipe,
+                            gameStateManager: gameStateManager
+                        )
                             .opacity(isCountingDown ? 0 : 1)
 
                         Spacer()

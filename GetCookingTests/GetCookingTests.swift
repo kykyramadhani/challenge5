@@ -8,6 +8,7 @@
 import Testing
 import CoreGraphics
 import SpriteKit
+import SwiftUI
 import UIKit
 @testable import GetCooking
 
@@ -33,6 +34,20 @@ struct ArtAssetTests {
 
         #expect(TrimmedArt.image(named: GameArt.bubble) != nil)
         #expect(TrimmedArt.image(named: GameArt.plate) != nil)
+    }
+
+    /// The serving station's two pieces. `BellNode` builds them by name, and a
+    /// missing one leaves the player carrying the plate at empty space with no
+    /// other symptom.
+    @Test func theServingStationArtExists() {
+        #expect(UIImage(named: "Tray") != nil)
+        #expect(UIImage(named: "RingingBell") != nil)
+    }
+
+    /// The served-dish count's icon. Referenced by name from `PointCard`, so a
+    /// rename leaves the badge showing a bare number with no other symptom.
+    @Test func theServedDishIconExists() {
+        #expect(UIImage(named: "ServedDish") != nil)
     }
 
     /// The source art sits on 1920×1080 canvases with the subject filling as
@@ -1280,38 +1295,38 @@ struct GameLoopTests {
     }
 }
 
-struct DishTimerGeometryTests {
+/// The recipe card's border, which is now the dish clock.
+struct RecipeBorderGeometryTests {
 
-    private let radius: CGFloat = 50
+    private let rect = CGRect(x: 0, y: 0, width: 400, height: 200)
+    private let radius: CGFloat = 40
 
-    /// Tolerance in points. The arc is drawn as Béziers, so the bounds land a
-    /// hair off the ideal circle.
-    private let slack: CGFloat = 0.5
+    /// The drain has to start at the top-right corner and finish at the
+    /// top-left, travelling the long way round via the bottom. Getting the
+    /// start point wrong is what would make the border empty from an arbitrary
+    /// corner — the whole reason this isn't a plain rounded rectangle.
+    @Test func theBorderRunsFromTopRightToTopLeft() {
+        let path = CardBorder(cornerRadius: radius).path(in: rect)
 
-    @Test func aFullClockCoversTheWholeDisc() {
-        let box = DishTimerNode.wedgePath(radius: radius, fraction: 1).boundingBoxOfPath
+        #expect(path.currentPoint == CGPoint(x: rect.minX, y: rect.minY),
+                "ends at the top-left corner")
 
-        #expect(abs(box.width - radius * 2) < slack)
-        #expect(abs(box.height - radius * 2) < slack)
+        // An open path: its bounds cover the card but it never closes across
+        // the top, which is where the card meets the edge of the screen.
+        let box = path.boundingRect
+        #expect(abs(box.width - rect.width) < 0.5)
+        #expect(abs(box.height - rect.height) < 0.5)
     }
 
-    /// Spent time is eaten clockwise from 12 o'clock, so half a clock is the
-    /// *left* half of the disc. This is what pins the start angle and the
-    /// sweep direction — mirror either one and this fails.
-    @Test func halfAClockIsTheLeftHalf() {
-        let box = DishTimerNode.wedgePath(radius: radius, fraction: 0.5).boundingBoxOfPath
+    /// A corner radius larger than the card can accommodate must not produce a
+    /// self-overlapping path — a short recipe makes this card genuinely small.
+    @Test func anOversizedCornerRadiusIsClamped() {
+        let squat = CGRect(x: 0, y: 0, width: 50, height: 30)
+        let path = CardBorder(cornerRadius: 999).path(in: squat)
 
-        #expect(abs(box.minX + radius) < slack, "reaches the left edge")
-        #expect(abs(box.maxX) < slack, "stops at the centre line")
-        #expect(abs(box.height - radius * 2) < slack, "spans the full height")
-    }
-
-    /// An empty clock draws nothing, leaving the white dial and its rim — the
-    /// timer reads as spent rather than as having disappeared.
-    @Test func anEmptyClockDrawsNothing() {
-        let box = DishTimerNode.wedgePath(radius: radius, fraction: 0).boundingBoxOfPath
-
-        #expect(box.width < slack)
+        let box = path.boundingRect
+        #expect(box.width <= squat.width + 0.5)
+        #expect(box.height <= squat.height + 0.5)
     }
 }
 

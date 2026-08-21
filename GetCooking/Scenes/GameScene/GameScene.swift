@@ -36,14 +36,6 @@ final class GameScene: SKScene {
     var resetRadius: CGFloat { (shortEdge * 0.09).vc_clamped(to: 38...60) }
     var ingredientRadius: CGFloat { (shortEdge * 0.17).vc_clamped(to: 68...100) }
 
-    /// Countdown pie for the current dish. Sized and placed off the plate so
-    /// it reads as belonging to it, tucked against the lower right where it
-    /// clears both the bubbles and the finished dish.
-    var dishTimerRadius: CGFloat { plateRadius * 0.36 }
-    var dishTimerHome: CGPoint {
-        CGPoint(x: plateHome.x + plateRadius, y: plateHome.y - plateRadius * 0.85)
-    }
-
     /// How deep the SwiftUI HUD reaches down from the top of the screen.
     ///
     /// The score, recipe and hearts cards are opaque and sit above the scene,
@@ -72,6 +64,11 @@ final class GameScene: SKScene {
     /// more disruptive than a cursor blinking out.
     var heldHandGrace: TimeInterval = 0.35
 
+    /// How much the plate shrinks while it is being carried to the serving
+    /// tray. Small enough to drop into the tray's well, big enough that the
+    /// dish on it is still readable on the way over.
+    var carriedPlateScale: CGFloat = 0.62
+
     /// Timestamp of the previous `update(_:)`, for frame-rate independent
     /// easing. Zero until the first frame has been seen.
     var lastUpdateTime: TimeInterval = 0
@@ -89,8 +86,7 @@ final class GameScene: SKScene {
     // MARK: - Scene nodes
     var plateNode: PlateNode!
     var resetNode: ResetButtonNode!
-    var dishTimerNode: DishTimerNode!
-    
+
     /// Arc drawn around the bin while a discard dwell is charging.
     var resetProgressNode: SKShapeNode?
     var finishedDishNode: SKNode?
@@ -157,22 +153,7 @@ final class GameScene: SKScene {
         lastUpdateTime = currentTime
 
         syncWithGameState(force: false)
-        updateDishTimer()
         updateHandInput(now: currentTime, delta: delta)
-    }
-
-    /// Drives the countdown pie beside the plate.
-    ///
-    /// Read straight off the manager each frame rather than observed: the
-    /// fraction changes continuously, and publishing it would re-render the
-    /// entire SwiftUI HUD for a shape only SpriteKit draws.
-    func updateDishTimer() {
-        guard let gameStateManager, gameStateManager.isTimingDish else {
-            dishTimerNode?.isHidden = true
-            return
-        }
-        dishTimerNode?.isHidden = false
-        dishTimerNode?.update(fraction: gameStateManager.dishTimeFraction)
     }
 
     // MARK: - State machine
@@ -202,12 +183,15 @@ final class GameScene: SKScene {
             break
 
         case .cooking:
-            bellNode?.removeFromParent()
-            bellNode = nil
             if let direction = lastServeDirection {
+                // The tray is still holding the served plate — animateServe
+                // slides it off and clears it, so it must not be torn down
+                // here first or the dish vanishes on the spot.
                 lastServeDirection = nil
                 animateServe(direction: direction, then: gameStateManager.currentRecipe)
             } else {
+                bellNode?.removeFromParent()
+                bellNode = nil
                 finishedDishNode?.removeFromParent()
                 finishedDishNode = nil
                 spawnIngredientsIfNeeded(for: gameStateManager.currentRecipe)

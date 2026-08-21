@@ -2,24 +2,34 @@
 //  PointCard.swift
 //  GetCooking
 //
-//  Created by Owen Limantoro on 13/08/26.
+//  How many dishes the player has served this run.
+//
+//  A count of finished plates rather than a points total: the run has no
+//  target to hit and every dish is worth the same amount of work, so "3 served"
+//  says more about how you're doing than an abstract score does. The plate art
+//  is the same dish the player just carried to the tray, so the badge reads
+//  without a label.
 //
 
 import SwiftUI
 
 struct PointCard: View {
-    var score: Int
-    
-    var body: some View {
-        HStack {
-            Image(systemName: "star.fill")
-                .font(.system(size: 36, weight: .bold))
+    var dishesServed: Int
 
-            Text("\(score) pts")
-                .font(.system(size: 36, weight: .bold))
+    var body: some View {
+        HStack(spacing: 20) {
+            Image("ServedDish")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 52, height: 52)
+
+            Text("\(dishesServed)")
+                .font(.system(size: 44, weight: .bold))
+                .contentTransition(.numericText())
+                .animation(.snappy, value: dishesServed)
         }
-        .padding(.horizontal, 40)
-        .padding(.vertical, 22)
+        .padding(.horizontal, 36)
+        .padding(.vertical, 14)
         .foregroundStyle(.black)
         .background(
             Capsule()
@@ -29,5 +39,5 @@ struct PointCard: View {
 }
 
 #Preview {
-    PointCard(score: 10)
+    PointCard(dishesServed: 3)
 }
