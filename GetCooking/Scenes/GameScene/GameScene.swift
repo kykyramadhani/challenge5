@@ -45,6 +45,18 @@ final class GameScene: SKScene {
 
     let grabSlack: CGFloat = 30
 
+    // MARK: - Draw order
+    //
+    // The hand glow blends *additively*, so anything drawn underneath it gets
+    // brightened. Whatever the player is holding therefore has to sit above
+    // it, or picking an ingredient up lights the ingredient up too.
+
+    /// The hand aura: above the board, below anything in hand.
+    static let glowZ: CGFloat = 60
+
+    /// An ingredient or plate currently in a hand.
+    static let heldZ: CGFloat = 100
+
     /// How much of the gap to the hand a carried ingredient closes in one
     /// 60Hz frame.
     ///
@@ -87,6 +99,16 @@ final class GameScene: SKScene {
     var plateNode: PlateNode!
     var resetNode: ResetButtonNode!
 
+    /// Whether the playfield furniture belongs on screen.
+    ///
+    /// False during the seat check. The scene is mounted for that whole phase
+    /// so the hand glow can follow the player's hands from the moment they are
+    /// detected, but the plate and bin must not sit behind the calibration
+    /// frame while they are still finding their seat.
+    var showsBoard: Bool = false {
+        didSet { applyBoardVisibility() }
+    }
+
     /// Arc drawn around the bin while a discard dwell is charging.
     var resetProgressNode: SKShapeNode?
     var finishedDishNode: SKNode?
@@ -107,7 +129,7 @@ final class GameScene: SKScene {
 
     // MARK: - Hand tracking state
     var trackers: [Int: HandTracker] = [:]
-    var cursorNodes: [Int: SKShapeNode] = [:]
+    var cursorNodes: [Int: HandGlowNode] = [:]
     var resetHoverDetector = HoverDetector()
 
     // MARK: - State-machine bookkeeping

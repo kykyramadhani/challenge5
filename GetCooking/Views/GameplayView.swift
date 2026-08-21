@@ -67,14 +67,13 @@ struct GameplayView: View {
             CameraPreviewView(handPoseManager: handPoseManager)
                 .ignoresSafeArea()
 
-            // Camera comes from ContentView, already running.
-//            if showHandSkeleton {
-//                BodySkeletonView(handPoseManager: handPoseManager)
-//                    .ignoresSafeArea()
-//
-//                HandSkeletonView(handPoseManager: handPoseManager)
-//                    .ignoresSafeArena()
-//            }
+            // Mounted here rather than inside `gameBody` so the scene is alive
+            // for the whole screen, seat check included. The hand glow lives in
+            // the scene, and the player should see their hands light up the
+            // moment they are detected — during calibration and the countdown,
+            // not only once play starts. `showsBoard` keeps the plate and bin
+            // out of sight until then.
+            sceneLayer
 
             Group {
                 if sceneManager.isInTutorial {
@@ -110,26 +109,44 @@ struct GameplayView: View {
         }
     }
 
+    /// The SpriteKit layer: the board during play, and the hand glow at all
+    /// times. Kept out of `gameBody` so the seat check draws over a live scene
+    /// rather than swapping one in afterwards.
+    private var sceneLayer: some View {
+        GeometryReader { proxy in
+            SpriteView(
+                scene: scene,
+                options: [
+                    .allowsTransparency, .ignoresSiblingOrder,
+                ]
+            )
+            .ignoresSafeArea()
+            .background(.clear)
+            .onAppear {
+                scene.size = proxy.size
+                scene.gameStateManager = gameStateManager
+                scene.handPoseManager = handPoseManager
+                scene.showsBoard = boardIsUp
+            }
+            .onChange(of: proxy.size) { _, newSize in
+                scene.size = newSize
+            }
+            .onChange(of: boardIsUp) { _, isUp in
+                scene.showsBoard = isUp
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    /// The seat check is done (or was never needed), so the playfield belongs
+    /// on screen. Until then only the hand glow is drawn.
+    private var boardIsUp: Bool {
+        !sceneManager.isInTutorial && (hasCalibrated || !needsCalibration)
+    }
+
     private var gameBody: some View {
         GeometryReader { proxy in
             ZStack {
-                SpriteView(
-                    scene: scene,
-                    options: [
-                        .allowsTransparency, .ignoresSiblingOrder,
-                    ]
-                )
-                .ignoresSafeArea()
-                .background(.clear)
-                .onAppear {
-                    scene.size = proxy.size
-                    scene.gameStateManager = gameStateManager
-                    scene.handPoseManager = handPoseManager
-                }
-                .onChange(of: proxy.size) { _, newSize in
-                    scene.size = newSize
-                }
-
                 VStack {
                     HStack(alignment: .center) {
 

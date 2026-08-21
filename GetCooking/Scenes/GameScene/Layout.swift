@@ -19,7 +19,16 @@ extension GameScene {
         addChild(reset)
         resetNode = reset
 
+        applyBoardVisibility()
         layoutStaticNodes()
+    }
+
+    /// Shows or hides the playfield furniture. Called whenever `showsBoard`
+    /// changes and again whenever a node is rebuilt, so a plate created mid-run
+    /// inherits the current setting rather than defaulting to visible.
+    func applyBoardVisibility() {
+        plateNode?.isHidden = !showsBoard
+        resetNode?.isHidden = !showsBoard
     }
 
     /// Re-sizes and re-positions everything after a rotation or size change.
@@ -44,8 +53,9 @@ extension GameScene {
         let plate = PlateNode(radius: plateRadius)
         plate.zPosition = 1
         plate.position = plateHome
-        
+
         addChild(plate)
         plateNode = plate
+        applyBoardVisibility()
     }
 }

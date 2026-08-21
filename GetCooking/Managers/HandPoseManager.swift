@@ -137,17 +137,6 @@ final class HandPoseManager: NSObject, ObservableObject {
     /// detectors disagree slightly about where a wrist is.
     var wristMatchTolerance: CGFloat = 0.6
 
-    /// How much larger or smaller than the anchor hand another hand may
-    /// measure and still count as the same person's.
-    ///
-    /// Only used as the fallback when no body is found at all — see
-    /// `onePersonHandIndices`.
-    var samePersonScaleTolerance: CGFloat = 1.7
-
-    /// Furthest another hand may sit from the anchor, in normalized units, in
-    /// the same no-body fallback.
-    var samePersonMaxSpan: CGFloat = 0.7
-
     /// Minimum Vision joint confidence to trust a point.
     var jointConfidenceThreshold: Float = 0.25
 
@@ -753,25 +742,19 @@ final class HandPoseManager: NSObject, ObservableObject {
             : nil
         let handLimit = oneHandPreference != nil ? 1 : maximumHandCount
 
+        // No body, no hands. A hand is only the player's if it can be tied to
+        // a visible shoulder, so a torso out of frame means nothing is tracked
+        // — the same rule the seat check enforces before the game even starts.
+        // There used to be a geometry-only fallback here for when the body
+        // detector lost the player; it is gone deliberately, because it also
+        // let a bystander's hands in whenever that happened.
         let keep = Self.playerHandIndices(
             handWrists: classifications.map(\.wrist),
             bodies: bodies,
             wristTolerance: wristMatchTolerance,
             limit: handLimit,
             requiredHand: oneHandPreference
-        ) ?? Self.onePersonHandIndices(
-            // No body to anchor on — a torso cropped out of frame, or the
-            // detector losing the player for a frame. Falling back to the
-            // geometric guess keeps the game playable; blanking every hand
-            // because a shoulder went missing would not. There's no chirality
-            // signal here to honor the chosen side with, so one-hand mode
-            // still just caps it to a single hand.
-            positions: classifications.map(\.location),
-            palmLengths: classifications.map(\.palmLength),
-            maxSpan: samePersonMaxSpan,
-            scaleTolerance: samePersonScaleTolerance,
-            limit: handLimit
-        )
+        ) ?? []
 
         let hands = matchToTrackedHands(keep.map { classifications[$0] }, now: now)
         DispatchQueue.main.async { self.hands = hands }
@@ -1069,62 +1052,6 @@ final class HandPoseManager: NSObject, ObservableObject {
             .sorted { $0.distance < $1.distance }
             .prefix(limit)
             .map(\.index)
-    }
-
-    /// Narrows a frame's hands down to the ones that plausibly belong to a
-    /// single person, on geometry alone.
-    ///
-    /// The fallback for when no body is detected. Kept because it degrades
-    /// better than showing nothing, but `playerHandIndices` is the real filter.
-    ///
-    /// Anchored on the **largest palm**, which is the hand nearest the lens and
-    /// therefore the person the iPad is pointed at. Another hand joins it when
-    /// it measures a similar size (so it is at a similar distance) and sits
-    /// close enough to hang off the same body.
-    ///
-    /// Apparent hand size is the load-bearing signal here. Someone standing
-    /// behind the player measures visibly smaller, and no amount of arm-waving
-    /// changes that, whereas position alone can't tell a second player from the
-    /// player's own outstretched hand.
-    ///
-    /// ponytail: geometry only, no notion of *whose* body a hand is on. If two
-    /// people stand shoulder to shoulder at the same distance this will happily
-    /// mix them; pairing hands to torsos needs `VNDetectHumanRectanglesRequest`
-    /// (cheap) or `VNDetectHumanBodyPoseRequest` (a second inference pass per
-    /// frame) — see the note in this method's tests.
-    ///
-    /// Returns indices into the input, anchor first, at most `limit` of them.
-    static func onePersonHandIndices(
-        positions: [CGPoint],
-        palmLengths: [CGFloat],
-        maxSpan: CGFloat,
-        scaleTolerance: CGFloat,
-        limit: Int
-    ) -> [Int] {
-        guard limit > 0, positions.count == palmLengths.count,
-              let anchor = palmLengths.indices.max(by: { palmLengths[$0] < palmLengths[$1] }),
-              palmLengths[anchor] > 0,
-              scaleTolerance >= 1
-        else { return [] }
-
-        let anchorPalm = palmLengths[anchor]
-        let anchorPosition = positions[anchor]
-
-        func distanceToAnchor(_ index: Int) -> CGFloat {
-            positions[index].distance(to: anchorPosition)
-        }
-
-        let sameBody = positions.indices.filter { index in
-            guard index != anchor else { return false }
-            let ratio = palmLengths[index] / anchorPalm
-            guard ratio >= 1 / scaleTolerance, ratio <= scaleTolerance else { return false }
-            return distanceToAnchor(index) <= maxSpan
-        }
-
-        // Nearest first, so if more hands qualify than can be played with, the
-        // ones dropped are the least likely to be the player's own.
-        let ranked = sameBody.sorted { distanceToAnchor($0) < distanceToAnchor($1) }
-        return [anchor] + ranked.prefix(limit - 1)
     }
 
     /// The gap between thumb tip and little-finger tip, in palm lengths —

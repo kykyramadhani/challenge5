@@ -803,16 +803,18 @@ struct PlayerBodyMatchTests {
         #expect(kept?.count == 2)
     }
 
-    /// No body at all is *not* "no hands" — it tells the caller to fall back,
-    /// so a cropped torso can't freeze the game.
-    @Test func noBodyAsksTheCallerToFallBack() {
+    /// No shoulders in shot, no hands. A hand only counts as the player's if
+    /// it can be tied to a visible body, so a cropped torso tracks nothing —
+    /// the caller maps this nil straight to an empty list.
+    @Test func noBodyMeansNoHands() {
         #expect(keep(hands: [(0.5, 0.5)], bodies: []) == nil)
     }
 
     /// The player is in frame with their hands down or out of shot. That
-    /// matches nothing — and must *not* report "no body", because falling back
-    /// to geometry is exactly the door a bystander's hands would come through.
-    @Test func aPlayerWithNoVisibleWristsMatchesNothingRatherThanFallingBack() {
+    /// matches nothing, and is reported as an empty list rather than as "no
+    /// body" — the two are distinct even though the caller now treats them
+    /// the same way.
+    @Test func aPlayerWithNoVisibleWristsMatchesNothing() {
         let kept = keep(
             hands: [(0.85, 0.55)],                       // a bystander's hand
             bodies: [body(wrists: [], shoulders: 0.30)]  // player, hands down
@@ -993,95 +995,6 @@ struct BodySkeletonTests {
         let drawn = Set(body(hips: true).chains.flatMap { $0 })
 
         #expect(!drawn.contains(CGPoint(x: 0.5, y: 0.85)))
-    }
-}
-
-/// The geometry-only fallback, used when no body is detected at all.
-struct OnePersonHandTests {
-
-    /// Shipped numbers.
-    private func keep(
-        _ hands: [(x: CGFloat, y: CGFloat, palm: CGFloat)],
-        limit: Int = 2
-    ) -> [Int] {
-        HandPoseManager.onePersonHandIndices(
-            positions: hands.map { CGPoint(x: $0.x, y: $0.y) },
-            palmLengths: hands.map(\.palm),
-            maxSpan: 0.7,
-            scaleTolerance: 1.7,
-            limit: limit
-        )
-    }
-
-    /// Both of one player's hands survive, however they are ordered.
-    @Test func bothOfThePlayersHandsAreKept() {
-        let kept = keep([(0.4, 0.5, 0.12), (0.6, 0.5, 0.12)])
-
-        #expect(kept.count == 2)
-        #expect(Set(kept) == [0, 1])
-    }
-
-    /// The whole point: someone further back measures smaller, so they lose to
-    /// the player even while Vision is happily reporting them.
-    @Test func aBystanderFurtherBackIsDropped() {
-        let kept = keep([
-            (0.4, 0.5, 0.12),   // player
-            (0.6, 0.5, 0.12),   // player
-            (0.85, 0.6, 0.05)   // bystander, half the apparent size
-        ])
-
-        #expect(Set(kept) == [0, 1], "the bystander must not be tracked")
-    }
-
-    /// A hand the right size but right across the frame is somebody else's.
-    @Test func aHandTooFarAcrossTheFrameIsDropped() {
-        let kept = keep([(0.9, 0.05, 0.12), (0.05, 0.95, 0.12)])
-
-        #expect(kept.count == 1)
-    }
-
-    /// One hand alone is still the player.
-    @Test func aLoneHandIsKept() {
-        #expect(keep([(0.5, 0.5, 0.1)]) == [0])
-    }
-
-    /// Reaching one arm towards the camera makes that hand measurably bigger.
-    /// The depth window has to tolerate that or the game drops the hand the
-    /// player is actively reaching with.
-    @Test func oneHandReachingForwardIsStillTheSamePlayer() {
-        let kept = keep([(0.45, 0.5, 0.10), (0.55, 0.5, 0.16)])
-
-        #expect(kept.count == 2, "1.6× is within the depth window")
-    }
-
-    /// Never hand back more than the game can play with, even when a crowd
-    /// qualifies.
-    @Test func neverReturnsMoreThanTheLimit() {
-        let kept = keep([
-            (0.40, 0.5, 0.12), (0.50, 0.5, 0.12),
-            (0.60, 0.5, 0.12), (0.70, 0.5, 0.12)
-        ])
-
-        #expect(kept.count == 2)
-    }
-
-    @Test func noHandsInMeansNoHandsOut() {
-        #expect(keep([]).isEmpty)
-    }
-
-    /// A hand with no usable palm measurement can't be placed in depth, so it
-    /// can't anchor anything either.
-    @Test func unmeasurableHandsAreIgnored() {
-        #expect(keep([(0.5, 0.5, 0)]).isEmpty)
-    }
-
-    /// Why this is only the fallback: on geometry alone two people side by
-    /// side at the same distance are indistinguishable. `PlayerBodyMatchTests`
-    /// covers the same case correctly, because it knows whose wrist is whose.
-    @Test func mixesTwoPeopleAtTheSameDistance() {
-        let kept = keep([(0.35, 0.5, 0.12), (0.55, 0.5, 0.12)])
-
-        #expect(kept.count == 2, "the body-pose filter is what fixes this")
     }
 }
 

@@ -23,15 +23,32 @@ extension GameScene {
     /// (top-left origin, y-down) to scene space (bottom-left, y-up),
     /// and runs the grab / drag / release / trash-hover logic.
     func updateHandInput(now: TimeInterval, delta: TimeInterval = 0) {
-        // Hands are live for two phases now: cooking, where they move
+        guard let view, let handPoseManager else {
+            hideAllCursors()
+            return
+        }
+
+        let viewSize = view.bounds.size
+        let hands = handPoseManager.hands
+        let liveIDs = Set(hands.map(\.id))
+
+        // The glow is drawn *before* any game-state gate, so a hand lights up
+        // the moment it is detected — through the seat check and the countdown
+        // as well as during play. Only the interaction below is gated.
+        for hand in hands {
+            let cursor = convertPoint(fromView: handPoseManager.cursor(for: hand, in: viewSize))
+            updateCursorNode(for: hand.id, at: cursor, isFist: hand.isClosedFist)
+        }
+        retireVanishedGlows(stillLive: liveIDs)
+
+        // Hands drive gameplay in two phases: cooking, where they move
         // ingredients, and serving, where they carry the whole plate to the
-        // bell. Everything else parks them.
-        guard let view, let handPoseManager, let gameStateManager,
+        // tray. Everything else parks them.
+        guard let gameStateManager,
               gameStateManager.state == .cooking
                 || gameStateManager.state == .waitingToServe else {
             abandonAllDrags()
             abandonPlateCarry()
-            hideAllCursors()
             resetHoverDetector.reset()
             updateTrashProgress(0)
             return
@@ -39,9 +56,7 @@ extension GameScene {
 
         let isCooking = gameStateManager.state == .cooking
 
-        let viewSize = view.bounds.size
-        let hands = handPoseManager.hands
-        retireVanishedHands(stillLive: Set(hands.map(\.id)), now: now)
+        retireVanishedHands(stillLive: liveIDs, now: now)
 
         var frameHands: [FrameHand] = []
 
@@ -58,8 +73,6 @@ extension GameScene {
             frameHands.append(FrameHand(cursor: cursor,
                                         isOpen: state == .open,
                                         isHolding: tracker.held != nil))
-
-            updateCursorNode(for: hand.id, at: cursor, isFist: state == .fist)
 
             guard isCooking else {
                 carryPlate(
@@ -80,7 +93,7 @@ extension GameScene {
             if state == .fist, tracker.previousState != .fist, tracker.held == nil {
                 if let grabbed = grabCandidate(touchedBy: handPoints) {
                     grabbed.heldBy = hand.id
-                    grabbed.zPosition = 100
+                    grabbed.zPosition = Self.heldZ
                     grabbed.removeAllActions()
                     grabbed.setScale(1)
                     tracker.held = grabbed
@@ -172,6 +185,9 @@ extension GameScene {
             plateHeldBy = handID
             plateOpenSince = nil
             plateNode.removeAllActions()
+            // Above the hand's glow, like a held ingredient — otherwise the
+            // additive aura washes over the plate the whole way to the tray.
+            plateNode.zPosition = Self.heldZ
             // Shrink on pick-up, so the plate is already tray-sized by the
             // time it gets there — the player can see it will fit, instead of
             // carrying a full-size plate at a well that looks too small.
@@ -240,6 +256,7 @@ extension GameScene {
 
         guard let plateNode else { return }
         plateNode.removeAllActions()
+        plateNode.zPosition = 1
 
         let home = SKAction.move(to: plateHome, duration: 0.3)
         home.timingMode = .easeOut
@@ -254,6 +271,7 @@ extension GameScene {
         plateOpenSince = nil
         plateNode?.position = plateHome
         plateNode?.setScale(1)
+        plateNode?.zPosition = 1
     }
 
     // MARK: - Trash hover
@@ -422,28 +440,40 @@ extension GameScene {
 
     // MARK: - Cursors
 
-    /// Shows a green (fist) or red (open) circle at the hand position.
+    /// Lights the hand up: a glowing aura on the palm, green while open and
+    /// accent while grabbing, trailing fading circles as it moves.
     func updateCursorNode(for id: Int, at position: CGPoint, isFist: Bool) {
-        let node: SKShapeNode
+        let node: HandGlowNode
         if let existing = cursorNodes[id] {
             node = existing
         } else {
-            node = SKShapeNode(circleOfRadius: 22)
-            node.strokeColor = .white
-            node.lineWidth = 3
-            node.zPosition = 1000
+            node = HandGlowNode(radius: ingredientRadius)
+            node.zPosition = Self.glowZ
             addChild(node)
+            // Emitted into the scene rather than into the glow, so the wake
+            // stays put as the hand moves on.
+            node.attachTrail(to: self)
             cursorNodes[id] = node
         }
-        node.isHidden = false
+        node.setVisible(true)
         node.position = position
-        node.fillColor = isFist
-            ? SKColor.systemGreen.withAlphaComponent(0.75)
-            : SKColor.systemRed.withAlphaComponent(0.65)
+        node.setGrabbing(isFist)
     }
 
     func hideAllCursors() {
-        cursorNodes.values.forEach { $0.isHidden = true }
+        cursorNodes.values.forEach { $0.setVisible(false) }
+    }
+
+    /// Tears down the glow for any hand Vision is no longer reporting.
+    ///
+    /// Separate from `retireVanishedHands` because the glow outlives the game
+    /// state that owns the trackers: it is drawn during the seat check and the
+    /// countdown too, when there is nothing to be holding in the first place.
+    func retireVanishedGlows(stillLive: Set<Int>) {
+        for (id, node) in cursorNodes where !stillLive.contains(id) {
+            node.removeFromParent()
+            cursorNodes[id] = nil
+        }
     }
 
     // MARK: - Hand lifecycle
@@ -454,7 +484,6 @@ extension GameScene {
     func retireVanishedHands(stillLive: Set<Int>, now: TimeInterval) {
         for (id, tracker) in trackers where !stillLive.contains(id) {
             if tracker.held != nil, now - tracker.lastSeen <= heldHandGrace {
-                cursorNodes[id]?.isHidden = true
                 continue
             }
             if let held = tracker.held { releaseOntoTable(held) }
@@ -469,8 +498,6 @@ extension GameScene {
             if plateHeldBy == id { releasePlateHome() }
 
             trackers[id] = nil
-            cursorNodes[id]?.removeFromParent()
-            cursorNodes[id] = nil
         }
     }
 
