@@ -43,13 +43,14 @@ struct GameplayView: View {
     /// *how far into the screen* the player is.
     @State private var hasCalibrated = false
 
-    /// Seconds left on the "get ready" beat, counting 3 → 1 and then 0 once
-    /// play has begun. The board is already up and the camera live; the game
-    /// state machine simply stays `.idle` until this reaches zero, so nothing
-    /// spawns and no clock runs while the player settles.
+    /// Where the "get ready" beat has got to: 3 → 2 → 1 → 0, where 0 is the
+    /// "GO!" flash, and -1 once it is over and the overlay is gone. The board
+    /// is already up and the camera live throughout; the game state machine
+    /// simply stays `.idle` until the countdown finishes, so nothing spawns
+    /// and no clock runs while the player settles.
     @State private var countdown = 3
 
-    private var isCountingDown: Bool { countdown > 0 }
+    private var isCountingDown: Bool { countdown >= 0 }
 
     /// The selected game asks for a seat check and the player hasn't passed it
     /// yet. Games without calibration skip straight to the board.
@@ -229,20 +230,23 @@ struct GameplayView: View {
             // still running.
             handPoseManager.start()
         }
-        .task(id: gameStateManager.resetToken) {
+        .task(id: gameStateManager.runToken) {
             // Runs when the board appears — i.e. after calibration — and again
-            // on every replay, keyed off resetToken since a replay that skips
+            // on every replay, keyed off runToken since a replay that skips
             // calibration (no calibration required) never remounts this view.
+            // Deliberately *not* resetToken: that also fires when a dish times
+            // out, which costs a life but leaves the run going, and a countdown
+            // there would interrupt play the player hasn't lost yet.
             // The camera is already live, handed over by the seat check.
-            for step in stride(from: 3, through: 1, by: -1) {
-                countdown = step
+            for step in stride(from: 3, through: 0, by: -1) {
+                countdown = step  // 0 is the "GO!" beat
                 do {
                     try await Task.sleep(for: .seconds(1))
                 } catch {
                     return  // view went away mid-count
                 }
             }
-            countdown = 0
+            countdown = -1
             gameStateManager.start()
         }
         .onChange(of: gameStateManager.isPaused) { _, paused in

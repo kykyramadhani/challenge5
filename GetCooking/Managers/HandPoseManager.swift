@@ -3,7 +3,8 @@
 //  VisionChef
 //
 //  Captures camera frames, runs VNDetectHumanHandPoseRequest on each frame,
-//  tracks up to two hands independently, and classifies each as open/closed.
+//  tracks up to two hands independently, and classifies each as grabbing
+//  (thumb tip pinched to little-finger tip) or open (everything else).
 //
 //  Vision inference runs entirely on a background queue (`videoQueue`); only
 //  the final @Published updates are hopped onto the main queue, so a slow
@@ -150,22 +151,27 @@ final class HandPoseManager: NSObject, ObservableObject {
     /// Minimum Vision joint confidence to trust a point.
     var jointConfidenceThreshold: Float = 0.25
 
-    /// A finger counts as "extended" when its tip sits at least this many
-    /// *palm lengths* away from the wrist (palm length = wrist → knuckles).
+    /// Grabbing is a **pinch**: thumb tip and index-finger tip brought
+    /// together. Measured as the gap between those two tips divided by palm
+    /// length (wrist → knuckles), so it is scale-free and holds at any
+    /// distance from the camera, the same way every other pose measurement
+    /// here works.
     ///
-    /// Measuring against palm length rather than against the finger's own PIP
-    /// joint is what makes this work: an extended finger puts its tip at
-    /// roughly 1.8–2.2 palm lengths from the wrist, while a curled one folds
-    /// back to ~1.0, so 1.5 splits them with room on both sides — and because
-    /// the ratio is scale-free it holds at any distance from the camera.
-    var extensionRatioThreshold: CGFloat = 1.5
-
-    /// Number of extended fingers (out of 4, thumb excluded) required to
-    /// classify a hand as open. `closedFingerCountThreshold` or fewer
-    /// classifies it as a fist. Values in between keep that hand's previous
-    /// state (hysteresis) to avoid flicker at the boundary.
-    var openFingerCountThreshold = 3
-    var closedFingerCountThreshold = 1
+    /// Tips touching read at roughly 0.1–0.25 palm lengths (they never reach 0
+    /// — the joints sit inside the fingers); an open hand holds them around
+    /// 0.8–1.2 apart. The two thresholds give hysteresis: at or below
+    /// `pinchCloseRatio` the hand is grabbing, at or above `pinchOpenRatio` it
+    /// is open, and in between it keeps whatever it was, so a hand hovering
+    /// right at the boundary doesn't flicker and drop what it's carrying.
+    ///
+    /// Anything that isn't an active pinch counts as open — including a
+    /// clenched fist, which used to be the grab pose. Note that the thumb
+    /// folds *across* the index finger in a fist, so these two tips land
+    /// nearer each other than a thumb-to-little-finger pinch would; the
+    /// thresholds are set tight enough to keep that clear of a real pinch, and
+    /// are the first thing to lower if fists start registering as grabs.
+    var pinchCloseRatio: CGFloat = 0.3
+    var pinchOpenRatio: CGFloat = 0.5
 
     /// Rotation used when running on a Mac, which has no device orientation to
     /// follow. Valid angles are 0/90/180/270 only, so -90 must be written 270.
@@ -731,8 +737,7 @@ final class HandPoseManager: NSObject, ObservableObject {
         let classifications = observations.compactMap {
             try? Self.classify(
                 observation: $0,
-                jointConfidenceThreshold: jointConfidenceThreshold,
-                extensionRatioThreshold: extensionRatioThreshold
+                jointConfidenceThreshold: jointConfidenceThreshold
             )
         }
         guard !classifications.isEmpty else {
@@ -781,7 +786,10 @@ final class HandPoseManager: NSObject, ObservableObject {
         /// Wrist → knuckles, normalized. Doubles as a distance-from-camera
         /// cue: the same hand twice as far away measures half as long.
         let palmLength: CGFloat
-        let extendedFingerCount: Int
+        /// Thumb-tip to index-tip gap, in palm lengths. Nil when either tip
+        /// was missing this frame — the hand is then treated as open, since a
+        /// grab has to be seen to count.
+        let pinchRatio: CGFloat?
         let skeleton: [[CGPoint]]
     }
 
@@ -797,8 +805,7 @@ final class HandPoseManager: NSObject, ObservableObject {
 
     private static func classify(
         observation: VNHumanHandPoseObservation,
-        jointConfidenceThreshold: Float,
-        extensionRatioThreshold: CGFloat
+        jointConfidenceThreshold: Float
     ) throws -> Classification {
         let allPoints = try observation.recognizedPoints(.all)
 
@@ -822,14 +829,13 @@ final class HandPoseManager: NSObject, ObservableObject {
             throw HandPoseError.noReliablePalm
         }
 
-        // Thumb excluded: it folds sideways rather than curling inward, so it
-        // scores badly against a straight wrist-distance test.
-        let fingertips: [VNHumanHandPoseObservation.JointName] = [.indexTip, .middleTip, .ringTip, .littleTip]
-        let extendedCount = extendedFingerCount(
-            wrist: wrist,
-            fingertips: fingertips.compactMap(point),
-            palmLength: palmLength,
-            threshold: extensionRatioThreshold
+        // The grab gesture: thumb tip meeting little-finger tip. Only these two
+        // joints matter — what the other three fingers are doing is ignored
+        // entirely, so a fist and a flat palm both read as open.
+        let pinch = pinchRatio(
+            thumbTip: point(.thumbTip),
+            indexTip: point(.indexTip),
+            palmLength: palmLength
         )
 
         // Track the palm centre (wrist + knuckles) rather than including the
@@ -843,7 +849,7 @@ final class HandPoseManager: NSObject, ObservableObject {
             location: centre,
             wrist: wrist,
             palmLength: palmLength,
-            extendedFingerCount: extendedCount,
+            pinchRatio: pinch,
             skeleton: skeleton
         )
     }
@@ -1121,17 +1127,22 @@ final class HandPoseManager: NSObject, ObservableObject {
         return [anchor] + ranked.prefix(limit - 1)
     }
 
-    /// How many fingertips sit at least `threshold` palm-lengths from the
-    /// wrist. Extracted from `classify` so the tuning maths can be exercised
-    /// without having to fabricate a `VNHumanHandPoseObservation`.
-    static func extendedFingerCount(
-        wrist: CGPoint,
-        fingertips: [CGPoint],
-        palmLength: CGFloat,
-        threshold: CGFloat
-    ) -> Int {
-        guard palmLength > 0 else { return 0 }
-        return fingertips.filter { wrist.distance(to: $0) / palmLength >= threshold }.count
+    /// The gap between thumb tip and little-finger tip, in palm lengths —
+    /// small means the two are pinched together, which is the grab gesture.
+    ///
+    /// Nil when either tip is missing, or the palm couldn't be measured: the
+    /// caller reads that as "not grabbing", so a hand whose thumb drops out of
+    /// tracking opens rather than clamping shut on whatever is nearby.
+    ///
+    /// Extracted from `classify` so the tuning maths can be exercised without
+    /// having to fabricate a `VNHumanHandPoseObservation`.
+    static func pinchRatio(
+        thumbTip: CGPoint?,
+        indexTip: CGPoint?,
+        palmLength: CGFloat
+    ) -> CGFloat? {
+        guard palmLength > 0, let thumbTip, let indexTip else { return nil }
+        return thumbTip.distance(to: indexTip) / palmLength
     }
 
     private enum HandPoseError: Error {
@@ -1175,14 +1186,20 @@ final class HandPoseManager: NSObject, ObservableObject {
                 y: hand.smoothed.y + (classification.location.y - hand.smoothed.y) * cursorSmoothing
             )
 
-            // Hysteresis is per hand, so one hand closing can't flip the other.
+            // Hysteresis is per hand, so one hand pinching can't flip the other.
+            // A missing pinch measurement opens the hand outright rather than
+            // holding the previous state — see `pinchRatio`.
             let isOpen: Bool
-            if classification.extendedFingerCount >= openFingerCountThreshold {
-                isOpen = true
-            } else if classification.extendedFingerCount <= closedFingerCountThreshold {
-                isOpen = false
+            if let pinch = classification.pinchRatio {
+                if pinch <= pinchCloseRatio {
+                    isOpen = false
+                } else if pinch >= pinchOpenRatio {
+                    isOpen = true
+                } else {
+                    isOpen = hand.isOpen
+                }
             } else {
-                isOpen = hand.isOpen
+                isOpen = true
             }
             hand.isOpen = isOpen
 
@@ -1192,7 +1209,6 @@ final class HandPoseManager: NSObject, ObservableObject {
                 cursorPosition: hand.smoothed,
                 isOpenHand: isOpen,
                 isClosedFist: !isOpen,
-                extendedFingerCount: classification.extendedFingerCount,
                 skeleton: classification.skeleton
             ))
         }

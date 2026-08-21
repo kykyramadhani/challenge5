@@ -143,58 +143,93 @@ struct HandPoseMappingTests {
     }
 }
 
-struct FistClassifierTests {
+/// Grabbing is a thumb-to-index-finger pinch. The shipped thresholds are
+/// 0.3 (grab) and 0.5 (open), with hysteresis in between.
+struct PinchClassifierTests {
 
-    private let wrist = CGPoint.zero
     private let palmLength: CGFloat = 1.0
-    private let threshold: CGFloat = 1.5
 
-    /// An open hand puts each tip ~2 palm-lengths from the wrist.
-    @Test func openHandCountsEveryFinger() {
-        let tips = [2.0, 2.1, 1.95, 1.8].map { CGPoint(x: 0, y: $0) }
+    /// The shipped values, so these tests fail if the thresholds drift apart
+    /// from the fixtures below rather than silently going vacuous.
+    private let closeRatio: CGFloat = 0.3
+    private let openRatio: CGFloat = 0.5
 
-        let count = HandPoseManager.extendedFingerCount(
-            wrist: wrist, fingertips: tips, palmLength: palmLength, threshold: threshold
+    /// Tips touching. They never reach 0 — the joints sit inside the fingers —
+    /// so this has to clear the grab threshold with room, not just beat zero.
+    @Test func tipsTogetherReadAsAPinch() {
+        let ratio = HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0),
+            indexTip: CGPoint(x: 0.15, y: 0),
+            palmLength: palmLength
         )
 
-        #expect(count == 4)
+        #expect(ratio == 0.15)
+        #expect(ratio! <= closeRatio, "clears the shipped grab threshold")
     }
 
-    /// A fist curls the tips back to roughly the knuckle line (~1 palm length).
-    /// The old tip/PIP ratio test scored a *straight* finger at only ~1.33, so
-    /// it never cleared 1.5 and every hand read as a permanent fist.
-    @Test func closedFistCountsNoFingers() {
-        let tips = [1.0, 1.1, 0.95, 0.9].map { CGPoint(x: 0, y: $0) }
-
-        let count = HandPoseManager.extendedFingerCount(
-            wrist: wrist, fingertips: tips, palmLength: palmLength, threshold: threshold
+    /// A spread open hand puts the two tips a full palm-width apart or more —
+    /// comfortably past the open threshold, never mistakeable for a grab.
+    @Test func aSpreadHandIsWellClearOfTheGrabThreshold() {
+        let ratio = HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0),
+            indexTip: CGPoint(x: 1.1, y: 0),
+            palmLength: palmLength
         )
 
-        #expect(count == 0)
+        #expect(ratio! >= openRatio, "reads as open, not held by hysteresis")
     }
 
-    /// Scale-free: the same pose twice as far from the camera must classify
-    /// identically, since every distance is divided by palm length.
-    @Test func classificationIsIndependentOfDistanceFromCamera() {
-        let near = [2.0, 2.1, 1.95, 1.8].map { CGPoint(x: 0, y: $0) }
-        let far = near.map { CGPoint(x: $0.x / 2, y: $0.y / 2) }
-
-        let nearCount = HandPoseManager.extendedFingerCount(
-            wrist: wrist, fingertips: near, palmLength: palmLength, threshold: threshold
+    /// The whole point of the change: a clenched fist is no longer a grab.
+    ///
+    /// This is the close call for a thumb-to-*index* pinch specifically — a
+    /// fist folds the thumb across the curled index, so these two tips end up
+    /// nearer each other than any other pair on the hand. ~0.6 palm lengths
+    /// still has to land on the open side of the threshold.
+    @Test func aClenchedFistIsNotAGrab() {
+        let ratio = HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0),
+            indexTip: CGPoint(x: 0.6, y: 0),
+            palmLength: palmLength
         )
-        let farCount = HandPoseManager.extendedFingerCount(
-            wrist: wrist, fingertips: far, palmLength: palmLength / 2, threshold: threshold
-        )
 
-        #expect(nearCount == farCount)
+        #expect(ratio! >= openRatio, "a fist must read as open")
     }
 
-    @Test func missingPalmMeasurementDoesNotReportExtendedFingers() {
-        let count = HandPoseManager.extendedFingerCount(
-            wrist: wrist, fingertips: [CGPoint(x: 0, y: 2)], palmLength: 0, threshold: threshold
+    /// Scale-free: the same pinch twice as far from the camera must classify
+    /// identically, since the gap is divided by palm length.
+    @Test func pinchIsIndependentOfDistanceFromCamera() {
+        let near = HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0),
+            indexTip: CGPoint(x: 0.3, y: 0),
+            palmLength: palmLength
+        )
+        let far = HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0),
+            indexTip: CGPoint(x: 0.15, y: 0),
+            palmLength: palmLength / 2
         )
 
-        #expect(count == 0)
+        #expect(near == far)
+    }
+
+    /// A tip that dropped out of tracking is not a grab — the caller opens the
+    /// hand rather than clamping shut on whatever is nearby.
+    @Test func aMissingTipHasNoPinchMeasurement() {
+        #expect(HandPoseManager.pinchRatio(
+            thumbTip: nil, indexTip: CGPoint(x: 0.2, y: 0), palmLength: palmLength
+        ) == nil)
+
+        #expect(HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0), indexTip: nil, palmLength: palmLength
+        ) == nil)
+    }
+
+    @Test func anUnmeasurablePalmHasNoPinchMeasurement() {
+        #expect(HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0),
+            indexTip: CGPoint(x: 0.2, y: 0),
+            palmLength: 0
+        ) == nil)
     }
 }
 
@@ -1334,6 +1369,32 @@ struct LivesTests {
         manager.failDish()
 
         #expect(manager.resetToken == tokenBefore + 1)
+    }
+
+    /// Losing a life wipes the board but the run carries on, so the player
+    /// must not be dropped back into a 3-2-1-GO! countdown. `runToken` is what
+    /// GameplayView keys that countdown off, and only `restart()` bumps it.
+    @Test func aTimedOutDishDoesNotBumpTheRunToken() {
+        let manager = GameStateManager(recipes: Recipe.all)
+        manager.start()
+        let runBefore = manager.runToken
+
+        manager.failDish()
+
+        #expect(manager.state == .cooking, "still playing, just a life down")
+        #expect(manager.runToken == runBefore, "no countdown mid-run")
+    }
+
+    /// Replay is the other half of that rule: a fresh run *does* get the
+    /// countdown back.
+    @Test func restartBumpsTheRunToken() {
+        let manager = GameStateManager(recipes: Recipe.all)
+        manager.start()
+        let runBefore = manager.runToken
+
+        manager.restart()
+
+        #expect(manager.runToken == runBefore + 1)
     }
 
     /// The run ends on the last life, and only then — this is the sole way to

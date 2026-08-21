@@ -44,6 +44,13 @@ final class GameStateManager: ObservableObject {
     /// back onto the table off this.
     @Published private(set) var discardToken: Int = 0
 
+    /// Bumped only when a brand-new run begins — i.e. `restart()`, never
+    /// `failDish()`. `GameplayView` keys its 3-2-1-GO! countdown off this
+    /// rather than `resetToken`: losing a life also wipes the board, but the
+    /// run is still going and the player should not be made to sit through
+    /// another countdown to carry on.
+    @Published private(set) var runToken: Int = 0
+
     let startingLives: Int
 
     private let recipePool: [Recipe]
@@ -168,6 +175,7 @@ final class GameStateManager: ObservableObject {
         dishesCompleted = 0
         currentRecipe = recipePool.randomElement()!
         resetToken += 1
+        runToken += 1
         state = .idle
     }
 
