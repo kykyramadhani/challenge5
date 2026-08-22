@@ -11,7 +11,8 @@ import SwiftUI
 
 struct MainMenuView: View {
     @Bindable var sceneManager: SceneManager
-    
+    @State private var showSettings = false
+
     private let games = GameOption.all
     var body: some View {
         ZStack {
@@ -52,9 +53,18 @@ struct MainMenuView: View {
             }
             
             SettingsButton {
-                print("Running")
+                showSettings = true
+            }
+
+            // A dimmed card over the menu rather than a system sheet, so it
+            // carries the game's own styling (see SettingsView).
+            if showSettings {
+                SettingsView(onClose: { showSettings = false })
+                    .transition(.opacity)
+                    .zIndex(1)
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: showSettings)
     }
 }
 

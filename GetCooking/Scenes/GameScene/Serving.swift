@@ -2,9 +2,9 @@
 //  GameScene+Serving.swift
 //  GetCooking
 //
-//  Handles everything after a dish is complete: showing the finished
-//  dish image, the bell swipe cue, the plate slide-out animation,
-//  plate discard (trash hover), and committing/releasing ingredients.
+//  Handles everything after a dish is complete: showing the finished dish
+//  image, ringing the bell, carrying the plate off to it, plate discard
+//  (reset hover), and committing/releasing ingredients.
 //
 
 import SpriteKit
@@ -15,6 +15,10 @@ extension GameScene {
     /// Replaces the ingredient bubbles with the finished dish image
     /// on top of the plate.
     func showFinishedDish(_ recipe: Recipe) {
+        // Nil for the beat between a served tray sliding off and the next
+        // plate being built — there is nothing to put a dish on.
+        guard let plateNode else { return }
+
         ScuffleCloudAnimator.play(
             on: self,
             at: plateHome,
@@ -28,22 +32,28 @@ extension GameScene {
                 texture.size(),
                 into: plateRadius * 1.8
             )
-            dish.position = plateHome
+            // A child of the plate, not of the scene: the player is about to
+            // pick the plate up and carry it, and the meal has to travel with
+            // it rather than stay behind at the table.
+            dish.position = .zero
             dish.zPosition = 3
             dish.setScale(0)
-            addChild(dish)
+            plateNode.addChild(dish)
             dish.run(.scale(to: 1, duration: 0.25))
             finishedDishNode = dish
         }
     }
 
-    // MARK: - Bell swipe cue
-    /// Shows a ringing bell that nudges toward the serve direction,
-    /// telling the player which way to swipe.
-    func showSwipeCue(direction: SwipeDirection) {
-        swipeCueNode?.removeFromParent()
+    // MARK: - Bell
 
-        let bell = BellNode(direction: direction)
+    /// Slides the serving station — tray plus ringing bell — in from one edge.
+    /// That edge is where the player has to carry the plate to serve the dish.
+    func showBell(on direction: SwipeDirection) {
+        bellNode?.removeFromParent()
+
+        // Wide enough that the shrunken plate drops in comfortably, and that
+        // a hand aiming for it doesn't have to be precise.
+        let bell = BellNode(direction: direction, width: plateRadius * 1.9)
 
         let targetX: CGFloat
         let startX: CGFloat
@@ -81,28 +91,38 @@ extension GameScene {
         )
         bell.run(animation)
 
-        swipeCueNode = bell
+        bellNode = bell
     }
 
     // MARK: - Serve animation
 
-    /// Slides the plate and finished dish off-screen in the swipe
-    /// direction, then rebuilds a fresh plate and spawns the next
-    /// recipe's ingredients.
+    /// Carries the whole serving station off screen once the plate has landed
+    /// on it, then brings out a fresh plate and the next recipe's ingredients.
+    ///
+    /// The tray does the leaving, not the plate: by this point the plate is a
+    /// child of the tray (see `BellNode.receive`), so sliding the tray takes
+    /// the dish with it and the order reads as being carried away to the
+    /// kitchen. The dish itself is still a child of the plate, so it rides
+    /// along too.
     func animateServe(direction: SwipeDirection, then nextRecipe: Recipe) {
         let slideX: CGFloat = direction == .left ? -size.width : size.width
         let slideOut = SKAction.moveBy(x: slideX, y: 0, duration: 0.35)
         slideOut.timingMode = .easeIn
 
-        let nodesToSlide = [plateNode, finishedDishNode].compactMap { $0 }
-        for node in nodesToSlide {
-            node.run(.sequence([slideOut, .removeFromParent()]))
-        }
+        // A beat first, so the plate is visibly *sitting on the tray* rather
+        // than being whisked away the instant it arrives.
+        bellNode?.run(.sequence([
+            .wait(forDuration: 0.45),
+            slideOut,
+            .removeFromParent()
+        ]))
+        bellNode = nil
+        plateNode = nil
         finishedDishNode = nil
 
         run(
             .sequence([
-                .wait(forDuration: 0.4),
+                .wait(forDuration: 0.85),
                 .run { [weak self] in
                     guard let self else { return }
                     self.rebuildPlate()
@@ -122,6 +142,14 @@ extension GameScene {
         _ node: IngredientNode,
         gameStateManager: GameStateManager
     ) {
+        guard let plateNode else { return }
+        
+        let ingredientList: [Ingredient] = gameStateManager.currentRecipe.ingredients
+        
+        if !ingredientList.contains(node.ingredient) {
+            gameStateManager.wrongIngredientPlaced = true
+        }
+
         node.heldBy = nil
         node.isOnPlate = true
         node.zPosition = 2
@@ -133,6 +161,7 @@ extension GameScene {
             y: .random(in: -scatter...scatter)
         )
         plateNode.addChild(node)
+        AudioManager.shared.play(.bubblePut)
         gameStateManager.addIngredientToPlate(node.ingredient)
     }
 

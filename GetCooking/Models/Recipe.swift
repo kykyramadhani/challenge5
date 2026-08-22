@@ -45,7 +45,7 @@ extension Recipe {
         name: "Salad",
         ingredients: [.lettuce, .cucumber, .tomato, .mayonnaise],
         scoreValue: 20,
-        timeLimit: 20,
+        timeLimit: 10,
         finishedDishImageName: "salad"
     )
 
@@ -53,7 +53,7 @@ extension Recipe {
         name: "Chichken Geprek",
         ingredients: [.chicken, .chili, .cucumber],
         scoreValue: 25,
-        timeLimit: 15,
+        timeLimit: 10,
         finishedDishImageName: "ChickenGeprek"
     )
 

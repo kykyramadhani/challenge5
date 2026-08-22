@@ -3,8 +3,8 @@
 //  VisionChef
 //
 //  Captures camera frames, runs VNDetectHumanHandPoseRequest on each frame,
-//  tracks up to two hands independently, classifies each as open/closed, and
-//  detects fast swipes (horizontal to serve, downward to bin the plate).
+//  tracks up to two hands independently, and classifies each as grabbing
+//  (thumb tip pinched to little-finger tip) or open (everything else).
 //
 //  Vision inference runs entirely on a background queue (`videoQueue`); only
 //  the final @Published updates are hopped onto the main queue, so a slow
@@ -24,10 +24,6 @@ final class HandPoseManager: NSObject, ObservableObject {
 
     /// Every hand currently tracked, up to `maximumHandCount`.
     @Published private(set) var hands: [HandData] = []
-
-    /// The most recent detected swipe, from whichever hand made it. Consumed
-    /// by `GameScene`, which calls `clearSwipe()` once handled.
-    @Published private(set) var lastSwipe: SwipeDirection?
 
     /// The player's upper body in normalized Vision space, nil when nobody is
     /// tracked.
@@ -141,36 +137,30 @@ final class HandPoseManager: NSObject, ObservableObject {
     /// detectors disagree slightly about where a wrist is.
     var wristMatchTolerance: CGFloat = 0.6
 
-    /// How much larger or smaller than the anchor hand another hand may
-    /// measure and still count as the same person's.
-    ///
-    /// Only used as the fallback when no body is found at all — see
-    /// `onePersonHandIndices`.
-    var samePersonScaleTolerance: CGFloat = 1.7
-
-    /// Furthest another hand may sit from the anchor, in normalized units, in
-    /// the same no-body fallback.
-    var samePersonMaxSpan: CGFloat = 0.7
-
     /// Minimum Vision joint confidence to trust a point.
     var jointConfidenceThreshold: Float = 0.25
 
-    /// A finger counts as "extended" when its tip sits at least this many
-    /// *palm lengths* away from the wrist (palm length = wrist → knuckles).
+    /// Grabbing is a **pinch**: thumb tip and index-finger tip brought
+    /// together. Measured as the gap between those two tips divided by palm
+    /// length (wrist → knuckles), so it is scale-free and holds at any
+    /// distance from the camera, the same way every other pose measurement
+    /// here works.
     ///
-    /// Measuring against palm length rather than against the finger's own PIP
-    /// joint is what makes this work: an extended finger puts its tip at
-    /// roughly 1.8–2.2 palm lengths from the wrist, while a curled one folds
-    /// back to ~1.0, so 1.5 splits them with room on both sides — and because
-    /// the ratio is scale-free it holds at any distance from the camera.
-    var extensionRatioThreshold: CGFloat = 1.5
-
-    /// Number of extended fingers (out of 4, thumb excluded) required to
-    /// classify a hand as open. `closedFingerCountThreshold` or fewer
-    /// classifies it as a fist. Values in between keep that hand's previous
-    /// state (hysteresis) to avoid flicker at the boundary.
-    var openFingerCountThreshold = 3
-    var closedFingerCountThreshold = 1
+    /// Tips touching read at roughly 0.1–0.25 palm lengths (they never reach 0
+    /// — the joints sit inside the fingers); an open hand holds them around
+    /// 0.8–1.2 apart. The two thresholds give hysteresis: at or below
+    /// `pinchCloseRatio` the hand is grabbing, at or above `pinchOpenRatio` it
+    /// is open, and in between it keeps whatever it was, so a hand hovering
+    /// right at the boundary doesn't flicker and drop what it's carrying.
+    ///
+    /// Anything that isn't an active pinch counts as open — including a
+    /// clenched fist, which used to be the grab pose. Note that the thumb
+    /// folds *across* the index finger in a fist, so these two tips land
+    /// nearer each other than a thumb-to-little-finger pinch would; the
+    /// thresholds are set tight enough to keep that clear of a real pinch, and
+    /// are the first thing to lower if fists start registering as grabs.
+    var pinchCloseRatio: CGFloat = 0.3
+    var pinchOpenRatio: CGFloat = 0.5
 
     /// Rotation used when running on a Mac, which has no device orientation to
     /// follow. Valid angles are 0/90/180/270 only, so -90 must be written 270.
@@ -183,26 +173,6 @@ final class HandPoseManager: NSObject, ObservableObject {
     /// be considered the same hand. Too large and two hands crossing over swap
     /// identities; too small and a fast hand is treated as a brand-new one.
     var handMatchRadius: CGFloat = 0.45
-
-    /// Rolling window of palm positions used for swipe detection.
-    private let swipeSampleWindow: TimeInterval = 0.3
-
-    /// Normalized-units-per-second speed required to register a swipe. Tuned
-    /// low: a casual flick should land first time, and swipes are only acted on
-    /// in contexts where a false positive is cheap (see `GameScene`).
-    var swipeVelocityThreshold: CGFloat = 0.9
-
-    /// Net travel required as well as speed, so a slow drift across a long
-    /// window can't accumulate into a "swipe".
-    var minimumSwipeDistance: CGFloat = 0.10
-
-    /// A swipe must be this many times more horizontal than vertical to count,
-    /// so reaching up or down for an ingredient never reads as a serve.
-    var swipeAxisDominance: CGFloat = 1.25
-
-    /// Minimum time between two accepted swipes, across all hands — otherwise
-    /// both hands moving together fire the same gesture twice.
-    var swipeCooldown: TimeInterval = 0.5
 
     /// How long a hand's trajectory survives after Vision stops reporting it.
     ///
@@ -232,24 +202,17 @@ final class HandPoseManager: NSObject, ObservableObject {
 
     // MARK: - Per-hand tracking (accessed only from videoQueue)
 
-    private struct TimedPoint {
-        let point: CGPoint
-        let time: TimeInterval
-    }
-
     /// videoQueue-local record of a hand between frames.
     private struct TrackedHand {
         let id: Int
         var smoothed: CGPoint
         var isOpen: Bool
-        var recent: [TimedPoint]
         /// Last time Vision actually reported this hand; drives the grace period.
         var lastSeen: TimeInterval
     }
 
     private var tracked: [TrackedHand] = []
     private var nextHandID = 0
-    private var lastSwipeTime: TimeInterval = 0
     private var lastMeasuredBufferSize: CGSize = .zero
 
     /// videoQueue-local copy of what was last published, so an unchanged body
@@ -307,11 +270,6 @@ final class HandPoseManager: NSObject, ObservableObject {
                 captureSession.stopRunning()
             }
         }
-    }
-
-    /// Call after consuming `lastSwipe` so the same swipe isn't handled twice.
-    func clearSwipe() {
-        lastSwipe = nil
     }
 
     // MARK: - Coordinate mapping
@@ -428,6 +386,15 @@ final class HandPoseManager: NSObject, ObservableObject {
             if turnOffCenterStage { Self.disableCenterStage() }
 
             self.captureSession.beginConfiguration()
+
+            // This is a video-only session (no audio input), so it must not
+            // touch the app's shared audio session. Left at its default (true),
+            // AVCaptureSession reconfigures that session on start and tears it
+            // down on stop — which is why quitting the game killed *all* audio,
+            // sound effects included. Turning it off leaves AudioManager's
+            // `.ambient` session alone for the whole app lifetime.
+            self.captureSession.automaticallyConfiguresApplicationAudioSession = false
+
             // Fallback only. `selectWidestFormat` below overrides this with a
             // hand-picked format (which flips the preset to `.inputPriority`);
             // the preset matters just for devices where no format qualifies.
@@ -768,8 +735,7 @@ final class HandPoseManager: NSObject, ObservableObject {
         let classifications = observations.compactMap {
             try? Self.classify(
                 observation: $0,
-                jointConfidenceThreshold: jointConfidenceThreshold,
-                extensionRatioThreshold: extensionRatioThreshold
+                jointConfidenceThreshold: jointConfidenceThreshold
             )
         }
         guard !classifications.isEmpty else {
@@ -777,22 +743,27 @@ final class HandPoseManager: NSObject, ObservableObject {
             return
         }
 
+        // Set from the Settings sheet (SettingsView). Read straight from
+        // UserDefaults rather than @AppStorage — this runs on videoQueue, off
+        // the main thread, once per frame.
+        let oneHandPreference: HandSide? = UserDefaults.standard.bool(forKey: "oneHandModeEnabled")
+            ? HandSide(rawValue: UserDefaults.standard.string(forKey: "preferredHand") ?? "") ?? .right
+            : nil
+        let handLimit = oneHandPreference != nil ? 1 : maximumHandCount
+
+        // No body, no hands. A hand is only the player's if it can be tied to
+        // a visible shoulder, so a torso out of frame means nothing is tracked
+        // — the same rule the seat check enforces before the game even starts.
+        // There used to be a geometry-only fallback here for when the body
+        // detector lost the player; it is gone deliberately, because it also
+        // let a bystander's hands in whenever that happened.
         let keep = Self.playerHandIndices(
             handWrists: classifications.map(\.wrist),
             bodies: bodies,
             wristTolerance: wristMatchTolerance,
-            limit: maximumHandCount
-        ) ?? Self.onePersonHandIndices(
-            // No body to anchor on — a torso cropped out of frame, or the
-            // detector losing the player for a frame. Falling back to the
-            // geometric guess keeps the game playable; blanking every hand
-            // because a shoulder went missing would not.
-            positions: classifications.map(\.location),
-            palmLengths: classifications.map(\.palmLength),
-            maxSpan: samePersonMaxSpan,
-            scaleTolerance: samePersonScaleTolerance,
-            limit: maximumHandCount
-        )
+            limit: handLimit,
+            requiredHand: oneHandPreference
+        ) ?? []
 
         let hands = matchToTrackedHands(keep.map { classifications[$0] }, now: now)
         DispatchQueue.main.async { self.hands = hands }
@@ -807,7 +778,10 @@ final class HandPoseManager: NSObject, ObservableObject {
         /// Wrist → knuckles, normalized. Doubles as a distance-from-camera
         /// cue: the same hand twice as far away measures half as long.
         let palmLength: CGFloat
-        let extendedFingerCount: Int
+        /// Thumb-tip to index-tip gap, in palm lengths. Nil when either tip
+        /// was missing this frame — the hand is then treated as open, since a
+        /// grab has to be seen to count.
+        let pinchRatio: CGFloat?
         let skeleton: [[CGPoint]]
     }
 
@@ -823,8 +797,7 @@ final class HandPoseManager: NSObject, ObservableObject {
 
     private static func classify(
         observation: VNHumanHandPoseObservation,
-        jointConfidenceThreshold: Float,
-        extensionRatioThreshold: CGFloat
+        jointConfidenceThreshold: Float
     ) throws -> Classification {
         let allPoints = try observation.recognizedPoints(.all)
 
@@ -848,14 +821,13 @@ final class HandPoseManager: NSObject, ObservableObject {
             throw HandPoseError.noReliablePalm
         }
 
-        // Thumb excluded: it folds sideways rather than curling inward, so it
-        // scores badly against a straight wrist-distance test.
-        let fingertips: [VNHumanHandPoseObservation.JointName] = [.indexTip, .middleTip, .ringTip, .littleTip]
-        let extendedCount = extendedFingerCount(
-            wrist: wrist,
-            fingertips: fingertips.compactMap(point),
-            palmLength: palmLength,
-            threshold: extensionRatioThreshold
+        // The grab gesture: thumb tip meeting little-finger tip. Only these two
+        // joints matter — what the other three fingers are doing is ignored
+        // entirely, so a fist and a flat palm both read as open.
+        let pinch = pinchRatio(
+            thumbTip: point(.thumbTip),
+            indexTip: point(.indexTip),
+            palmLength: palmLength
         )
 
         // Track the palm centre (wrist + knuckles) rather than including the
@@ -869,7 +841,7 @@ final class HandPoseManager: NSObject, ObservableObject {
             location: centre,
             wrist: wrist,
             palmLength: palmLength,
-            extendedFingerCount: extendedCount,
+            pinchRatio: pinch,
             skeleton: skeleton
         )
     }
@@ -897,9 +869,15 @@ final class HandPoseManager: NSObject, ObservableObject {
         let leftHip: CGPoint?
         let rightHip: CGPoint?
 
+        /// Whichever wrists Vision was confident about — nil when that side
+        /// wasn't seen. Kept as separate sides (rather than a merged list) so
+        /// one-hand mode can require *the chosen* wrist, not just any wrist.
+        let leftWrist: CGPoint?
+        let rightWrist: CGPoint?
+
         /// Whichever wrists Vision was confident about — 0, 1 or 2 of them.
         /// Empty is legitimate: the player is there, their hands are not.
-        let wrists: [CGPoint]
+        var wrists: [CGPoint] { [leftWrist, rightWrist].compactMap { $0 } }
 
         /// Apparent shoulder span: how near this person is, and the yardstick
         /// the wrist tolerance is measured in.
@@ -930,23 +908,37 @@ final class HandPoseManager: NSObject, ObservableObject {
                 rightShoulder: transform(rightShoulder),
                 leftHip: leftHip.map(transform),
                 rightHip: rightHip.map(transform),
-                wrists: wrists.map(transform)
+                leftWrist: leftWrist.map(transform),
+                rightWrist: rightWrist.map(transform)
             )
         }
 
         /// Whether the player is sitting the way the game needs: head,
-        /// shoulders and **both hands** inside `frame`, far enough back that
-        /// they all fit, close enough that the shoulders still span a decent
-        /// share of it.
+        /// shoulders and the required hand(s) inside `frame`, far enough back
+        /// that they all fit, close enough that the shoulders still span a
+        /// decent share of it.
         ///
         /// The rest of the body is free to fall outside — only what the game
-        /// actually tracks has to be in shot. Requiring both wrists is what
-        /// makes the guide pose meaningful: hands can only be up in the box
-        /// with the arms raised, which is the pose the silhouette shows.
-        func isAligned(in frame: CGRect, minimumShoulderSpan: CGFloat) -> Bool {
-            guard let head, wrists.count == 2 else { return false }
+        /// actually tracks has to be in shot. `requiredHand` nil means both
+        /// wrists are required (the default two-handed pose the silhouette
+        /// shows); a specific side is one-hand mode asking for just that hand.
+        func isAligned(
+            in frame: CGRect,
+            minimumShoulderSpan: CGFloat,
+            requiredHand: HandSide? = nil
+        ) -> Bool {
+            guard let head else { return false }
 
-            let required = [head, leftShoulder, rightShoulder] + wrists
+            let requiredWrists: [CGPoint]
+            if let requiredHand {
+                guard let wrist = requiredHand == .left ? leftWrist : rightWrist else { return false }
+                requiredWrists = [wrist]
+            } else {
+                guard wrists.count == 2 else { return false }
+                requiredWrists = wrists
+            }
+
+            let required = [head, leftShoulder, rightShoulder] + requiredWrists
             guard required.allSatisfy(frame.contains) else { return false }
 
             return scale >= minimumShoulderSpan
@@ -982,7 +974,13 @@ final class HandPoseManager: NSObject, ObservableObject {
             rightShoulder: rightShoulder,
             leftHip: point(.leftHip),
             rightHip: point(.rightHip),
-            wrists: [point(.leftWrist), point(.rightWrist)].compactMap { $0 }
+            // Swapped on purpose: the capture connection mirrors the buffer
+            // before Vision ever sees it (see the isVideoMirrored setup
+            // below), so Vision's own left/right wrist labels come out
+            // anatomically backwards — what it calls the left wrist is the
+            // player's actual right one.
+            leftWrist: point(.rightWrist),
+            rightWrist: point(.leftWrist)
         )
     }
 
@@ -1010,11 +1008,16 @@ final class HandPoseManager: NSObject, ObservableObject {
     ///
     /// Returns nil when no usable body was found — the caller's signal to fall
     /// back rather than blank every hand on screen.
+    ///
+    /// `requiredHand` is one-hand mode: nil matches either of the player's
+    /// wrists (the normal, two-handed rule); a specific side matches only
+    /// that wrist, so the other hand is dropped exactly like a bystander's.
     static func playerHandIndices(
         handWrists: [CGPoint],
         bodies: [BodyCandidate],
         wristTolerance: CGFloat,
-        limit: Int
+        limit: Int,
+        requiredHand: HandSide? = nil
     ) -> [Int]? {
         guard limit > 0 else { return [] }
         guard let player = nearestBody(in: bodies) else { return nil }
@@ -1029,10 +1032,18 @@ final class HandPoseManager: NSObject, ObservableObject {
             bodies[body].wrists.map { $0.distance(to: hand) }.min() ?? .greatestFiniteMagnitude
         }
 
+        // The player's own wrist(s) to match against — both by default, or
+        // just the chosen side in one-hand mode.
+        let playerWrists: [CGPoint] = {
+            guard let requiredHand else { return bodies[player].wrists }
+            let wrist = requiredHand == .left ? bodies[player].leftWrist : bodies[player].rightWrist
+            return wrist.map { [$0] } ?? []
+        }()
+
         let matched: [(index: Int, distance: CGFloat)] = handWrists.indices.compactMap { index in
             let hand = handWrists[index]
 
-            let toPlayer = nearestWrist(of: player, to: hand)
+            let toPlayer = playerWrists.map { $0.distance(to: hand) }.min() ?? .greatestFiniteMagnitude
             guard toPlayer <= reach else { return nil }
 
             // Nearer to someone else's wrist means it is on their arm, even if
@@ -1052,73 +1063,22 @@ final class HandPoseManager: NSObject, ObservableObject {
             .map(\.index)
     }
 
-    /// Narrows a frame's hands down to the ones that plausibly belong to a
-    /// single person, on geometry alone.
+    /// The gap between thumb tip and little-finger tip, in palm lengths —
+    /// small means the two are pinched together, which is the grab gesture.
     ///
-    /// The fallback for when no body is detected. Kept because it degrades
-    /// better than showing nothing, but `playerHandIndices` is the real filter.
+    /// Nil when either tip is missing, or the palm couldn't be measured: the
+    /// caller reads that as "not grabbing", so a hand whose thumb drops out of
+    /// tracking opens rather than clamping shut on whatever is nearby.
     ///
-    /// Anchored on the **largest palm**, which is the hand nearest the lens and
-    /// therefore the person the iPad is pointed at. Another hand joins it when
-    /// it measures a similar size (so it is at a similar distance) and sits
-    /// close enough to hang off the same body.
-    ///
-    /// Apparent hand size is the load-bearing signal here. Someone standing
-    /// behind the player measures visibly smaller, and no amount of arm-waving
-    /// changes that, whereas position alone can't tell a second player from the
-    /// player's own outstretched hand.
-    ///
-    /// ponytail: geometry only, no notion of *whose* body a hand is on. If two
-    /// people stand shoulder to shoulder at the same distance this will happily
-    /// mix them; pairing hands to torsos needs `VNDetectHumanRectanglesRequest`
-    /// (cheap) or `VNDetectHumanBodyPoseRequest` (a second inference pass per
-    /// frame) — see the note in this method's tests.
-    ///
-    /// Returns indices into the input, anchor first, at most `limit` of them.
-    static func onePersonHandIndices(
-        positions: [CGPoint],
-        palmLengths: [CGFloat],
-        maxSpan: CGFloat,
-        scaleTolerance: CGFloat,
-        limit: Int
-    ) -> [Int] {
-        guard limit > 0, positions.count == palmLengths.count,
-              let anchor = palmLengths.indices.max(by: { palmLengths[$0] < palmLengths[$1] }),
-              palmLengths[anchor] > 0,
-              scaleTolerance >= 1
-        else { return [] }
-
-        let anchorPalm = palmLengths[anchor]
-        let anchorPosition = positions[anchor]
-
-        func distanceToAnchor(_ index: Int) -> CGFloat {
-            positions[index].distance(to: anchorPosition)
-        }
-
-        let sameBody = positions.indices.filter { index in
-            guard index != anchor else { return false }
-            let ratio = palmLengths[index] / anchorPalm
-            guard ratio >= 1 / scaleTolerance, ratio <= scaleTolerance else { return false }
-            return distanceToAnchor(index) <= maxSpan
-        }
-
-        // Nearest first, so if more hands qualify than can be played with, the
-        // ones dropped are the least likely to be the player's own.
-        let ranked = sameBody.sorted { distanceToAnchor($0) < distanceToAnchor($1) }
-        return [anchor] + ranked.prefix(limit - 1)
-    }
-
-    /// How many fingertips sit at least `threshold` palm-lengths from the
-    /// wrist. Extracted from `classify` so the tuning maths can be exercised
-    /// without having to fabricate a `VNHumanHandPoseObservation`.
-    static func extendedFingerCount(
-        wrist: CGPoint,
-        fingertips: [CGPoint],
-        palmLength: CGFloat,
-        threshold: CGFloat
-    ) -> Int {
-        guard palmLength > 0 else { return 0 }
-        return fingertips.filter { wrist.distance(to: $0) / palmLength >= threshold }.count
+    /// Extracted from `classify` so the tuning maths can be exercised without
+    /// having to fabricate a `VNHumanHandPoseObservation`.
+    static func pinchRatio(
+        thumbTip: CGPoint?,
+        indexTip: CGPoint?,
+        palmLength: CGFloat
+    ) -> CGFloat? {
+        guard palmLength > 0, let thumbTip, let indexTip else { return nil }
+        return thumbTip.distance(to: indexTip) / palmLength
     }
 
     private enum HandPoseError: Error {
@@ -1150,7 +1110,7 @@ final class HandPoseManager: NSObject, ObservableObject {
                 hand = tracked[previous]
             } else {
                 hand = TrackedHand(id: nextHandID, smoothed: classification.location,
-                                   isOpen: false, recent: [], lastSeen: now)
+                                   isOpen: false, lastSeen: now)
                 nextHandID += 1
             }
             hand.lastSeen = now
@@ -1162,22 +1122,22 @@ final class HandPoseManager: NSObject, ObservableObject {
                 y: hand.smoothed.y + (classification.location.y - hand.smoothed.y) * cursorSmoothing
             )
 
-            // Hysteresis is per hand, so one hand closing can't flip the other.
+            // Hysteresis is per hand, so one hand pinching can't flip the other.
+            // A missing pinch measurement opens the hand outright rather than
+            // holding the previous state — see `pinchRatio`.
             let isOpen: Bool
-            if classification.extendedFingerCount >= openFingerCountThreshold {
-                isOpen = true
-            } else if classification.extendedFingerCount <= closedFingerCountThreshold {
-                isOpen = false
+            if let pinch = classification.pinchRatio {
+                if pinch <= pinchCloseRatio {
+                    isOpen = false
+                } else if pinch >= pinchOpenRatio {
+                    isOpen = true
+                } else {
+                    isOpen = hand.isOpen
+                }
             } else {
-                isOpen = hand.isOpen
+                isOpen = true
             }
             hand.isOpen = isOpen
-
-            // Swipe velocity is measured on the raw palm centre; smoothing it
-            // would damp exactly the fast motion a swipe is made of.
-            hand.recent.append(TimedPoint(point: classification.location, time: now))
-            hand.recent.removeAll { now - $0.time > swipeSampleWindow }
-            detectSwipe(in: &hand, now: now)
 
             stillTracked.append(hand)
             result.append(HandData(
@@ -1185,7 +1145,6 @@ final class HandPoseManager: NSObject, ObservableObject {
                 cursorPosition: hand.smoothed,
                 isOpenHand: isOpen,
                 isClosedFist: !isOpen,
-                extendedFingerCount: classification.extendedFingerCount,
                 skeleton: classification.skeleton
             ))
         }
@@ -1201,37 +1160,6 @@ final class HandPoseManager: NSObject, ObservableObject {
 
         tracked = stillTracked
         return result
-    }
-
-    /// Classifies a stretch of palm travel as a swipe, or nothing.
-    ///
-    /// Both a speed *and* a net-distance bar must be cleared: speed alone lets
-    /// a tiny tracking jitter over a couple of milliseconds read as a flick,
-    /// while distance alone lets a slow drift across the window qualify.
-    ///
-    /// `start`/`end` are in Vision space, where y grows upward.
-    static func swipeDirection(
-        from start: CGPoint,
-        to end: CGPoint,
-        over duration: TimeInterval,
-        minimumDistance: CGFloat,
-        horizontalSpeed: CGFloat,
-        dominance: CGFloat
-    ) -> SwipeDirection? {
-        guard duration >= 0.04 else { return nil }
-
-        let dx = end.x - start.x
-        let dy = end.y - start.y
-        let velocityX = dx / duration
-
-        guard abs(dx) >= minimumDistance,
-              abs(velocityX) >= horizontalSpeed,
-              abs(dx) >= abs(dy) * dominance
-        else { return nil }
-
-        // The feed is mirrored at the capture connection, so Vision-space x
-        // already runs the same way the player sees it.
-        return velocityX > 0 ? .right : .left
     }
 
     /// For each freshly detected hand position, the index of the previously
@@ -1268,40 +1196,9 @@ final class HandPoseManager: NSObject, ObservableObject {
         return assignments
     }
 
-    /// Looks for a flick in a hand's recent trajectory.
-    ///
-    /// Deliberately makes **no check on finger pose**. Vision's open/closed
-    /// classification is the first thing to fall apart under motion blur, which
-    /// is precisely when a swipe is happening — requiring `isOpen` here meant
-    /// the faster you swiped, the less likely it was to register.
-    ///
-    /// Measured on the raw palm samples rather than the smoothed cursor:
-    /// smoothing exists to steady a pointer, and it damps exactly the sharp
-    /// motion a flick is made of.
-    private func detectSwipe(in hand: inout TrackedHand, now: TimeInterval) {
-        guard now - lastSwipeTime > swipeCooldown,
-              let newest = hand.recent.last,
-              let oldest = hand.recent.first
-        else { return }
-
-        guard let direction = Self.swipeDirection(
-            from: oldest.point,
-            to: newest.point,
-            over: newest.time - oldest.time,
-            minimumDistance: minimumSwipeDistance,
-            horizontalSpeed: swipeVelocityThreshold,
-            dominance: swipeAxisDominance
-        ) else { return }
-
-        lastSwipeTime = now
-        hand.recent.removeAll()
-
-        DispatchQueue.main.async { self.lastSwipe = direction }
-    }
-
-    /// No hand in this frame. Trajectories are kept for `handGracePeriod` so a
-    /// blurred-out flick can still be measured when tracking recovers — only
-    /// the published cursors go away immediately.
+    /// No hand in this frame. Tracking records are kept for `handGracePeriod`
+    /// so a hand that blurs out for a moment keeps its identity — only the
+    /// published cursors go away immediately.
     private func publishNoHands() {
         let now = CACurrentMediaTime()
         tracked.removeAll { now - $0.lastSeen > handGracePeriod }

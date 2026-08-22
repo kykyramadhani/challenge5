@@ -20,6 +20,7 @@
 import AVFoundation
 import SpriteKit
 import SwiftUI
+import UIKit
 
 struct GameplayView: View {
     @Bindable var sceneManager: SceneManager
@@ -42,13 +43,14 @@ struct GameplayView: View {
     /// *how far into the screen* the player is.
     @State private var hasCalibrated = false
 
-    /// Seconds left on the "get ready" beat, counting 3 → 1 and then 0 once
-    /// play has begun. The board is already up and the camera live; the game
-    /// state machine simply stays `.idle` until this reaches zero, so nothing
-    /// spawns and no clock runs while the player settles.
+    /// Where the "get ready" beat has got to: 3 → 2 → 1 → 0, where 0 is the
+    /// "GO!" flash, and -1 once it is over and the overlay is gone. The board
+    /// is already up and the camera live throughout; the game state machine
+    /// simply stays `.idle` until the countdown finishes, so nothing spawns
+    /// and no clock runs while the player settles.
     @State private var countdown = 3
 
-    private var isCountingDown: Bool { countdown > 0 }
+    private var isCountingDown: Bool { countdown >= 0 }
 
     /// The selected game asks for a seat check and the player hasn't passed it
     /// yet. Games without calibration skip straight to the board.
@@ -65,14 +67,13 @@ struct GameplayView: View {
             CameraPreviewView(handPoseManager: handPoseManager)
                 .ignoresSafeArea()
 
-            // Camera comes from ContentView, already running.
-            if showHandSkeleton {
-                BodySkeletonView(handPoseManager: handPoseManager)
-                    .ignoresSafeArea()
-
-                HandSkeletonView(handPoseManager: handPoseManager)
-                    .ignoresSafeArea()
-            }
+            // Mounted here rather than inside `gameBody` so the scene is alive
+            // for the whole screen, seat check included. The hand glow lives in
+            // the scene, and the player should see their hands light up the
+            // moment they are detected — during calibration and the countdown,
+            // not only once play starts. `showsBoard` keeps the plate and bin
+            // out of sight until then.
+            sceneLayer
 
             Group {
                 if sceneManager.isInTutorial {
@@ -95,44 +96,79 @@ struct GameplayView: View {
         // when the player leaves gameplay entirely. start() is idempotent, so
         // the seat check and board calling it again is harmless; the preview
         // above stays live across their swap because it never leaves the tree.
-        .onAppear { handPoseManager.start() }
-        .onDisappear { handPoseManager.stop() }
+        .onAppear {
+            handPoseManager.start()
+            // The game is played hands-free — no taps to keep the system's
+            // auto-lock timer from firing — so without this the screen dims
+            // and locks itself mid-round.
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
+        .onDisappear {
+            handPoseManager.stop()
+            UIApplication.shared.isIdleTimerDisabled = false
+            // Leaving gameplay entirely (quit, or back to the menu) — the music
+            // belongs to this screen, so it goes with it.
+            AudioManager.shared.stopMusic()
+        }
+    }
+
+    /// The SpriteKit layer: the board during play, and the hand glow at all
+    /// times. Kept out of `gameBody` so the seat check draws over a live scene
+    /// rather than swapping one in afterwards.
+    private var sceneLayer: some View {
+        GeometryReader { proxy in
+            SpriteView(
+                scene: scene,
+                options: [
+                    .allowsTransparency, .ignoresSiblingOrder,
+                ]
+            )
+            .ignoresSafeArea()
+            .background(.clear)
+            .onAppear {
+                scene.size = proxy.size
+                scene.gameStateManager = gameStateManager
+                scene.handPoseManager = handPoseManager
+                scene.showsBoard = boardIsUp
+            }
+            .onChange(of: proxy.size) { _, newSize in
+                scene.size = newSize
+            }
+            .onChange(of: boardIsUp) { _, isUp in
+                scene.showsBoard = isUp
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    /// The seat check is done (or was never needed), so the playfield belongs
+    /// on screen. Until then only the hand glow is drawn.
+    private var boardIsUp: Bool {
+        !sceneManager.isInTutorial && (hasCalibrated || !needsCalibration)
     }
 
     private var gameBody: some View {
         GeometryReader { proxy in
             ZStack {
-                SpriteView(
-                    scene: scene,
-                    options: [
-                        .allowsTransparency, .ignoresSiblingOrder,
-                    ]
-                )
-                .ignoresSafeArea()
-                .background(.clear)
-                .onAppear {
-                    scene.size = proxy.size
-                    scene.gameStateManager = gameStateManager
-                    scene.handPoseManager = handPoseManager
-                }
-                .onChange(of: proxy.size) { _, newSize in
-                    scene.size = newSize
-                }
-
                 VStack {
                     HStack(alignment: .center) {
 
                         Spacer()
 
-                        PointCard(score: gameStateManager.score)
+                        PointCard(
+                            dishesServed: gameStateManager.dishesCompleted
+                        )
 
                         Spacer()
 
                         // Hidden rather than removed during the countdown: it
                         // still holds its width, so the score and hearts don't
                         // jump sideways the moment the first recipe lands.
-                        RecipeCard(recipe: gameStateManager.currentRecipe)
-                            .opacity(isCountingDown ? 0 : 1)
+                        RecipeCard(
+                            recipe: gameStateManager.currentRecipe,
+                            gameStateManager: gameStateManager
+                        )
+                        .opacity(isCountingDown ? 0 : 1)
 
                         Spacer()
 
@@ -147,12 +183,14 @@ struct GameplayView: View {
                     Spacer()
                 }
                 .ignoresSafeArea()
+                
+                LoseHeartOverlay(gameStateManager: gameStateManager)
 
                 if gameStateManager.state == .gameOver {
                     PostGame(
                         score: gameStateManager.score,
                         survivedSeconds: gameStateManager.elapsedTime,
-                        onRestart: { gameStateManager.restart() },
+                        onRestart: replay,
                         sceneManager: sceneManager
                     )
                 }
@@ -219,26 +257,54 @@ struct GameplayView: View {
             // still running.
             handPoseManager.start()
         }
-        .task {
-            // Runs when the board appears — i.e. after calibration. The camera
-            // is already live, handed over by the seat check.
-            for step in stride(from: 3, through: 1, by: -1) {
-                countdown = step
+        .task(id: gameStateManager.runToken) {
+            // Runs when the board appears — i.e. after calibration — and again
+            // on every replay, keyed off runToken since a replay that skips
+            // calibration (no calibration required) never remounts this view.
+            // Deliberately *not* resetToken: that also fires when a dish times
+            // out, which costs a life but leaves the run going, and a countdown
+            // there would interrupt play the player hasn't lost yet.
+            // The camera is already live, handed over by the seat check.
+            // Bring the music up under the count so play starts already scored;
+            // startMusic is a no-op if it's somehow already going.
+            AudioManager.shared.startMusic()
+            // One shot at the top of the beat — the clip already voices 3-2-1.
+            AudioManager.shared.play(.countdown)
+            for step in stride(from: 3, through: 0, by: -1) {
+                countdown = step  // 0 is the "GO!" beat
                 do {
                     try await Task.sleep(for: .seconds(1))
                 } catch {
                     return  // view went away mid-count
                 }
             }
-            countdown = 0
+            countdown = -1
             gameStateManager.start()
         }
         .onChange(of: gameStateManager.isPaused) { _, paused in
             scene.isPaused = paused
+            // Hold the music with the game so a pause is actually quiet.
+            if paused { AudioManager.shared.pauseMusic() }
+            else { AudioManager.shared.resumeMusic() }
         }
         .onChange(of: gameStateManager.state) { _, state in
             scene.isPaused = (state == .gameOver)
+            // Fade the music out on the game-over screen; the replay's countdown
+            // task brings it back for the next run.
+            if state == .gameOver { AudioManager.shared.stopMusic() }
         }
+    }
+
+    /// Play Again: send the player back through the seat check (if the game
+    /// needs one) and the countdown, exactly like the first run. Flipping
+    /// `hasCalibrated` back swaps the Group to SeatCalibrationView, which
+    /// unmounts `gameBody` — so its `.task` reruns fresh once calibration
+    /// passes and the board reappears; for a game with no calibration step,
+    /// `gameBody` never unmounts, so the `.task(id:)` keyed on `resetToken` is
+    /// what reruns the countdown instead.
+    private func replay() {
+        if needsCalibration { hasCalibrated = false }
+        gameStateManager.restart()
     }
 
     /// Bail out of the run entirely and go back to the main menu. Resetting the

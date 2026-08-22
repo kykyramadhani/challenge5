@@ -16,9 +16,11 @@ struct HandData: Identifiable, Equatable {
     let id: Int
     /// Palm centre in *normalized Vision space* (origin bottom-left, 0...1).
     var cursorPosition: CGPoint
+    /// Not grabbing. Anything that isn't an active thumb-to-little-finger
+    /// pinch is open, a clenched fist included.
     var isOpenHand: Bool
+    /// Grabbing: thumb tip and little-finger tip pinched together.
     var isClosedFist: Bool
-    var extendedFingerCount: Int
     /// One chain of joints per finger (thumb → little), normalized Vision space.
     var skeleton: [[CGPoint]]
 

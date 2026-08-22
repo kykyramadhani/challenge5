@@ -2,7 +2,7 @@
 //  GetReadyOverlay.swift
 //  GetCooking
 //
-//  The 3-2-1 between passing the seat check and the first recipe landing.
+//  The 3-2-1-GO! between passing the seat check and the first recipe landing.
 //
 //  Deliberately shown over a live board — camera, plate and HUD all visible
 //  behind it — so the player can settle their hands before anything is asked
@@ -12,7 +12,8 @@
 import SwiftUI
 
 struct GetReadyOverlay: View {
-    /// Seconds left. 3, 2, 1 — never 0; the overlay is gone by then.
+    /// Seconds left: 3, 2, 1, then 0 for the "GO!" beat. The overlay is gone
+    /// by the time it goes negative.
     let count: Int
 
     var body: some View {
@@ -26,8 +27,11 @@ struct GetReadyOverlay: View {
 
             Spacer()
 
-            Text("\(count)")
-                .font(.system(size: 160, weight: .black))
+            // "GO!" rather than a fourth number, so the beat play actually
+            // starts on is unmistakable. Sized down a little because three
+            // glyphs at 160pt overflow a narrow screen.
+            Text(count > 0 ? "\(count)" : "GO!")
+                .font(.system(size: count > 0 ? 160 : 130, weight: .black))
                 .contentTransition(.numericText(countsDown: true))
                 .animation(.snappy, value: count)
 

@@ -21,6 +21,12 @@ struct SeatCalibrationView: View {
     /// Called once the player has held the pose for the full dwell.
     var onCalibrated: () -> Void
 
+    /// Set from the Settings sheet. When on, only the chosen hand has to be
+    /// raised — this is the fix for the pose otherwise being impossible to
+    /// hold with one arm unavailable.
+    @AppStorage("oneHandModeEnabled") private var oneHandModeEnabled = false
+    @AppStorage("preferredHand") private var preferredHand: HandSide = .right
+
     /// Same dwell detector the bin gesture uses, so "hold still for a moment"
     /// behaves identically across the game and the timing rules live in one
     /// place — including the stall cap that stops a hitch completing it.
@@ -68,7 +74,7 @@ struct SeatCalibrationView: View {
                 let frame = Self.targetFrame(in: proxy.size)
 
                 VStack(spacing: 0) {
-                    Text("Adjust your seat to fit in the frame")
+                    Text(instructionText)
                         .font(.system(size: 44, weight: .black))
                         .foregroundStyle(.white)
                         .outlined(width: 4)
@@ -148,11 +154,18 @@ struct SeatCalibrationView: View {
         }
     }
 
+    private var instructionText: String {
+        oneHandModeEnabled
+            ? "Adjust your seat and raise your \(preferredHand.rawValue) hand"
+            : "Adjust your seat to fit in the frame"
+    }
+
     private func isAligned(in size: CGSize, frame: CGRect) -> Bool {
         guard let body = handPoseManager.playerBody(in: size) else { return false }
         return body.isAligned(
             in: frame,
-            minimumShoulderSpan: frame.width * Self.minimumShoulderShare
+            minimumShoulderSpan: frame.width * Self.minimumShoulderShare,
+            requiredHand: oneHandModeEnabled ? preferredHand : nil
         )
     }
 }

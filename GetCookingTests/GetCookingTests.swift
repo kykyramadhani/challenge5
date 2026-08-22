@@ -8,6 +8,7 @@
 import Testing
 import CoreGraphics
 import SpriteKit
+import SwiftUI
 import UIKit
 @testable import GetCooking
 
@@ -33,6 +34,20 @@ struct ArtAssetTests {
 
         #expect(TrimmedArt.image(named: GameArt.bubble) != nil)
         #expect(TrimmedArt.image(named: GameArt.plate) != nil)
+    }
+
+    /// The serving station's two pieces. `BellNode` builds them by name, and a
+    /// missing one leaves the player carrying the plate at empty space with no
+    /// other symptom.
+    @Test func theServingStationArtExists() {
+        #expect(UIImage(named: "Tray") != nil)
+        #expect(UIImage(named: "RingingBell") != nil)
+    }
+
+    /// The served-dish count's icon. Referenced by name from `PointCard`, so a
+    /// rename leaves the badge showing a bare number with no other symptom.
+    @Test func theServedDishIconExists() {
+        #expect(UIImage(named: "ServedDish") != nil)
     }
 
     /// The source art sits on 1920×1080 canvases with the subject filling as
@@ -143,105 +158,93 @@ struct HandPoseMappingTests {
     }
 }
 
-struct FistClassifierTests {
+/// Grabbing is a thumb-to-index-finger pinch. The shipped thresholds are
+/// 0.3 (grab) and 0.5 (open), with hysteresis in between.
+struct PinchClassifierTests {
 
-    private let wrist = CGPoint.zero
     private let palmLength: CGFloat = 1.0
-    private let threshold: CGFloat = 1.5
 
-    /// An open hand puts each tip ~2 palm-lengths from the wrist.
-    @Test func openHandCountsEveryFinger() {
-        let tips = [2.0, 2.1, 1.95, 1.8].map { CGPoint(x: 0, y: $0) }
+    /// The shipped values, so these tests fail if the thresholds drift apart
+    /// from the fixtures below rather than silently going vacuous.
+    private let closeRatio: CGFloat = 0.3
+    private let openRatio: CGFloat = 0.5
 
-        let count = HandPoseManager.extendedFingerCount(
-            wrist: wrist, fingertips: tips, palmLength: palmLength, threshold: threshold
+    /// Tips touching. They never reach 0 — the joints sit inside the fingers —
+    /// so this has to clear the grab threshold with room, not just beat zero.
+    @Test func tipsTogetherReadAsAPinch() {
+        let ratio = HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0),
+            indexTip: CGPoint(x: 0.15, y: 0),
+            palmLength: palmLength
         )
 
-        #expect(count == 4)
+        #expect(ratio == 0.15)
+        #expect(ratio! <= closeRatio, "clears the shipped grab threshold")
     }
 
-    /// A fist curls the tips back to roughly the knuckle line (~1 palm length).
-    /// The old tip/PIP ratio test scored a *straight* finger at only ~1.33, so
-    /// it never cleared 1.5 and every hand read as a permanent fist.
-    @Test func closedFistCountsNoFingers() {
-        let tips = [1.0, 1.1, 0.95, 0.9].map { CGPoint(x: 0, y: $0) }
-
-        let count = HandPoseManager.extendedFingerCount(
-            wrist: wrist, fingertips: tips, palmLength: palmLength, threshold: threshold
+    /// A spread open hand puts the two tips a full palm-width apart or more —
+    /// comfortably past the open threshold, never mistakeable for a grab.
+    @Test func aSpreadHandIsWellClearOfTheGrabThreshold() {
+        let ratio = HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0),
+            indexTip: CGPoint(x: 1.1, y: 0),
+            palmLength: palmLength
         )
 
-        #expect(count == 0)
+        #expect(ratio! >= openRatio, "reads as open, not held by hysteresis")
     }
 
-    /// Scale-free: the same pose twice as far from the camera must classify
-    /// identically, since every distance is divided by palm length.
-    @Test func classificationIsIndependentOfDistanceFromCamera() {
-        let near = [2.0, 2.1, 1.95, 1.8].map { CGPoint(x: 0, y: $0) }
-        let far = near.map { CGPoint(x: $0.x / 2, y: $0.y / 2) }
-
-        let nearCount = HandPoseManager.extendedFingerCount(
-            wrist: wrist, fingertips: near, palmLength: palmLength, threshold: threshold
-        )
-        let farCount = HandPoseManager.extendedFingerCount(
-            wrist: wrist, fingertips: far, palmLength: palmLength / 2, threshold: threshold
-        )
-
-        #expect(nearCount == farCount)
-    }
-
-    @Test func missingPalmMeasurementDoesNotReportExtendedFingers() {
-        let count = HandPoseManager.extendedFingerCount(
-            wrist: wrist, fingertips: [CGPoint(x: 0, y: 2)], palmLength: 0, threshold: threshold
+    /// The whole point of the change: a clenched fist is no longer a grab.
+    ///
+    /// This is the close call for a thumb-to-*index* pinch specifically — a
+    /// fist folds the thumb across the curled index, so these two tips end up
+    /// nearer each other than any other pair on the hand. ~0.6 palm lengths
+    /// still has to land on the open side of the threshold.
+    @Test func aClenchedFistIsNotAGrab() {
+        let ratio = HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0),
+            indexTip: CGPoint(x: 0.6, y: 0),
+            palmLength: palmLength
         )
 
-        #expect(count == 0)
+        #expect(ratio! >= openRatio, "a fist must read as open")
     }
-}
 
-struct SwipeDetectionTests {
-
-    /// Same numbers the manager ships with.
-    private func detect(from start: CGPoint, to end: CGPoint, over duration: TimeInterval) -> SwipeDirection? {
-        HandPoseManager.swipeDirection(
-            from: start, to: end, over: duration,
-            minimumDistance: 0.10, horizontalSpeed: 0.9, dominance: 1.25
+    /// Scale-free: the same pinch twice as far from the camera must classify
+    /// identically, since the gap is divided by palm length.
+    @Test func pinchIsIndependentOfDistanceFromCamera() {
+        let near = HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0),
+            indexTip: CGPoint(x: 0.3, y: 0),
+            palmLength: palmLength
         )
+        let far = HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0),
+            indexTip: CGPoint(x: 0.15, y: 0),
+            palmLength: palmLength / 2
+        )
+
+        #expect(near == far)
     }
 
-    /// A casual flick — 18% of the frame in a sixth of a second — has to land.
-    /// This is the whole point of the change: it was below the old 1.8 bar.
-    @Test func casualHorizontalFlickRegisters() {
-        #expect(detect(from: CGPoint(x: 0.4, y: 0.5), to: CGPoint(x: 0.58, y: 0.5), over: 0.16) == .right)
-        #expect(detect(from: CGPoint(x: 0.58, y: 0.5), to: CGPoint(x: 0.4, y: 0.5), over: 0.16) == .left)
+    /// A tip that dropped out of tracking is not a grab — the caller opens the
+    /// hand rather than clamping shut on whatever is nearby.
+    @Test func aMissingTipHasNoPinchMeasurement() {
+        #expect(HandPoseManager.pinchRatio(
+            thumbTip: nil, indexTip: CGPoint(x: 0.2, y: 0), palmLength: palmLength
+        ) == nil)
+
+        #expect(HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0), indexTip: nil, palmLength: palmLength
+        ) == nil)
     }
 
-    /// Vertical motion is never a serve — reaching down for the bowl or up for
-    /// a high bubble must not fling the dish away.
-    @Test func verticalFlicksAreNotServes() {
-        #expect(detect(from: CGPoint(x: 0.5, y: 0.6), to: CGPoint(x: 0.5, y: 0.42), over: 0.16) == nil)
-        #expect(detect(from: CGPoint(x: 0.5, y: 0.42), to: CGPoint(x: 0.5, y: 0.6), over: 0.16) == nil)
-    }
-
-    /// Slow drift covers the distance but not the speed — reaching across the
-    /// table must not read as a swipe.
-    @Test func slowDriftIsNotASwipe() {
-        #expect(detect(from: CGPoint(x: 0.3, y: 0.5), to: CGPoint(x: 0.6, y: 0.5), over: 1.5) == nil)
-    }
-
-    /// Fast but tiny: jitter over a couple of frames clears the speed bar
-    /// easily, which is why a net-distance bar exists too.
-    @Test func fastJitterIsNotASwipe() {
-        #expect(detect(from: CGPoint(x: 0.5, y: 0.5), to: CGPoint(x: 0.52, y: 0.5), over: 0.05) == nil)
-    }
-
-    /// A 45° flick belongs to neither axis; acting on it would make serving and
-    /// discarding fire interchangeably.
-    @Test func diagonalFlickIsRejected() {
-        #expect(detect(from: CGPoint(x: 0.4, y: 0.6), to: CGPoint(x: 0.6, y: 0.4), over: 0.16) == nil)
-    }
-
-    @Test func tooShortAWindowIsIgnored() {
-        #expect(detect(from: CGPoint(x: 0.3, y: 0.5), to: CGPoint(x: 0.9, y: 0.5), over: 0.01) == nil)
+    @Test func anUnmeasurablePalmHasNoPinchMeasurement() {
+        #expect(HandPoseManager.pinchRatio(
+            thumbTip: CGPoint(x: 0, y: 0),
+            indexTip: CGPoint(x: 0.2, y: 0),
+            palmLength: 0
+        ) == nil)
     }
 }
 
@@ -675,26 +678,30 @@ struct PlayerBodyMatchTests {
         at centre: CGFloat = 0.5,
         hips: Bool = false
     ) -> HandPoseManager.BodyCandidate {
-        HandPoseManager.BodyCandidate(
+        let points = wrists.map { CGPoint(x: $0.0, y: $0.1) }
+        return HandPoseManager.BodyCandidate(
             head: nil, // irrelevant to wrist matching
             leftShoulder: CGPoint(x: centre - span / 2, y: 0.70),
             rightShoulder: CGPoint(x: centre + span / 2, y: 0.70),
             leftHip: hips ? CGPoint(x: centre - span / 2, y: 0.40) : nil,
             rightHip: hips ? CGPoint(x: centre + span / 2, y: 0.40) : nil,
-            wrists: wrists.map { CGPoint(x: $0.0, y: $0.1) }
+            leftWrist: points.first,
+            rightWrist: points.count > 1 ? points[1] : nil
         )
     }
 
     private func keep(
         hands: [(CGFloat, CGFloat)],
         bodies: [HandPoseManager.BodyCandidate],
-        limit: Int = 2
+        limit: Int = 2,
+        requiredHand: HandSide? = nil
     ) -> [Int]? {
         HandPoseManager.playerHandIndices(
             handWrists: hands.map { CGPoint(x: $0.0, y: $0.1) },
             bodies: bodies,
             wristTolerance: 0.6,
-            limit: limit
+            limit: limit,
+            requiredHand: requiredHand
         )
     }
 
@@ -706,6 +713,32 @@ struct PlayerBodyMatchTests {
         )
 
         #expect(kept.map(Set.init) == Set([0, 1]))
+    }
+
+    /// One-hand mode: only the hand nearest the chosen wrist is kept, even
+    /// though both of the player's hands are up.
+    @Test func oneHandModeKeepsOnlyTheChosenSide() {
+        let kept = keep(
+            hands: [(0.40, 0.50), (0.60, 0.50)],
+            bodies: [body(wrists: [(0.40, 0.50), (0.60, 0.50)], shoulders: 0.30)],
+            limit: 1,
+            requiredHand: .left
+        )
+
+        #expect(kept == [0], "index 0 sits on the left wrist (0.40, 0.50)")
+    }
+
+    /// The other hand is dropped exactly like a bystander's — it just isn't
+    /// the wrist one-hand mode is listening to.
+    @Test func oneHandModeDropsTheOtherHandEvenWithoutABystander() {
+        let kept = keep(
+            hands: [(0.40, 0.50), (0.60, 0.50)],
+            bodies: [body(wrists: [(0.40, 0.50), (0.60, 0.50)], shoulders: 0.30)],
+            limit: 1,
+            requiredHand: .right
+        )
+
+        #expect(kept == [1], "index 1 sits on the right wrist (0.60, 0.50)")
     }
 
     /// The case geometry could not do: the player has **one** hand up, so
@@ -770,16 +803,18 @@ struct PlayerBodyMatchTests {
         #expect(kept?.count == 2)
     }
 
-    /// No body at all is *not* "no hands" — it tells the caller to fall back,
-    /// so a cropped torso can't freeze the game.
-    @Test func noBodyAsksTheCallerToFallBack() {
+    /// No shoulders in shot, no hands. A hand only counts as the player's if
+    /// it can be tied to a visible body, so a cropped torso tracks nothing —
+    /// the caller maps this nil straight to an empty list.
+    @Test func noBodyMeansNoHands() {
         #expect(keep(hands: [(0.5, 0.5)], bodies: []) == nil)
     }
 
     /// The player is in frame with their hands down or out of shot. That
-    /// matches nothing — and must *not* report "no body", because falling back
-    /// to geometry is exactly the door a bystander's hands would come through.
-    @Test func aPlayerWithNoVisibleWristsMatchesNothingRatherThanFallingBack() {
+    /// matches nothing, and is reported as an empty list rather than as "no
+    /// body" — the two are distinct even though the caller now treats them
+    /// the same way.
+    @Test func aPlayerWithNoVisibleWristsMatchesNothing() {
         let kept = keep(
             hands: [(0.85, 0.55)],                       // a bystander's hand
             bodies: [body(wrists: [], shoulders: 0.30)]  // player, hands down
@@ -840,7 +875,8 @@ struct SeatCalibrationTests {
             rightShoulder: CGPoint(x: centre + span / 2, y: shoulderY),
             leftHip: CGPoint(x: centre - span / 2, y: 700),
             rightHip: CGPoint(x: centre + span / 2, y: 700),
-            wrists: wrists
+            leftWrist: wrists.first,
+            rightWrist: wrists.count > 1 ? wrists[1] : nil
         )
     }
 
@@ -857,11 +893,31 @@ struct SeatCalibrationTests {
         #expect(!armsDown.isAligned(in: frame, minimumShoulderSpan: minimumSpan))
     }
 
-    /// One hand up is not the pose.
+    /// One hand up is not the pose — by default, both are required.
     @Test func onlyOneHandUpFails() {
         let oneHand = body(wrists: [CGPoint(x: 390, y: 330)])
 
         #expect(!oneHand.isAligned(in: frame, minimumShoulderSpan: minimumSpan))
+    }
+
+    /// One-hand mode: raising the chosen hand alone is enough.
+    @Test func oneHandModePassesWithOnlyTheChosenHandUp() {
+        // Left wrist only — see the `body()` default order below.
+        let leftHandOnly = body(wrists: [CGPoint(x: 390, y: 330)])
+
+        #expect(leftHandOnly.isAligned(
+            in: frame, minimumShoulderSpan: minimumSpan, requiredHand: .left
+        ))
+    }
+
+    /// One-hand mode still checks *which* hand — raising the other one
+    /// doesn't satisfy it, otherwise the setting would mean nothing.
+    @Test func oneHandModeFailsWhenTheOtherHandIsUp() {
+        let leftHandOnly = body(wrists: [CGPoint(x: 390, y: 330)])
+
+        #expect(!leftHandOnly.isAligned(
+            in: frame, minimumShoulderSpan: minimumSpan, requiredHand: .right
+        ))
     }
 
     /// No head found — the player is out of shot or turned right away.
@@ -910,7 +966,8 @@ struct BodySkeletonTests {
             rightShoulder: CGPoint(x: 0.6, y: 0.7),
             leftHip: hips ? CGPoint(x: 0.42, y: 0.4) : nil,
             rightHip: hips ? CGPoint(x: 0.58, y: 0.4) : nil,
-            wrists: []
+            leftWrist: nil,
+            rightWrist: nil
         )
     }
 
@@ -938,95 +995,6 @@ struct BodySkeletonTests {
         let drawn = Set(body(hips: true).chains.flatMap { $0 })
 
         #expect(!drawn.contains(CGPoint(x: 0.5, y: 0.85)))
-    }
-}
-
-/// The geometry-only fallback, used when no body is detected at all.
-struct OnePersonHandTests {
-
-    /// Shipped numbers.
-    private func keep(
-        _ hands: [(x: CGFloat, y: CGFloat, palm: CGFloat)],
-        limit: Int = 2
-    ) -> [Int] {
-        HandPoseManager.onePersonHandIndices(
-            positions: hands.map { CGPoint(x: $0.x, y: $0.y) },
-            palmLengths: hands.map(\.palm),
-            maxSpan: 0.7,
-            scaleTolerance: 1.7,
-            limit: limit
-        )
-    }
-
-    /// Both of one player's hands survive, however they are ordered.
-    @Test func bothOfThePlayersHandsAreKept() {
-        let kept = keep([(0.4, 0.5, 0.12), (0.6, 0.5, 0.12)])
-
-        #expect(kept.count == 2)
-        #expect(Set(kept) == [0, 1])
-    }
-
-    /// The whole point: someone further back measures smaller, so they lose to
-    /// the player even while Vision is happily reporting them.
-    @Test func aBystanderFurtherBackIsDropped() {
-        let kept = keep([
-            (0.4, 0.5, 0.12),   // player
-            (0.6, 0.5, 0.12),   // player
-            (0.85, 0.6, 0.05)   // bystander, half the apparent size
-        ])
-
-        #expect(Set(kept) == [0, 1], "the bystander must not be tracked")
-    }
-
-    /// A hand the right size but right across the frame is somebody else's.
-    @Test func aHandTooFarAcrossTheFrameIsDropped() {
-        let kept = keep([(0.9, 0.05, 0.12), (0.05, 0.95, 0.12)])
-
-        #expect(kept.count == 1)
-    }
-
-    /// One hand alone is still the player.
-    @Test func aLoneHandIsKept() {
-        #expect(keep([(0.5, 0.5, 0.1)]) == [0])
-    }
-
-    /// Reaching one arm towards the camera makes that hand measurably bigger.
-    /// The depth window has to tolerate that or the game drops the hand the
-    /// player is actively reaching with.
-    @Test func oneHandReachingForwardIsStillTheSamePlayer() {
-        let kept = keep([(0.45, 0.5, 0.10), (0.55, 0.5, 0.16)])
-
-        #expect(kept.count == 2, "1.6× is within the depth window")
-    }
-
-    /// Never hand back more than the game can play with, even when a crowd
-    /// qualifies.
-    @Test func neverReturnsMoreThanTheLimit() {
-        let kept = keep([
-            (0.40, 0.5, 0.12), (0.50, 0.5, 0.12),
-            (0.60, 0.5, 0.12), (0.70, 0.5, 0.12)
-        ])
-
-        #expect(kept.count == 2)
-    }
-
-    @Test func noHandsInMeansNoHandsOut() {
-        #expect(keep([]).isEmpty)
-    }
-
-    /// A hand with no usable palm measurement can't be placed in depth, so it
-    /// can't anchor anything either.
-    @Test func unmeasurableHandsAreIgnored() {
-        #expect(keep([(0.5, 0.5, 0)]).isEmpty)
-    }
-
-    /// Why this is only the fallback: on geometry alone two people side by
-    /// side at the same distance are indistinguishable. `PlayerBodyMatchTests`
-    /// covers the same case correctly, because it knows whose wrist is whose.
-    @Test func mixesTwoPeopleAtTheSameDistance() {
-        let kept = keep([(0.35, 0.5, 0.12), (0.55, 0.5, 0.12)])
-
-        #expect(kept.count == 2, "the body-pose filter is what fixes this")
     }
 }
 
@@ -1145,6 +1113,10 @@ struct GameLoopTests {
 
     /// The "Play Again does nothing" bug: restarting has to reset the score and
     /// the plate, and bump the token GameScene keys its board wipe off.
+    ///
+    /// Leaves `state` at `.idle` rather than `.cooking` — a replay has to sit
+    /// through the seat check and countdown again, and it's `start()` that
+    /// actually resumes play once that beat finishes (see below).
     @Test func restartResetsEverythingAndBumpsResetToken() {
         let manager = GameStateManager(recipes: [.chickenMayonnaise])
         manager.start()
@@ -1157,9 +1129,22 @@ struct GameLoopTests {
         #expect(manager.score == 0)
         #expect(manager.lives == manager.startingLives)
         #expect(manager.elapsedTime == 0)
-        #expect(manager.state == .cooking)
+        #expect(manager.state == .idle)
         #expect(manager.resetToken == tokenBefore + 1,
                 "GameScene clears the board off this token; without it the old ingredients stay")
+    }
+
+    /// `restart()` alone must not resume play — GameplayView's countdown is
+    /// what calls `start()` once it finishes, same as the very first run.
+    @Test func restartDoesNotResumePlayOnItsOwn() {
+        let manager = GameStateManager(recipes: [.chickenMayonnaise])
+        manager.start()
+        manager.restart()
+
+        #expect(manager.state == .idle)
+
+        manager.start()
+        #expect(manager.state == .cooking)
     }
 
     @Test func servingAwardsTheRecipesOwnScore() async throws {
@@ -1171,27 +1156,46 @@ struct GameLoopTests {
         #expect(manager.state == .dishComplete)
 
         try await Task.sleep(for: .milliseconds(1200)) // dish reveal beat
-        #expect(manager.state == .waitingForSwipe)
+        #expect(manager.state == .waitingToServe)
 
-        let cue = try #require(manager.swipeCueDirection)
-        manager.handleSwipe(cue)
+        manager.serveDish()
 
         #expect(manager.score == 25, "Chicken Geprek is worth 25, not a flat 1")
     }
 
-    @Test func swipingTheWrongWayScoresNothing() async throws {
+    /// Serving is gated on the bell having rung. The plate passes over plenty
+    /// of screen while ingredients are still being fetched, and none of that
+    /// may count as a delivery.
+    @Test func servingBeforeTheBellDoesNothing() {
         let manager = GameStateManager(recipes: [.chickenMayonnaise])
         manager.start()
-        for ingredient in Recipe.chickenMayonnaise.ingredients {
+        #expect(manager.state == .cooking)
+
+        manager.serveDish()
+
+        #expect(manager.score == 0)
+        #expect(manager.state == .cooking, "still cooking")
+    }
+
+    /// The bell picks an edge, and that edge is what the scene carries the
+    /// plate toward. It has to clear once the dish is gone, or the next round
+    /// would start with a stale target.
+    @Test func theBellRingsOnOneSideAndClearsAfterServing() async throws {
+        let manager = GameStateManager(recipes: [.chickenMayonnaise, .salad])
+        manager.start()
+        for ingredient in manager.currentRecipe.ingredients {
             manager.addIngredientToPlate(ingredient)
         }
         try await Task.sleep(for: .milliseconds(1200))
 
-        let cue = try #require(manager.swipeCueDirection)
-        manager.handleSwipe(cue == .left ? .right : .left)
+        #expect(manager.state == .waitingToServe)
+        let side = try #require(manager.bellSide)
+        #expect(side == .left || side == .right)
 
-        #expect(manager.score == 0)
-        #expect(manager.state == .waitingForSwipe, "still waiting for the right swipe")
+        manager.serveDish()
+
+        #expect(manager.bellSide == nil)
+        #expect(manager.state == .cooking)
     }
 
     /// A wrong ingredient must not complete the dish.
@@ -1204,49 +1208,54 @@ struct GameLoopTests {
     }
 }
 
-struct DishTimerGeometryTests {
+/// The recipe card's border, which is now the dish clock.
+struct RecipeBorderGeometryTests {
 
-    private let radius: CGFloat = 50
+    private let rect = CGRect(x: 0, y: 0, width: 400, height: 200)
+    private let radius: CGFloat = 40
 
-    /// Tolerance in points. The arc is drawn as Béziers, so the bounds land a
-    /// hair off the ideal circle.
-    private let slack: CGFloat = 0.5
+    /// The drain has to start at the top-right corner and finish at the
+    /// top-left, travelling the long way round via the bottom. Getting the
+    /// start point wrong is what would make the border empty from an arbitrary
+    /// corner — the whole reason this isn't a plain rounded rectangle.
+    @Test func theBorderRunsFromTopRightToTopLeft() {
+        let path = CardBorder(cornerRadius: radius).path(in: rect)
 
-    @Test func aFullClockCoversTheWholeDisc() {
-        let box = DishTimerNode.wedgePath(radius: radius, fraction: 1).boundingBoxOfPath
+        #expect(path.currentPoint == CGPoint(x: rect.minX, y: rect.minY),
+                "ends at the top-left corner")
 
-        #expect(abs(box.width - radius * 2) < slack)
-        #expect(abs(box.height - radius * 2) < slack)
+        // An open path: its bounds cover the card but it never closes across
+        // the top, which is where the card meets the edge of the screen.
+        let box = path.boundingRect
+        #expect(abs(box.width - rect.width) < 0.5)
+        #expect(abs(box.height - rect.height) < 0.5)
     }
 
-    /// Spent time is eaten clockwise from 12 o'clock, so half a clock is the
-    /// *left* half of the disc. This is what pins the start angle and the
-    /// sweep direction — mirror either one and this fails.
-    @Test func halfAClockIsTheLeftHalf() {
-        let box = DishTimerNode.wedgePath(radius: radius, fraction: 0.5).boundingBoxOfPath
+    /// A corner radius larger than the card can accommodate must not produce a
+    /// self-overlapping path — a short recipe makes this card genuinely small.
+    @Test func anOversizedCornerRadiusIsClamped() {
+        let squat = CGRect(x: 0, y: 0, width: 50, height: 30)
+        let path = CardBorder(cornerRadius: 999).path(in: squat)
 
-        #expect(abs(box.minX + radius) < slack, "reaches the left edge")
-        #expect(abs(box.maxX) < slack, "stops at the centre line")
-        #expect(abs(box.height - radius * 2) < slack, "spans the full height")
-    }
-
-    /// An empty clock draws nothing, leaving the white dial and its rim — the
-    /// timer reads as spent rather than as having disappeared.
-    @Test func anEmptyClockDrawsNothing() {
-        let box = DishTimerNode.wedgePath(radius: radius, fraction: 0).boundingBoxOfPath
-
-        #expect(box.width < slack)
+        let box = path.boundingRect
+        #expect(box.width <= squat.width + 0.5)
+        #expect(box.height <= squat.height + 0.5)
     }
 }
 
 struct DishTimeLimitTests {
 
     /// Each dish carries its own assembly budget, so pin the shipped numbers.
+    ///
+    /// They all sit at 30s today, and the difficulty ramp squeezes that as the
+    /// run goes on rather than the recipes differing from each other. The
+    /// field is still per-recipe, so a fiddly dish can be given more room
+    /// without touching the others.
     @Test func everyRecipeDeclaresItsOwnLimit() {
-        #expect(Recipe.chickenMayonnaise.timeLimit == 10)
-        #expect(Recipe.chickenCheese.timeLimit == 10)
-        #expect(Recipe.chickenGeprek.timeLimit == 15)
-        #expect(Recipe.salad.timeLimit == 20)
+        #expect(Recipe.chickenMayonnaise.timeLimit == 30)
+        #expect(Recipe.chickenCheese.timeLimit == 30)
+        #expect(Recipe.chickenGeprek.timeLimit == 30)
+        #expect(Recipe.salad.timeLimit == 30)
     }
 
     /// Every recipe must be worth some time, or it would fail the instant it
@@ -1288,6 +1297,32 @@ struct LivesTests {
         manager.failDish()
 
         #expect(manager.resetToken == tokenBefore + 1)
+    }
+
+    /// Losing a life wipes the board but the run carries on, so the player
+    /// must not be dropped back into a 3-2-1-GO! countdown. `runToken` is what
+    /// GameplayView keys that countdown off, and only `restart()` bumps it.
+    @Test func aTimedOutDishDoesNotBumpTheRunToken() {
+        let manager = GameStateManager(recipes: Recipe.all)
+        manager.start()
+        let runBefore = manager.runToken
+
+        manager.failDish()
+
+        #expect(manager.state == .cooking, "still playing, just a life down")
+        #expect(manager.runToken == runBefore, "no countdown mid-run")
+    }
+
+    /// Replay is the other half of that rule: a fresh run *does* get the
+    /// countdown back.
+    @Test func restartBumpsTheRunToken() {
+        let manager = GameStateManager(recipes: Recipe.all)
+        manager.start()
+        let runBefore = manager.runToken
+
+        manager.restart()
+
+        #expect(manager.runToken == runBefore + 1)
     }
 
     /// The run ends on the last life, and only then — this is the sole way to
@@ -1343,8 +1378,7 @@ struct LivesTests {
         try await Task.sleep(for: .milliseconds(1200))
         #expect(!manager.isTimingDish)
 
-        let cue = try #require(manager.swipeCueDirection)
-        manager.handleSwipe(cue)
+        manager.serveDish()
 
         #expect(manager.isTimingDish, "the next dish is on the clock")
         #expect(manager.dishTimeLimit == manager.currentRecipe.timeLimit)
@@ -1361,8 +1395,7 @@ struct LivesTests {
         }
         try await Task.sleep(for: .milliseconds(1200))
 
-        let cue = try #require(manager.swipeCueDirection)
-        manager.handleSwipe(cue)
+        manager.serveDish()
 
         #expect(manager.lives == manager.startingLives)
         #expect(manager.score > 0)
@@ -1380,8 +1413,7 @@ struct LivesTests {
             }
             // Long enough for the reveal beat to hand over to the swipe cue.
             try await Task.sleep(for: .milliseconds(1200))
-            let cue = try #require(manager.swipeCueDirection)
-            manager.handleSwipe(cue)
+            manager.serveDish()
         }
 
         // Dishes 1–4 stay on the base budget for whatever recipe is up.

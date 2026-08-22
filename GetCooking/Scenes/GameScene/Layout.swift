@@ -19,14 +19,16 @@ extension GameScene {
         addChild(reset)
         resetNode = reset
 
-        // Above the plate and the bubbles, so a dish sitting on the plate
-        // never hides how much time is left on it.
-        let dishTimer = DishTimerNode(radius: dishTimerRadius)
-        dishTimer.zPosition = 5
-        addChild(dishTimer)
-        dishTimerNode = dishTimer
-
+        applyBoardVisibility()
         layoutStaticNodes()
+    }
+
+    /// Shows or hides the playfield furniture. Called whenever `showsBoard`
+    /// changes and again whenever a node is rebuilt, so a plate created mid-run
+    /// inherits the current setting rather than defaulting to visible.
+    func applyBoardVisibility() {
+        plateNode?.isHidden = !showsBoard
+        resetNode?.isHidden = !showsBoard
     }
 
     /// Re-sizes and re-positions everything after a rotation or size change.
@@ -34,9 +36,6 @@ extension GameScene {
         guard size.width > 0, size.height > 0 else { return }
 
         plateNode?.position = plateHome
-
-        dishTimerNode?.position = dishTimerHome
-        dishTimerNode?.resize(to: dishTimerRadius)
 
         // Reset button
         let inset: CGFloat = 120
@@ -54,8 +53,9 @@ extension GameScene {
         let plate = PlateNode(radius: plateRadius)
         plate.zPosition = 1
         plate.position = plateHome
-        
+
         addChild(plate)
         plateNode = plate
+        applyBoardVisibility()
     }
 }

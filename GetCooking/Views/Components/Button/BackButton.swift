@@ -13,6 +13,7 @@ struct BackButton: View {
     var body: some View {
         GeometryReader { proxy in
             Button(action: {
+                AudioManager.shared.play(.uiClick)
                 action()
             }) {
                 Image(systemName: "chevron.left")
