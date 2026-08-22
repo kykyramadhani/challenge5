@@ -102,7 +102,7 @@ struct RecipeCard: View {
         }
         .animation(
             wrongRecipe
-                ? .easeInOut(duration: 0.2).repeatForever(autoreverses: true)
+                ? .easeInOut(duration: 0.4).repeatForever(autoreverses: true)
                 : .default,
             value: wrongRecipe
         )
