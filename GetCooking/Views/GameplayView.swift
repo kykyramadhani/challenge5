@@ -186,15 +186,6 @@ struct GameplayView: View {
                 
                 LoseHeartOverlay(gameStateManager: gameStateManager)
 
-                if gameStateManager.state == .gameOver {
-                    PostGame(
-                        score: gameStateManager.score,
-                        survivedSeconds: gameStateManager.elapsedTime,
-                        onRestart: replay,
-                        sceneManager: sceneManager
-                    )
-                }
-
                 if isCountingDown {
                     GetReadyOverlay(count: countdown)
                         .ignoresSafeArea()
@@ -289,22 +280,14 @@ struct GameplayView: View {
         }
         .onChange(of: gameStateManager.state) { _, state in
             scene.isPaused = (state == .gameOver)
-            // Fade the music out on the game-over screen; the replay's countdown
-            // task brings it back for the next run.
-            if state == .gameOver { AudioManager.shared.stopMusic() }
+            if state == .gameOver {
+                // The run is over: fade the music and hand the results to their
+                // own screen. goToPostGame resets the nav path, which unmounts
+                // this view — so its `.onDisappear` stops the camera feed.
+                AudioManager.shared.stopMusic()
+                sceneManager.goToPostGame(gameStateManager.result)
+            }
         }
-    }
-
-    /// Play Again: send the player back through the seat check (if the game
-    /// needs one) and the countdown, exactly like the first run. Flipping
-    /// `hasCalibrated` back swaps the Group to SeatCalibrationView, which
-    /// unmounts `gameBody` — so its `.task` reruns fresh once calibration
-    /// passes and the board reappears; for a game with no calibration step,
-    /// `gameBody` never unmounts, so the `.task(id:)` keyed on `resetToken` is
-    /// what reruns the countdown instead.
-    private func replay() {
-        if needsCalibration { hasCalibrated = false }
-        gameStateManager.restart()
     }
 
     /// Bail out of the run entirely and go back to the main menu. Resetting the

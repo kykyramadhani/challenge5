@@ -42,6 +42,24 @@ final class SceneManager {
         path.append("gameplay")
     }
 
+    /// Show the end-of-run results as their own screen. Resetting the path
+    /// first drops GameplayView from the stack — tearing down its camera and
+    /// scene — and then pushes PostGame on top of the menu.
+    func goToPostGame(_ result: GameResult) {
+        isInGameplayFlow = false
+        path = NavigationPath()
+        path.append(result)
+    }
+
+    /// Play Again from the results screen: start a brand-new run of the same
+    /// game. A fresh GameplayView means a fresh GameStateManager, so it runs
+    /// the seat check and countdown again just like the first time.
+    func replayGame() {
+        guard selectedGame != nil else { goToMainMenu(); return }
+        path = NavigationPath()
+        goToGameplay()
+    }
+
     func goToMainMenu() {
         path = NavigationPath()
         selectedGame = nil

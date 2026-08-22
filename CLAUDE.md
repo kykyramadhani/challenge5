@@ -64,10 +64,13 @@ GetCooking/
     GameArt.swift            string constants for non-ingredient art (bubble, plate)
 
   Managers/              The "brains" — no UI code
-    GameStateManager.swift   state machine: idle → cooking → dishComplete →
-                              waitingForSwipe → gameOver → (restart) → cooking
-    HandPoseManager.swift    AVFoundation capture + Vision hand-pose inference,
-                              runs on a background queue, publishes HandData[]
+    CameraManager.swift          camera authorization status, permission requests, device discovery
+    GameStateManager.swift       state machine: idle → cooking → dishComplete →
+                                  waitingForSwipe → gameOver → (restart) → cooking
+    HandPoseManager.swift        AVFoundation capture + Vision hand-pose inference,
+                                  runs on a background queue, publishes HandData[]
+    HumanBodyPoseManager.swift   Vision body pose detection, nearest player resolution,
+                                  bystander filtering & alignment checking
     Enums/
       HandData.swift          one tracked hand, published to UI + scene
       SwipeDirection.swift     .left / .right

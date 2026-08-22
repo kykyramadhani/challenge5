@@ -24,31 +24,68 @@ import SwiftUI
 struct ContentView: View {
     @State private var sceneManager = SceneManager()
     @StateObject private var handPoseManager = HandPoseManager()
+    @State private var showSplashScreen = true
+
+    /// False until the player has been through onboarding once. Backed by
+    /// UserDefaults, so it survives launches but resets on a fresh install —
+    /// exactly "show it only the first time the game is installed".
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
-        // The camera preview lives inside GameplayView — the only screen that
-        // shows it — mounted as that screen's backmost layer so it sits behind
-        // both the seat check and the board. It can't live here behind the
-        // NavigationStack: a transparent top screen reveals the screen *beneath
-        // it in the stack* (the opaque menu / game-opening), not a sibling drawn
-        // behind the whole stack, so a camera here is always occluded. The
-        // capture *session* is still owned by HandPoseManager, so hosting the
-        // preview view downstream doesn't rebuild the pipeline.
-        NavigationStack(path: $sceneManager.path) {
-            MainMenuView(sceneManager: sceneManager)
-                .navigationDestination(for: GameOption.self) { game in
-                    GameOpening(game: game, sceneManager: sceneManager)
-                }
-                .navigationDestination(for: String.self) { destination in
-                    if destination == "gameplay" {
-                        GameplayView(
-                            sceneManager: sceneManager,
-                            handPoseManager: handPoseManager
-                        )
+        ZStack {
+            // The camera preview lives inside GameplayView — the only screen that
+            // shows it — mounted as that screen's backmost layer so it sits behind
+            // both the seat check and the board. It can't live here behind the
+            // NavigationStack: a transparent top screen reveals the screen *beneath
+            // it in the stack* (the opaque menu / game-opening), not a sibling drawn
+            // behind the whole stack, so a camera here is always occluded. The
+            // capture *session* is still owned by HandPoseManager, so hosting the
+            // preview view downstream doesn't rebuild the pipeline.
+            NavigationStack(path: $sceneManager.path) {
+                MainMenuView(sceneManager: sceneManager)
+                    .navigationDestination(for: GameOption.self) { game in
+                        GameOpening(game: game, sceneManager: sceneManager)
+                    }
+                    .navigationDestination(for: String.self) { destination in
+                        if destination == "gameplay" {
+                            GameplayView(
+                                sceneManager: sceneManager,
+                                handPoseManager: handPoseManager
+                            )
+                        }
+                    }
+                    .navigationDestination(for: GameResult.self) { result in
+                        PostGameView(result: result, sceneManager: sceneManager)
+                    }
+            }
+            .tint(.appSecondaryText)
+
+            // First-launch onboarding, above the menu but below the splash so
+            // the splash still plays first. Dismissing it flips the flag, which
+            // removes it for good.
+            if !hasCompletedOnboarding {
+                OnboardingView {
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        hasCompletedOnboarding = true
                     }
                 }
+                .transition(.opacity)
+                .zIndex(50)
+            }
+
+            if showSplashScreen {
+                SplashScreenView()
+                    .transition(.opacity.combined(with: .scale(scale: 1.02)))
+                    .zIndex(100)
+            }
         }
-        .tint(.appSecondaryText)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    showSplashScreen = false
+                }
+            }
+        }
     }
 }
 

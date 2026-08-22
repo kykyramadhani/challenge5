@@ -15,8 +15,28 @@ final class GameStateManager: ObservableObject {
 
     @Published private(set) var state: GameState = .idle
     @Published private(set) var currentRecipe: Recipe
-    @Published private(set) var score: Int = 0
     @Published private(set) var plateContents: [Ingredient] = []
+
+    /// How many dishes of each kind the player completed this run, keyed by the
+    /// recipe's `finishedDishImageName` (e.g. "salad", "ChickenGeprek"). The
+    /// PostGame paycheck reads these for its per-dish tally.
+    @Published private(set) var dishesByType: [String: Int] = [:]
+
+    /// Total seconds of leftover dish-clock banked across the run. A dish
+    /// finished with 3 seconds still on its clock adds 3 here — the paycheck's
+    /// "Speed Bonus".
+    @Published private(set) var speedBonus: Int = 0
+
+    /// Every dish completed this run, all kinds summed — the paycheck's
+    /// "Dishes Served" count.
+    var totalDishesServed: Int { dishesByType.values.reduce(0, +) }
+
+    /// A value snapshot of this run's outcome, handed to the results screen so
+    /// it needs no live reference back to this manager.
+    var result: GameResult {
+        GameResult(dishesByType: dishesByType, speedBonus: speedBonus)
+    }
+
     /// Which edge the bell rang on, and so which way the plate has to be
     /// carried. Nil whenever no dish is waiting to be served.
     @Published private(set) var bellSide: SwipeDirection?
@@ -172,7 +192,8 @@ final class GameStateManager: ObservableObject {
         // the run that just ended has to be silenced explicitly.
         AudioManager.shared.stopClockWarning()
         AudioManager.shared.play(.reset)
-        score = 0
+        dishesByType = [:]
+        speedBonus = 0
         lives = startingLives
         plateContents = []
         bellSide = nil
@@ -321,9 +342,7 @@ final class GameStateManager: ObservableObject {
         guard state == .waitingToServe else { return }
         // The order is handed over…
         AudioManager.shared.play(.putOrder)
-        score += currentRecipe.scoreValue
-        // …and the point lands a beat later, so the two read as serve-then-score
-        // rather than one muddy chord.
+        // …and the reward chime lands a beat later.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             AudioManager.shared.play(.addPoint)
         }
@@ -344,6 +363,10 @@ final class GameStateManager: ObservableObject {
 
     private func checkForCompletion() {
         guard Self.matches(plateContents: plateContents, recipe: currentRecipe) else { return }
+        // Bank the dish and its leftover time *now*, while the dish clock still
+        // reads the moment of completion — it keeps ticking down as the player
+        // carries the plate to the bell, so reading it later would under-count.
+        recordCompletedDish()
         state = .dishComplete
         // The plate is right: ring the bell — the dish is up.
         AudioManager.shared.play(.bell)
@@ -352,6 +375,16 @@ final class GameStateManager: ObservableObject {
             self.bellSide = Bool.random() ? .left : .right
             self.state = .waitingToServe
         }
+    }
+
+    /// Records a just-completed dish: adds it to its per-type tally and banks
+    /// however many whole seconds were left on its clock as speed bonus.
+    private func recordCompletedDish() {
+        dishesByType[currentRecipe.finishedDishImageName, default: 0] += 1
+
+        // Whole seconds still on the clock — floored, so 3.7s left banks 3.
+        let secondsLeft = max(0, Int(dishDeadline - playClock))
+        speedBonus += secondsLeft
     }
 
     private func startNewRound() {

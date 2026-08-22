@@ -1,0 +1,132 @@
+//
+//  PostGame.swift
+//  GetCooking
+//
+//  The end-of-run summary: the paycheck (dishes served + speed bonus + total)
+//  and a per-dish-type tally, driven by the run's GameStateManager.
+//
+
+import SwiftUI
+
+/// A value snapshot of a finished run, passed to the results screen so it needs
+/// no live reference to the GameStateManager that produced it.
+struct GameResult: Hashable {
+    var dishesByType: [String: Int]
+    var speedBonus: Int
+
+    /// Every dish completed this run, all kinds summed.
+    var totalDishesServed: Int { dishesByType.values.reduce(0, +) }
+}
+
+struct PostGameView: View {
+    let result: GameResult
+    var sceneManager: SceneManager
+
+    /// The four dish types shown in the tally, paired with the asset name each
+    /// uses for its plate art. The key matches a recipe's `finishedDishImageName`,
+    /// which is how GameStateManager counts them.
+    private let dishTypes: [(key: String, image: String)] = [
+        ("salad", "salad"),
+        ("ChickenMayonnaise", "ChickenMayonnaise"),
+        ("ChickenGeprek", "ChickenGeprek"),
+        ("ChickenMozarella", "ChickenMozarella"),
+    ]
+
+    @State private var showShopComingSoon = false
+
+    var body: some View {
+        ZStack {
+            if let imageName = sceneManager.selectedGame?.imageName {
+                BackgroundImage(imageName)
+            }
+
+            VStack(spacing: 80) {
+                VStack(spacing: 32) {
+                    PayCheckView(
+                        totalDishServed: result.totalDishesServed,
+                        speedBonus: result.speedBonus
+                    )
+
+                    HStack(spacing: 35) {
+                        ForEach(dishTypes, id: \.key) { dish in
+                            foodPlate(
+                                food: dish.image,
+                                width: 150,
+                                height: 150,
+                                dishServed: result.dishesByType[dish.key] ?? 0
+                            )
+                        }
+                    }
+                }
+
+                HStack(spacing: 40) {
+                    ButtonComponent(
+                        name: "Play Again",
+                        icon: "play.fill",
+                        action: sceneManager.replayGame,
+                        buttonStyle: .primary
+                    )
+
+                    ButtonComponent(
+                        name: "Shop",
+                        icon: "cart.fill",
+                        action: { withAnimation(.easeInOut(duration: 0.2)) { showShopComingSoon = true } },
+                        buttonStyle: .text
+                    )
+
+                    ButtonComponent(
+                        name: "Main Menu",
+                        icon: "square.grid.2x2.fill",
+                        action: sceneManager.goToMainMenu,
+                        buttonStyle: .text
+                    )
+                }
+            }
+
+            if showShopComingSoon {
+                ShopComingSoonPopup {
+                    withAnimation(.easeInOut(duration: 0.2)) { showShopComingSoon = false }
+                }
+                .transition(.opacity)
+                .zIndex(1)
+            }
+        }
+        // Its own screen now — no system back chrome.
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+struct foodPlate: View {
+    let food: String
+    let width: CGFloat
+    let height: CGFloat
+    let dishServed: Int
+
+    var body: some View {
+        ZStack {
+            Image("plate")
+                .resizable()
+                .frame(width: width, height: height)
+
+            Image(food)
+                .resizable()
+                .frame(width: width * 0.7, height: height * 0.7)
+
+            Text("x\(dishServed)")
+                .font(.system(size: 40, weight: .bold, design: .rounded))
+                .foregroundColor(.appPrimary)
+                .offset(x: width * 0.5, y: height * 0.4)
+        }
+    }
+}
+
+#Preview {
+    PostGameView(
+        result: GameResult(
+            dishesByType: ["salad": 4, "ChickenMayonnaise": 4, "ChickenGeprek": 3, "ChickenMozarella": 2],
+            speedBonus: 20
+        ),
+        sceneManager: SceneManager()
+    )
+}

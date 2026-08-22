@@ -22,4 +22,6 @@ enum SoundEffect: String, CaseIterable {
     case putOrder        = "put_order"          // submit a completed order
     case reset           = "reset"              // level restart / game reset
     case uiClick         = "ui_click"           // menu button pressed
+    case wrongIngredient = "wrong_ingredients"  // a wrong ingredient placed on the plate
+    case scuffleCloud    = "scuffle_cloud"      // the puff of smoke when a dish is finished
 }
