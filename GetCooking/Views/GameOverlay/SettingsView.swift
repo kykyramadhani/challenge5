@@ -15,7 +15,6 @@
 import SwiftUI
 
 struct SettingsView: View {
-    /// Called when the player taps the close button.
     var onClose: () -> Void
 
     // MARK: - Persisted settings
@@ -33,7 +32,7 @@ struct SettingsView: View {
     var body: some View {
         ZStack {
             // Dimmed backdrop — a tap anywhere off the card closes it.
-            Color.black.opacity(0.55)
+            Color.black.opacity(0.8)
                 .ignoresSafeArea()
                 .onTapGesture { onClose() }
 
@@ -49,10 +48,10 @@ struct SettingsView: View {
     private var card: some View {
         VStack(spacing: 28) {
             Text("SETTINGS")
-                .font(.system(size: 44, weight: .black))
+                .font(.system(size: 48, weight: .bold))
                 .foregroundStyle(.appTertiary)
-                .padding(.top, 40)
-                .padding(.bottom, 8)
+                .padding(.top, 60)
+                .padding(.bottom, 60)
 
             settingRow(title: "Music") {
                 VolumeSlider(value: $musicVolume, onChanged:  { newValue in
@@ -105,13 +104,14 @@ struct SettingsView: View {
                     )
                 }
             }
-
-            Spacer(minLength: 32)
+            
+            Divider()
+                .padding(.bottom, 32)
         }
-        .padding(.horizontal, 48)
+        .padding(.horizontal, 72)
         .background(
             RoundedRectangle(cornerRadius: 40, style: .continuous)
-                .fill(.appBackground)
+                .fill(.white)
         )
     }
 
@@ -138,21 +138,13 @@ struct SettingsView: View {
         }) {
             Image(systemName: "xmark")
                 .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(.appText)
-                .frame(width: 90, height: 90)
-                .background(.appBackground, in: Circle())
+                .foregroundStyle(.appBackground)
+                .frame(width: 100, height: 100)
+                .background(.white, in: Circle())
                 .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
         }
-        // Nudged out so it straddles the card's top-right corner, as in the design.
-        .offset(x: 30, y: -30)
+        .offset(x: 0, y: -30)
     }
-}
-
-// MARK: - Language (UI-only for now)
-
-enum AppLanguage: String, CaseIterable {
-    case english
-    case indonesia
 }
 
 // MARK: - Volume slider
@@ -165,29 +157,30 @@ struct VolumeSlider: View {
     var onEditingEnded: ((Double) -> Void)? = nil
     var onChanged: ((Double) -> Void)? = nil
 
-    private let trackHeight: CGFloat = 18
-    private let thumbSize: CGFloat = 34
+    private let trackHeight: CGFloat = 33
+    private let thumbSize: CGFloat = 43
 
     var body: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let clamped = min(max(value, 0), 1)
+            
             // Keep the thumb fully on the track at both ends.
             let travel = max(width - thumbSize, 0)
             let thumbX = travel * clamped
 
             ZStack(alignment: .leading) {
-                Capsule()
+                RoundedRectangle(cornerRadius: 12)
                     .fill(Color.primary.opacity(0.1))
                     .frame(height: trackHeight)
 
-                Capsule()
+                RoundedRectangle(cornerRadius: 12)
                     .fill(Color.appTertiary.opacity(0.55))
                     .frame(width: thumbX + thumbSize / 2, height: trackHeight)
 
-                Circle()
+                Capsule()
                     .fill(Color.appTertiary)
-                    .frame(width: thumbSize, height: thumbSize)
+                    .frame(width: 30, height: thumbSize)
                     .shadow(color: .black.opacity(0.15), radius: 3, x: 0, y: 2)
                     .offset(x: thumbX)
             }
@@ -247,10 +240,10 @@ struct SegmentedPill: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
                 .background(
-                    Capsule()
+                    RoundedRectangle(cornerRadius: 12)
                         .fill(selected
                               ? Color.appTertiary.opacity(0.75)
-                              : Color.primary.opacity(0.08))
+                              : Color.gray.opacity(0.08))
                 )
         }
         .buttonStyle(.plain)

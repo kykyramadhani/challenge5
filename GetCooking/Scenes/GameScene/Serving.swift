@@ -24,6 +24,8 @@ extension GameScene {
             at: plateHome,
             width: plateRadius * 3
         )
+        // Sound for the puff of smoke the finished dish appears in.
+        AudioManager.shared.play(.scuffleCloud)
 
         if let texture = TrimmedArt.texture(named: recipe.finishedDishImageName)
         {
@@ -148,6 +150,8 @@ extension GameScene {
         
         if !ingredientList.contains(node.ingredient) {
             gameStateManager.wrongIngredientPlaced = true
+            // This ingredient isn't in the recipe — sound the mistake.
+            AudioManager.shared.play(.wrongIngredient)
         }
 
         node.heldBy = nil

@@ -1,12 +1,12 @@
 //
-//  VisionChefApp.swift
-//  VisionChef
+//  PlayFeatApp.swift
+//  PlayFeat
 //
 
 import SwiftUI
 
 @main
-struct VisionChefApp: App {
+struct PlayFeatApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

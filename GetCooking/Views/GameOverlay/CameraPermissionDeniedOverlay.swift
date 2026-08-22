@@ -9,20 +9,24 @@ import SwiftUI
 
 struct CameraPermissionDeniedOverlay: View {
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "camera.fill")
-                .font(.system(size: 40))
-            Text("Camera access is required to play VisionChef.")
+        VStack(spacing: 24) {
+            Image("PlayFeatMascot")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 260, height: 260)
+            
+            Text("Camera Permission is Required")
+                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .foregroundStyle(.appTertiaryText)
+            
+            Text("Go to your settings and allow access to your camera")
+                .font(.system(size: 24, weight: .medium, design: .rounded))
+                .foregroundStyle(.appTertiaryText)
                 .multilineTextAlignment(.center)
-                .font(.headline)
-            Text("Enable it in Settings \u{2192} Privacy & Security \u{2192} Camera.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                .frame(maxWidth: 520)
         }
-        .padding(28)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .padding()
+        .frame(maxWidth: 800)
+        .padding(40)
     }
 }
 
