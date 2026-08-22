@@ -106,6 +106,9 @@ struct GameplayView: View {
         .onDisappear {
             handPoseManager.stop()
             UIApplication.shared.isIdleTimerDisabled = false
+            // Leaving gameplay entirely (quit, or back to the menu) — the music
+            // belongs to this screen, so it goes with it.
+            AudioManager.shared.stopMusic()
         }
     }
 
@@ -152,7 +155,9 @@ struct GameplayView: View {
 
                         Spacer()
 
-                        PointCard(dishesServed: gameStateManager.dishesCompleted)
+                        PointCard(
+                            dishesServed: gameStateManager.dishesCompleted
+                        )
 
                         Spacer()
 
@@ -163,7 +168,7 @@ struct GameplayView: View {
                             recipe: gameStateManager.currentRecipe,
                             gameStateManager: gameStateManager
                         )
-                            .opacity(isCountingDown ? 0 : 1)
+                        .opacity(isCountingDown ? 0 : 1)
 
                         Spacer()
 
@@ -178,6 +183,8 @@ struct GameplayView: View {
                     Spacer()
                 }
                 .ignoresSafeArea()
+                
+                LoseHeartOverlay(gameStateManager: gameStateManager)
 
                 if gameStateManager.state == .gameOver {
                     PostGame(
@@ -258,6 +265,11 @@ struct GameplayView: View {
             // out, which costs a life but leaves the run going, and a countdown
             // there would interrupt play the player hasn't lost yet.
             // The camera is already live, handed over by the seat check.
+            // Bring the music up under the count so play starts already scored;
+            // startMusic is a no-op if it's somehow already going.
+            AudioManager.shared.startMusic()
+            // One shot at the top of the beat — the clip already voices 3-2-1.
+            AudioManager.shared.play(.countdown)
             for step in stride(from: 3, through: 0, by: -1) {
                 countdown = step  // 0 is the "GO!" beat
                 do {
@@ -271,9 +283,15 @@ struct GameplayView: View {
         }
         .onChange(of: gameStateManager.isPaused) { _, paused in
             scene.isPaused = paused
+            // Hold the music with the game so a pause is actually quiet.
+            if paused { AudioManager.shared.pauseMusic() }
+            else { AudioManager.shared.resumeMusic() }
         }
         .onChange(of: gameStateManager.state) { _, state in
             scene.isPaused = (state == .gameOver)
+            // Fade the music out on the game-over screen; the replay's countdown
+            // task brings it back for the next run.
+            if state == .gameOver { AudioManager.shared.stopMusic() }
         }
     }
 

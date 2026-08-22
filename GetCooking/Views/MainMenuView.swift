@@ -55,10 +55,16 @@ struct MainMenuView: View {
             SettingsButton {
                 showSettings = true
             }
+
+            // A dimmed card over the menu rather than a system sheet, so it
+            // carries the game's own styling (see SettingsView).
+            if showSettings {
+                SettingsView(onClose: { showSettings = false })
+                    .transition(.opacity)
+                    .zIndex(1)
+            }
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-        }
+        .animation(.easeInOut(duration: 0.2), value: showSettings)
     }
 }
 

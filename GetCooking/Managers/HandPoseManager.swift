@@ -386,6 +386,15 @@ final class HandPoseManager: NSObject, ObservableObject {
             if turnOffCenterStage { Self.disableCenterStage() }
 
             self.captureSession.beginConfiguration()
+
+            // This is a video-only session (no audio input), so it must not
+            // touch the app's shared audio session. Left at its default (true),
+            // AVCaptureSession reconfigures that session on start and tears it
+            // down on stop — which is why quitting the game killed *all* audio,
+            // sound effects included. Turning it off leaves AudioManager's
+            // `.ambient` session alone for the whole app lifetime.
+            self.captureSession.automaticallyConfiguresApplicationAudioSession = false
+
             // Fallback only. `selectWidestFormat` below overrides this with a
             // hand-picked format (which flips the preset to `.inputPriority`);
             // the preset matters just for devices where no format qualifies.

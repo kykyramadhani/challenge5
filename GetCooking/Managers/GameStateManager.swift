@@ -27,6 +27,7 @@ final class GameStateManager: ObservableObject {
 
     /// Lives left. Every dish that times out costs one; at zero the run ends.
     @Published private(set) var lives: Int
+    @Published var looseHeart: Bool = false
 
     /// When true the clocks and the scene are frozen (Pause button).
     @Published private(set) var isPaused: Bool = false
@@ -50,6 +51,8 @@ final class GameStateManager: ObservableObject {
     /// run is still going and the player should not be made to sit through
     /// another countdown to carry on.
     @Published private(set) var runToken: Int = 0
+    
+    @Published var wrongIngredientPlaced = false
 
     let startingLives: Int
 
@@ -165,6 +168,10 @@ final class GameStateManager: ObservableObject {
     /// once that beat is done.
     func restart() {
         timer?.invalidate()
+        // A restart wipes the board, so any low-time warning still looping from
+        // the run that just ended has to be silenced explicitly.
+        AudioManager.shared.stopClockWarning()
+        AudioManager.shared.play(.reset)
         score = 0
         lives = startingLives
         plateContents = []
@@ -201,7 +208,13 @@ final class GameStateManager: ObservableObject {
         let delta = min(now - lastTick, Self.maxTickDelta)
         lastTick = now
 
-        guard !isPaused, state != .gameOver else { return }
+        guard !isPaused, state != .gameOver else {
+            // No dish is running down while paused or after the run ends, so a
+            // low-time warning left looping would keep ticking over a frozen
+            // clock — silence it here.
+            AudioManager.shared.stopClockWarning()
+            return
+        }
         playClock += delta
 
         // Only whole seconds reach the HUD, so this publishes once a second
@@ -212,6 +225,29 @@ final class GameStateManager: ObservableObject {
         // `isTimingDish` and not just the deadline: an assembled dish waiting
         // to be served must not run out from under the player.
         if isTimingDish, playClock >= dishDeadline { failDish() }
+
+        // Kept in sync with the dish clock every tick — both AudioManager calls
+        // are idempotent, so re-asserting the current state costs nothing.
+        updateClockWarning()
+    }
+
+    /// Below this fraction of the dish clock, the looping low-time warning plays.
+    private static let lowTimeWarningFraction: CGFloat = 0.3
+
+    /// Starts or stops the low-time warning so it matches the dish clock.
+    ///
+    /// Only while a dish is actually being timed and it has dropped into the
+    /// last stretch. `dishTimeFraction > 0` excludes the expired frame, which
+    /// `failDish()` handles as its own event rather than as "low on time".
+    private func updateClockWarning() {
+        let runningLow = isTimingDish
+            && dishTimeFraction > 0
+            && dishTimeFraction <= Self.lowTimeWarningFraction
+        if runningLow {
+            AudioManager.shared.startClockWarning()
+        } else {
+            AudioManager.shared.stopClockWarning()
+        }
     }
 
     /// Puts the current recipe's assembly clock on `playClock`, squeezed by
@@ -229,6 +265,11 @@ final class GameStateManager: ObservableObject {
     func failDish() {
         guard state != .gameOver else { return }
         lives -= 1
+        looseHeart = true
+        // The dish ran out from under the player — stop the warning it was
+        // making and play the lost-life sting instead.
+        AudioManager.shared.stopClockWarning()
+        AudioManager.shared.play(.loseHeart)
 
         guard lives > 0 else {
             timer?.invalidate()
@@ -258,7 +299,14 @@ final class GameStateManager: ObservableObject {
     /// replay the animation or disturb a table that's still fine.
     func discardPlate() {
         guard state == .cooking, !plateContents.isEmpty else { return }
+        // The on-screen Reset button is what fires this, so it gets the reset
+        // sound as its feedback — the dish itself keeps its recipe and clock.
+        AudioManager.shared.play(.reset)
         plateContents = []
+
+        // Reset Wrong State
+        wrongIngredientPlaced = false
+
         discardToken += 1
     }
 
@@ -271,7 +319,14 @@ final class GameStateManager: ObservableObject {
     /// check against here — `bellSide` only decides which edge it is carried to.
     func serveDish() {
         guard state == .waitingToServe else { return }
+        // The order is handed over…
+        AudioManager.shared.play(.putOrder)
         score += currentRecipe.scoreValue
+        // …and the point lands a beat later, so the two read as serve-then-score
+        // rather than one muddy chord.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            AudioManager.shared.play(.addPoint)
+        }
         // Counts only served dishes — a timed-out dish (failDish) doesn't ramp
         // difficulty. startNewRound() reads the new count when it begins the
         // next dish's clock, so the speed-up lands on the very next dish.
@@ -290,6 +345,8 @@ final class GameStateManager: ObservableObject {
     private func checkForCompletion() {
         guard Self.matches(plateContents: plateContents, recipe: currentRecipe) else { return }
         state = .dishComplete
+        // The plate is right: ring the bell — the dish is up.
+        AudioManager.shared.play(.bell)
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.dishRevealDuration) { [weak self] in
             guard let self, self.state == .dishComplete else { return }
             self.bellSide = Bool.random() ? .left : .right
@@ -298,6 +355,9 @@ final class GameStateManager: ObservableObject {
     }
 
     private func startNewRound() {
+        // Reset Wrong State
+        wrongIngredientPlaced = false
+        
         plateContents = []
         bellSide = nil
         currentRecipe = nextRecipe()

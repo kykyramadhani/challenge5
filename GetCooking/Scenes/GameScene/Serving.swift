@@ -143,6 +143,12 @@ extension GameScene {
         gameStateManager: GameStateManager
     ) {
         guard let plateNode else { return }
+        
+        let ingredientList: [Ingredient] = gameStateManager.currentRecipe.ingredients
+        
+        if !ingredientList.contains(node.ingredient) {
+            gameStateManager.wrongIngredientPlaced = true
+        }
 
         node.heldBy = nil
         node.isOnPlate = true
@@ -155,6 +161,7 @@ extension GameScene {
             y: .random(in: -scatter...scatter)
         )
         plateNode.addChild(node)
+        AudioManager.shared.play(.bubblePut)
         gameStateManager.addIngredientToPlate(node.ingredient)
     }
 

@@ -29,7 +29,7 @@ extension Recipe {
         name: "Chichken Mayonnaise",
         ingredients: [.chicken, .mayonnaise],
         scoreValue: 15,
-        timeLimit: 30,
+        timeLimit: 10,
         finishedDishImageName: "ChickenMayonnaise"
     )
 
@@ -37,7 +37,7 @@ extension Recipe {
         name: "Chicken Cheese",
         ingredients: [.chicken, .cheese],
         scoreValue: 15,
-        timeLimit: 30,
+        timeLimit: 10,
         finishedDishImageName: "ChickenMozarella"
     )
 
@@ -45,7 +45,7 @@ extension Recipe {
         name: "Salad",
         ingredients: [.lettuce, .cucumber, .tomato, .mayonnaise],
         scoreValue: 20,
-        timeLimit: 30,
+        timeLimit: 10,
         finishedDishImageName: "salad"
     )
 
@@ -53,7 +53,7 @@ extension Recipe {
         name: "Chichken Geprek",
         ingredients: [.chicken, .chili, .cucumber],
         scoreValue: 25,
-        timeLimit: 30,
+        timeLimit: 10,
         finishedDishImageName: "ChickenGeprek"
     )
 

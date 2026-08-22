@@ -12,7 +12,10 @@ struct PauseButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            AudioManager.shared.play(.uiClick)
+            action()
+        }) {
             Image(systemName: isPaused ? "play.fill" : "pause.fill")
                 .font(.subheadline)
                 .frame(width: 22, height: 22)

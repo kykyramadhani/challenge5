@@ -35,7 +35,12 @@ struct GameCard: View {
         }
         .padding(24)
         .onTapGesture {
-            if game.isAvailable { onSelect() }
+            // Only an available game is a real selection — a tap on a locked
+            // card does nothing, so it shouldn't click either.
+            if game.isAvailable {
+                AudioManager.shared.play(.uiClick)
+                onSelect()
+            }
         }
     }
 }

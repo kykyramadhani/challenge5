@@ -26,6 +26,10 @@ struct RecipeCard: View {
     /// at tick rate), so the TimelineView below polls it instead and only this
     /// card redraws.
     @ObservedObject var gameStateManager: GameStateManager
+    
+    private var wrongRecipe: Bool  {
+        gameStateManager.wrongIngredientPlaced
+    }
 
     private static let iconSize: CGFloat = 100
     private static let iconSpacing: CGFloat = 24
@@ -88,7 +92,20 @@ struct RecipeCard: View {
         }
         .padding(.horizontal, 30)
         .padding(.vertical, 20)
-        .background(.white)
+        .background {
+            if wrongRecipe {
+                Color.red.opacity(0.85)
+                    .transition(.opacity)
+            } else {
+                Color.white
+            }
+        }
+        .animation(
+            wrongRecipe
+                ? .easeInOut(duration: 0.2).repeatForever(autoreverses: true)
+                : .default,
+            value: wrongRecipe
+        )
         .clipShape(
             UnevenRoundedRectangle(
                 bottomLeadingRadius: Self.cornerRadius,
