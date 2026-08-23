@@ -333,8 +333,7 @@ final class GameStateManager: ObservableObject {
         AudioManager.shared.play(.loseHeart)
 
         guard lives > 0 else {
-            timer?.invalidate()
-            state = .gameOver
+            gameOver()
             return
         }
 
@@ -342,6 +341,33 @@ final class GameStateManager: ObservableObject {
         // The recipe changed but the state may not have — a dish can time out
         // while already `.cooking` — so the scene needs telling explicitly.
         resetToken += 1
+    }
+    
+    func gameOver() {
+        timer?.invalidate()
+        persistResult()
+        state = .gameOver
+    }
+
+    // MARK: - Persistence
+
+    /// Banks the run's coins and high score into `GameStorage` the instant the
+    /// run ends.
+    ///
+    /// Deliberately here, in the model, rather than in `GameScene`: the scene's
+    /// `update(_:)` loop is paused the moment the run is over (`GameplayView`
+    /// sets `scene.isPaused` on `.gameOver`), and a save riding that loop only
+    /// runs if a frame happens to fire before the freeze — a race it often
+    /// loses, which is why the save only *sometimes* stuck. This transition
+    /// runs exactly once per run, so the save always lands.
+    private func persistResult() {
+        let outcome = result
+        GameStorage.coins += outcome.totalCoins
+        // Read before the write, so `newHighScore` still compares against the
+        // *previous* best rather than the value we are about to store.
+        if outcome.newHighScore {
+            GameStorage.highscore = outcome.totalDishesServed
+        }
     }
 
     // MARK: - Plate interaction (called by GameScene)

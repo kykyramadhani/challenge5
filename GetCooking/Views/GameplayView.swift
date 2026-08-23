@@ -302,16 +302,21 @@ struct GameplayView: View {
             scene.isPaused = (state == .gameOver)
             
             if state == .gameOver, !isEndingRun {
-                quitGame()
+                showGameOver()
             }
         }
+    }
+    
+    private func showGameOver() {
+        isEndingRun = true
+        AudioManager.shared.stopMusic()
+        showGameOverCover = true
     }
 
     private func quitGame() {
         showStopButton = false
-        isEndingRun = true
-        AudioManager.shared.stopMusic()
-        showGameOverCover = true
+        gameStateManager.gameOver()
+        showGameOver()
     }
 }
 

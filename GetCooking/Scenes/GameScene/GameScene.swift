@@ -241,6 +241,11 @@ final class GameScene: SKScene {
             }
 
         case .gameOver:
+            // The run's coins and high score are banked in
+            // GameStateManager.persistResult() the instant the run ends. It
+            // must NOT be done here: `GameplayView` pauses the scene on
+            // `.gameOver`, so this branch isn't guaranteed to run before the
+            // update loop freezes — which is exactly why the save was flaky.
             break
         }
     }

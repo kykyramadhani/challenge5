@@ -8,13 +8,12 @@
 import SwiftUI
 
 struct PayCheckView: View {
-    let totalDishServed: Int
-    let speedBonus: Int
-
-    /// Coins earned per dish served.
-    private let dishCost = 10
-    private var dishesEarnings: Int { totalDishServed * dishCost }
-    private var total: Int { dishesEarnings + speedBonus }
+//    let totalDishServed: Int
+//    let speedBonus: Int
+//    let dishesEarning: Int
+//    let totalCoins: Int
+    
+    let result: GameResult
 
     /// The coin total, tweened up from zero on appear. Kept as a `Double` so
     /// the count can pass through the in-between values as it animates.
@@ -25,7 +24,7 @@ struct PayCheckView: View {
             .onAppear {
                 // Let the paycheck settle in first, then ring up the total.
                 withAnimation(.easeOut(duration: 1.0).delay(0.4)) {
-                    animatedTotal = Double(total)
+                    animatedTotal = Double(result.totalCoins)
                 }
             }
             .overlay {
@@ -36,7 +35,7 @@ struct PayCheckView: View {
 
                     VStack(spacing: 0) {
                         // Header band — the title.
-                        Text("Nice work today!")
+                        Text(result.newHighScore ? "New Personal Best!" : "Nice work today!")
                             .font(.system(size: h * 0.15, weight: .bold, design: .rounded))
                             .foregroundStyle(.appTertiaryText)
                             .minimumScaleFactor(0.5)
@@ -45,13 +44,13 @@ struct PayCheckView: View {
                         // Middle band — the itemised lines.
                         VStack(spacing: h * 0.04) {
                             lineRow(
-                                label: "\(totalDishServed)x Dishes Served",
-                                value: dishesEarnings,
+                                label: "\(result.totalDishesServed)x Dishes Served",
+                                value: result.dishesEarnings,
                                 height: h
                             )
                             lineRow(
                                 label: "Speed Bonus",
-                                value: speedBonus,
+                                value: result.speedBonus,
                                 height: h
                             )
                         }
@@ -120,5 +119,5 @@ private struct AnimatedCounterText: View, Animatable {
 }
 
 #Preview {
-    PayCheckView(totalDishServed: 20, speedBonus: 100)
+    PayCheckView(result: .init(dishesByType: ["salad" : 1], speedBonus: 100))
 }

@@ -29,6 +29,15 @@ final class SceneManager {
         path.append(game)
     }
 
+    /// Start straight from the opening screen. With a single game there is no
+    /// carousel to pick from, so this both records the game — Play Again on the
+    /// results screen restarts whatever is selected — and drops into the run.
+    func play(_ game: GameOption) {
+        guard game.isAvailable else { return }
+        selectedGame = game
+        goToGameplay()
+    }
+
     /// Walkthrough read, or skipped.
     func finishTutorial() {
         isInTutorial = false

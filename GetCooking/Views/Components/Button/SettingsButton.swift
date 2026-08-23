@@ -19,14 +19,14 @@ struct SettingsButton: View {
                 Image(systemName: "gear")
                     .font(.system(size: 48, weight: .bold))
                     .foregroundStyle(.black)
-                    .frame(width: 100, height: 100)
+                    .frame(width: proxy.size.width * 0.1, height: proxy.size.height * 0.1)
                     .background(.white)
                     .clipShape(Circle())
                     .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
             }
             .position(
                 x: proxy.size.width * 0.88,
-                y: proxy.size.height * 0.1
+                y: proxy.size.height * 0.12
             )
 
         }

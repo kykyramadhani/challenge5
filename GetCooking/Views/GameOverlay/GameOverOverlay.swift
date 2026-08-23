@@ -30,7 +30,7 @@ struct GameOverOverlay: View {
                 .opacity(0.6 * scrimOpacity)
                 .ignoresSafeArea()
 
-            Text("Game Over")
+            Text("Shift Over")
                 .font(.system(size: 96, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.35), radius: 14, y: 6)

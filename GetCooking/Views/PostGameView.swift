@@ -11,11 +11,19 @@ import SwiftUI
 /// A value snapshot of a finished run, passed to the results screen so it needs
 /// no live reference to the GameStateManager that produced it.
 struct GameResult: Hashable {
+    private let dishCost = 10
+    
     var dishesByType: [String: Int]
     var speedBonus: Int
 
     /// Every dish completed this run, all kinds summed.
     var totalDishesServed: Int { dishesByType.values.reduce(0, +) }
+    var dishesEarnings: Int { totalDishesServed * dishCost }
+    var totalCoins: Int { dishesEarnings + speedBonus }
+    
+    var newHighScore: Bool {
+        GameStorage.highscore < totalDishesServed
+    }
 }
 
 struct PostGameView: View {
@@ -48,8 +56,11 @@ struct PostGameView: View {
             VStack(spacing: 80) {
                 VStack(spacing: 32) {
                     PayCheckView(
-                        totalDishServed: result.totalDishesServed,
-                        speedBonus: result.speedBonus
+                        result: result,
+//                        totalDishServed: result.totalDishesServed,
+//                        speedBonus: result.speedBonus,
+//                        dishesEarning: result.dishesEarnings,
+//                        totalCoins: result.totalCoins
                     )
                     .modifier(RevealOnAppear(revealed: revealed, delay: 0.1))
 

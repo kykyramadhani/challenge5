@@ -30,6 +30,8 @@ struct ContentView: View {
     /// UserDefaults, so it survives launches but resets on a fresh install —
     /// exactly "show it only the first time the game is installed".
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage("coin") private var coin: Int = 0
+    @AppStorage("highscore") private var highscore: Int = 0
 
     var body: some View {
         ZStack {
@@ -42,10 +44,9 @@ struct ContentView: View {
             // capture *session* is still owned by HandPoseManager, so hosting the
             // preview view downstream doesn't rebuild the pipeline.
             NavigationStack(path: $sceneManager.path) {
-                MainMenuView(sceneManager: sceneManager)
-                    .navigationDestination(for: GameOption.self) { game in
-                        GameOpening(game: game, sceneManager: sceneManager)
-                    }
+                // The opening screen is the root now — the old MainMenuView
+                // carousel is retired, so the splash lands straight here.
+                GameOpening(sceneManager: sceneManager)
                     .navigationDestination(for: String.self) { destination in
                         if destination == "gameplay" {
                             GameplayView(
