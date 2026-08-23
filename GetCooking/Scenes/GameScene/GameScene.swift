@@ -175,7 +175,18 @@ final class GameScene: SKScene {
         lastUpdateTime = currentTime
 
         syncWithGameState(force: false)
+        updateServeTimer()
         updateHandInput(now: currentTime, delta: delta)
+    }
+
+    /// Drives the tray's dial while an order is waiting to be carried over.
+    ///
+    /// Read straight off the manager each frame rather than observed: the
+    /// fraction changes continuously, and publishing it would re-render the
+    /// whole SwiftUI HUD for a shape only SpriteKit draws.
+    func updateServeTimer() {
+        guard let gameStateManager, let bellNode, gameStateManager.isTimingServe else { return }
+        bellNode.updateTimer(fraction: gameStateManager.serveTimeFraction)
     }
 
     // MARK: - State machine

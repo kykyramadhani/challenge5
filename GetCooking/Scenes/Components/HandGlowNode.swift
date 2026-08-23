@@ -24,10 +24,11 @@ final class HandGlowNode: SKNode {
     private let core: SKSpriteNode
     private let trail: SKEmitterNode
 
-    /// Open hand and grabbing hand get the two house colours, so the pose is
-    /// still readable at a glance the way the old red/green dot was.
-    static let openColor = UIColor(named: "AppPrimary") ?? .green
-    static let grabColor = UIColor(named: "AppAccent") ?? .orange
+    /// The two house colours: accent while the hand is just being tracked,
+    /// primary the moment it pinches. Green reads as "engaged", so it belongs
+    /// on the active state rather than the idle one.
+    static let openColor = UIColor(named: "AppAccent") ?? .orange
+    static let grabColor = UIColor(named: "AppPrimary") ?? .green
 
     /// Enough to read as a continuous ribbon while the hand is moving, few
     /// enough that a still hand isn't sitting in a puddle of them.

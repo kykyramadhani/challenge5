@@ -173,6 +173,28 @@ final class GameStateManager: ObservableObject {
         return CGFloat((dishDeadline - playClock) / dishTimeLimit).vc_clamped(to: 0...1)
     }
 
+    // MARK: - Serve clock
+    //
+    // Once the bell rings the player has a short window to carry the plate to
+    // the tray. Measured on `playClock` like everything else, so pausing
+    // costs nothing.
+
+    /// How long the tray waits for its plate.
+    static let serveTimeLimit: TimeInterval = 5
+
+    /// `playClock` reading at which the waiting order is abandoned.
+    private var serveDeadline: TimeInterval = 0
+
+    /// Whether the serve window is counting down.
+    var isTimingServe: Bool { state == .waitingToServe }
+
+    /// How much of the serve window is left, 1 down to 0 — what the tray's
+    /// dial is drawn from.
+    var serveTimeFraction: CGFloat {
+        guard Self.serveTimeLimit > 0 else { return 0 }
+        return CGFloat((serveDeadline - playClock) / Self.serveTimeLimit).vc_clamped(to: 0...1)
+    }
+
     /// How often the clock advances. Fine-grained because the countdown ring
     /// is drawn from it; that costs no extra SwiftUI work, since only whole
     /// seconds of `elapsedTime` are ever published.
@@ -259,9 +281,11 @@ final class GameStateManager: ObservableObject {
         let whole = Int(playClock)
         if whole != elapsedTime { elapsedTime = whole }
 
-        // `isTimingDish` and not just the deadline: an assembled dish waiting
-        // to be served must not run out from under the player.
+        // `isTimingDish` and not just the deadline: each clock only applies in
+        // the phase it belongs to, so neither can fire while the other is the
+        // one actually running.
         if isTimingDish, playClock >= dishDeadline { failDish() }
+        if isTimingServe, playClock >= serveDeadline { failDish() }
 
         // Kept in sync with the dish clock every tick — both AudioManager calls
         // are idempotent, so re-asserting the current state costs nothing.
@@ -389,6 +413,9 @@ final class GameStateManager: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.dishRevealDuration) { [weak self] in
             guard let self, self.state == .dishComplete else { return }
             self.bellSide = Bool.random() ? .left : .right
+            // Started as the bell rings, not when the dish was assembled, so
+            // the reveal beat above doesn't eat into the player's window.
+            self.serveDeadline = self.playClock + Self.serveTimeLimit
             self.state = .waitingToServe
         }
     }
