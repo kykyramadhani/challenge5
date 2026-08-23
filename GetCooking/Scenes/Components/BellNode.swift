@@ -24,6 +24,7 @@ final class BellNode: SKNode {
 
     private let tray: SKSpriteNode
     private let bell: SKSpriteNode
+    private let timer: TrayTimerNode
 
     /// Where a served plate comes to rest: the centre of the tray's well, in
     /// this node's own coordinates.
@@ -54,6 +55,7 @@ final class BellNode: SKNode {
 
         tray = SKSpriteNode(imageNamed: "Tray")
         bell = SKSpriteNode(imageNamed: "RingingBell")
+        timer = TrayTimerNode(radius: width * 0.15)
 
         super.init()
 
@@ -71,10 +73,21 @@ final class BellNode: SKNode {
         )
         bell.zPosition = 2
 
+        // Sits in the well, where the plate will land — it is the empty tray
+        // counting down, and the plate covers it on arrival.
+        timer.position = wellCentre
+        timer.zPosition = 1
+
         addChild(tray)
+        addChild(timer)
         addChild(bell)
 
         bell.run(.repeatForever(BellAnimation.ringing), withKey: Self.ringingKey)
+    }
+
+    /// Draws the serve window on the tray's dial. `fraction` is time left.
+    func updateTimer(fraction: CGFloat) {
+        timer.update(fraction: fraction)
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -100,6 +113,9 @@ final class BellNode: SKNode {
         plate.position = wellCentre
         plate.setScale(scale)
         addChild(plate)
+
+        // The order is no longer waiting, so the dial goes with the ringing.
+        timer.isHidden = true
 
         // The bell was ringing *for* this plate, so it falls quiet the moment
         // it arrives. Rocking is stopped and unwound rather than left where

@@ -34,6 +34,11 @@ struct PostGameView: View {
 
     @State private var showShopComingSoon = false
 
+    /// Drives the staggered entrance. Flipped true on appear; each section
+    /// reads it through `RevealOnAppear` with its own delay, so the paycheck,
+    /// the dish tally and the buttons fade up one after another.
+    @State private var revealed = false
+
     var body: some View {
         ZStack {
             if let imageName = sceneManager.selectedGame?.imageName {
@@ -46,6 +51,7 @@ struct PostGameView: View {
                         totalDishServed: result.totalDishesServed,
                         speedBonus: result.speedBonus
                     )
+                    .modifier(RevealOnAppear(revealed: revealed, delay: 0.1))
 
                     HStack(spacing: 35) {
                         ForEach(dishTypes, id: \.key) { dish in
@@ -57,6 +63,7 @@ struct PostGameView: View {
                             )
                         }
                     }
+                    .modifier(RevealOnAppear(revealed: revealed, delay: 0.3))
                 }
 
                 HStack(spacing: 40) {
@@ -81,7 +88,11 @@ struct PostGameView: View {
                         buttonStyle: .text
                     )
                 }
+                .modifier(RevealOnAppear(revealed: revealed, delay: 0.5))
+                // Nothing to tap until the buttons have actually arrived.
+                .allowsHitTesting(revealed)
             }
+            .onAppear { revealed = true }
 
             if showShopComingSoon {
                 ShopComingSoonPopup {
@@ -94,6 +105,21 @@ struct PostGameView: View {
         // Its own screen now — no system back chrome.
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+/// Fades and lifts a section into place once `revealed` turns true, after its
+/// own `delay`. Off-screen it starts slightly lower and transparent, so the
+/// results settle in from the bottom one row at a time.
+private struct RevealOnAppear: ViewModifier {
+    let revealed: Bool
+    let delay: Double
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(revealed ? 1 : 0)
+            .offset(y: revealed ? 0 : 24)
+            .animation(.easeOut(duration: 0.5).delay(delay), value: revealed)
     }
 }
 
