@@ -16,8 +16,18 @@ struct PayCheckView: View {
     private var dishesEarnings: Int { totalDishServed * dishCost }
     private var total: Int { dishesEarnings + speedBonus }
 
+    /// The coin total, tweened up from zero on appear. Kept as a `Double` so
+    /// the count can pass through the in-between values as it animates.
+    @State private var animatedTotal: Double = 0
+
     var body: some View {
         Image("Paycheck")
+            .onAppear {
+                // Let the paycheck settle in first, then ring up the total.
+                withAnimation(.easeOut(duration: 1.0).delay(0.4)) {
+                    animatedTotal = Double(total)
+                }
+            }
             .overlay {
                 GeometryReader { proxy in
                     let w = proxy.size.width
@@ -60,8 +70,10 @@ struct PayCheckView: View {
                                 .frame(width: h * 0.12, height: h * 0.12)
                                 .scaledToFit()
 
-                            Text("\(total)")
-                                .font(.system(size: h * 0.12, weight: .bold, design: .rounded))
+                            AnimatedCounterText(
+                                value: animatedTotal,
+                                font: .system(size: h * 0.12, weight: .bold, design: .rounded)
+                            )
                         }
                         .foregroundStyle(.appBackground)
                         .padding(.horizontal, sidePadding)
@@ -82,6 +94,28 @@ struct PayCheckView: View {
         .foregroundStyle(.appBackground)
         .lineLimit(1)
         .minimumScaleFactor(0.6)
+    }
+}
+
+/// A whole number that tweens through the integers between its old and new
+/// value whenever that value changes inside `withAnimation` — the coin total
+/// ticking up from zero. `Animatable` is what lets SwiftUI drive the in-between
+/// frames; a plain `Text("\(Int)")` would just snap to the final number.
+private struct AnimatedCounterText: View, Animatable {
+    var value: Double
+    let font: Font
+
+    var animatableData: Double {
+        get { value }
+        set { value = newValue }
+    }
+
+    var body: some View {
+        Text("\(Int(value.rounded()))")
+            .font(font)
+            // Keeps the coin total from nudging the layout as the digit count
+            // grows from 1 to 2 to 3 places on the way up.
+            .monospacedDigit()
     }
 }
 

@@ -144,6 +144,22 @@ final class GameStateManager: ObservableObject {
         pow(Self.speedUpFactor, Double(dishesCompleted / Self.dishesPerSpeedUp))
     }
 
+    /// Base stagger between one ingredient bubble popping in and the next,
+    /// before any speed-up — the pace a round fills in at on the first tier.
+    private static let baseSpawnStagger: TimeInterval = 0.35
+
+    /// A floor on the squeezed stagger, so even a very long run's board still
+    /// fills in visibly rather than snapping in all at once.
+    private static let minimumSpawnStagger: TimeInterval = 0.1
+
+    /// The gap between bubbles popping in when a round is laid out, tightened
+    /// by the same difficulty tier that squeezes the dish clock — so a later
+    /// board both *appears* faster and has less time to be cleared. `GameScene`
+    /// reads this each time it spawns a round.
+    var spawnStagger: TimeInterval {
+        max(Self.baseSpawnStagger / difficultyMultiplier, Self.minimumSpawnStagger)
+    }
+
     /// Whether the assembly clock is running.
     ///
     /// Only while `.cooking`. The moment the plate matches, the dish is safe:

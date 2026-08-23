@@ -215,7 +215,7 @@ final class AudioManager: NSObject {
     ///
     /// Calling this again for the track already playing does nothing, so it is
     /// safe to call on every round start without restarting the loop.
-    func startMusic(_ name: String = "gameplay_getcooking", fadeIn: TimeInterval = 0.8) {
+    func startMusic(_ name: String = "gameplay_getcooking", fadeIn: TimeInterval = 1.5) {
         guard isEnabled else { return }
 
         // Same track already going — leave it running rather than restart it.
@@ -228,6 +228,7 @@ final class AudioManager: NSObject {
             print("[AudioManager] ⚠️ Missing music file: \(name).wav")
             return
         }
+        
         do {
             let player = try AVAudioPlayer(contentsOf: url)
             player.numberOfLoops = -1        // loop for the whole session
@@ -247,6 +248,7 @@ final class AudioManager: NSObject {
         guard let player = musicPlayer else { return }
         musicPlayer = nil
         currentMusicName = nil
+        stopClockWarning()
 
         guard fadeOut > 0 else { player.stop(); return }
 

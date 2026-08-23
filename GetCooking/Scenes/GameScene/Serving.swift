@@ -180,6 +180,9 @@ extension GameScene {
     func releaseOntoTable(_ node: IngredientNode) {
         node.heldBy = nil
         node.zPosition = 2
+        // Grabbing cleared the bob (removeAllActions); dropping it back on the
+        // table brings it back, so a released bubble floats like the rest.
+        node.startFloating()
     }
 
     /// Empties the plate by floating its contents back onto the table.

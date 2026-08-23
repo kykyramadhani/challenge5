@@ -43,6 +43,14 @@ struct GameplayView: View {
     /// *how far into the screen* the player is.
     @State private var hasCalibrated = false
 
+    /// True while the "Game Over" cover is playing, between the run ending and
+    /// the results screen taking over. The board underneath is already frozen.
+    @State private var showGameOverCover = false
+
+    /// Guards the game-over hand-off so a repeated `.gameOver` never stacks a
+    /// second cover or fires the navigation twice.
+    @State private var isEndingRun = false
+
     /// Where the "get ready" beat has got to: 3 → 2 → 1 → 0, where 0 is the
     /// "GO!" flash, and -1 once it is over and the overlay is gone. The board
     /// is already up and the camera live throughout; the game state machine
@@ -88,6 +96,17 @@ struct GameplayView: View {
                         gameBody
                     }
                 }
+            }
+
+            // The run-over cover. Sits above the whole stack so it dims the
+            // board, the HUD and the hand glow alike. It owns its own timing
+            // and calls back when it is done, at which point the results screen
+            // is pushed (which unmounts this view and the cover with it).
+            if showGameOverCover {
+                GameOverOverlay {
+                    sceneManager.goToPostGame(gameStateManager.result)
+                }
+                .zIndex(200)
             }
         }
         .navigationBarBackButtonHidden(true)
@@ -258,7 +277,7 @@ struct GameplayView: View {
             // The camera is already live, handed over by the seat check.
             // Bring the music up under the count so play starts already scored;
             // startMusic is a no-op if it's somehow already going.
-            AudioManager.shared.startMusic()
+
             // One shot at the top of the beat — the clip already voices 3-2-1.
             AudioManager.shared.play(.countdown)
             for step in stride(from: 3, through: 0, by: -1) {
@@ -271,6 +290,7 @@ struct GameplayView: View {
             }
             countdown = -1
             gameStateManager.start()
+            AudioManager.shared.startMusic()
         }
         .onChange(of: gameStateManager.isPaused) { _, paused in
             scene.isPaused = paused
@@ -280,22 +300,18 @@ struct GameplayView: View {
         }
         .onChange(of: gameStateManager.state) { _, state in
             scene.isPaused = (state == .gameOver)
-            if state == .gameOver {
-                // The run is over: fade the music and hand the results to their
-                // own screen. goToPostGame resets the nav path, which unmounts
-                // this view — so its `.onDisappear` stops the camera feed.
-                AudioManager.shared.stopMusic()
-                sceneManager.goToPostGame(gameStateManager.result)
+            
+            if state == .gameOver, !isEndingRun {
+                quitGame()
             }
         }
     }
 
-    /// Bail out of the run entirely and go back to the main menu. Resetting the
-    /// navigation path tears down GameplayView, whose `.onDisappear` stops the
-    /// capture session; GameStateManager is owned here, so nothing carries over.
     private func quitGame() {
         showStopButton = false
-        sceneManager.goToMainMenu()
+        isEndingRun = true
+        AudioManager.shared.stopMusic()
+        showGameOverCover = true
     }
 }
 
