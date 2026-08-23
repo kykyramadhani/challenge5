@@ -440,8 +440,8 @@ extension GameScene {
 
     // MARK: - Cursors
 
-    /// Lights the hand up: a glowing aura on the palm, green while open and
-    /// accent while grabbing, trailing fading circles as it moves.
+    /// Lights the hand up: a glowing aura on the palm, accent while open and
+    /// green while pinching, trailing fading circles as it moves.
     func updateCursorNode(for id: Int, at position: CGPoint, isFist: Bool) {
         let node: HandGlowNode
         if let existing = cursorNodes[id] {

@@ -166,7 +166,7 @@ struct CardBorder: Shape {
         path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
         path.addArc(
             center: CGPoint(x: rect.minX + radius, y: rect.maxY - radius),
-            radius: radius,
+            radius: radius, 
             startAngle: .degrees(90),
             endAngle: .degrees(180),
             clockwise: false
