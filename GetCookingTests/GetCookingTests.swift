@@ -158,6 +158,108 @@ struct HandPoseMappingTests {
     }
 }
 
+/// The evidence-counter pinch state machine. This is the thing that stops one
+/// bad frame from dropping what the player is holding.
+struct PinchDetectorTests {
+
+    private let close: CGFloat = 0.3
+    private let open: CGFloat = 0.5
+
+    /// Feeds the same reading in `times` times.
+    private func feed(
+        _ detector: inout PinchDetector,
+        ratio: CGFloat?,
+        times: Int
+    ) {
+        for _ in 0..<times {
+            detector.record(ratio: ratio, closeRatio: close, openRatio: open)
+        }
+    }
+
+    /// One pinched frame is not enough — it takes a run of them.
+    @Test func aSingleFrameDoesNotCommitAPinch() {
+        var detector = PinchDetector(framesToCommit: 3)
+
+        feed(&detector, ratio: 0.1, times: 1)
+        #expect(!detector.isPinching)
+
+        feed(&detector, ratio: 0.1, times: 2)
+        #expect(detector.isPinching, "three agreeing frames commit it")
+    }
+
+    /// The bug this whole thing exists for: a hand mid-grab that throws one
+    /// spurious "apart" frame must keep holding on.
+    @Test func oneStrayApartFrameDoesNotRelease() {
+        var detector = PinchDetector(framesToCommit: 3)
+        feed(&detector, ratio: 0.1, times: 3)
+        #expect(detector.isPinching)
+
+        feed(&detector, ratio: 0.9, times: 1)
+
+        #expect(detector.isPinching, "one bad frame must not let go")
+    }
+
+    /// A sustained release still works — this is not a one-way latch.
+    @Test func aSustainedApartRunReleases() {
+        var detector = PinchDetector(framesToCommit: 3)
+        feed(&detector, ratio: 0.1, times: 3)
+
+        feed(&detector, ratio: 0.9, times: 3)
+
+        #expect(!detector.isPinching)
+    }
+
+    /// Evidence has to be *consecutive*: alternating frames never commit,
+    /// because each one resets the other side's counter.
+    @Test func alternatingFramesNeverCommit() {
+        var detector = PinchDetector(framesToCommit: 3)
+
+        for _ in 0..<10 {
+            detector.record(ratio: 0.1, closeRatio: close, openRatio: open)
+            detector.record(ratio: 0.9, closeRatio: close, openRatio: open)
+        }
+
+        #expect(!detector.isPinching, "never three in a row either way")
+    }
+
+    /// An unmeasurable frame is not evidence of being apart. A thumb that
+    /// blinks out of tracking used to read as letting go.
+    @Test func aMissingReadingHoldsTheCurrentState() {
+        var detector = PinchDetector(framesToCommit: 3)
+        feed(&detector, ratio: 0.1, times: 3)
+        #expect(detector.isPinching)
+
+        feed(&detector, ratio: nil, times: 10)
+
+        #expect(detector.isPinching, "no reading is not a release")
+    }
+
+    /// Readings between the thresholds are ambiguous and count for neither
+    /// side, so a hand hovering at the boundary holds rather than chattering.
+    @Test func readingsInsideTheHysteresisBandHoldTheState() {
+        var detector = PinchDetector(framesToCommit: 3)
+        feed(&detector, ratio: 0.1, times: 3)
+
+        feed(&detector, ratio: 0.4, times: 10)
+
+        #expect(detector.isPinching)
+    }
+
+    /// Clearing evidence keeps the committed state — a hand coasting through a
+    /// dropped frame resumes as what it was, not as a half-built opposite.
+    @Test func clearingEvidenceKeepsTheCommittedState() {
+        var detector = PinchDetector(framesToCommit: 3)
+        feed(&detector, ratio: 0.1, times: 3)
+
+        // Two frames of contrary evidence, then a dropout wipes them.
+        feed(&detector, ratio: 0.9, times: 2)
+        detector.clearEvidence()
+        feed(&detector, ratio: 0.9, times: 2)
+
+        #expect(detector.isPinching, "the earlier partial run must not carry over")
+    }
+}
+
 /// Grabbing is a thumb-to-index-finger pinch. The shipped thresholds are
 /// 0.3 (grab) and 0.5 (open), with hysteresis in between.
 struct PinchClassifierTests {
@@ -461,8 +563,10 @@ struct ResetButtonExclusionTests {
     }
 }
 
-/// Laying the tutorial artwork out, and putting the Skip hit area on top of
-/// the button that is drawn into it.
+/// Laying the tutorial artwork out, and placing the bubbles on it.
+///
+/// The Skip button is a real SwiftUI button now rather than a hit area
+/// measured over painted-on artwork, so there is no hotspot left to pin down.
 @MainActor
 struct TutorialLayoutTests {
 
@@ -503,58 +607,61 @@ struct TutorialLayoutTests {
         #expect(abs(page.height - exact.height) < 0.001)
     }
 
-    /// The point of the whole calculation: the hit area must land on the
-    /// artwork, not on the letterbox beside it.
-    @Test func theSkipHotspotSitsOnThePage() {
-        for screen in [landscape, portrait] {
-            let page = TutorialView.pageRect(in: screen)
-            let skip = TutorialView.skipRect(in: screen)
-
-            #expect(page.contains(CGPoint(x: skip.minX, y: skip.minY)))
-            #expect(page.contains(CGPoint(x: skip.maxX, y: skip.maxY)))
-        }
-    }
-
-    /// Bottom left, where the button is drawn.
-    @Test func theSkipHotspotIsBottomLeft() {
-        let page = TutorialView.pageRect(in: landscape)
-        let skip = TutorialView.skipRect(in: landscape)
-
-        #expect(skip.midX < page.midX, "left half")
-        #expect(skip.midY > page.midY, "lower half")
-    }
-
-    /// Same spot on the artwork whatever the screen, since it is measured
-    /// against the page rather than the screen.
-    @Test func theHotspotHoldsItsPlaceOnEveryScreen() {
-        for screen in [landscape, portrait, CGSize(width: 2048, height: 1536)] {
-            let page = TutorialView.pageRect(in: screen)
-            let skip = TutorialView.skipRect(in: screen)
-
-            let relativeX = (skip.midX - page.minX) / page.width
-            let relativeY = (skip.midY - page.minY) / page.height
-
-            #expect(abs(relativeX - TutorialView.skipHotspot.midX) < 0.001)
-            #expect(abs(relativeY - TutorialView.skipHotspot.midY) < 0.001)
-        }
-    }
-
     /// Every page has to resolve to something drawable, or the walkthrough
     /// shows a blank screen the player can only tap past.
     @Test func everyPageHasArtwork() {
-        for step in 1...TutorialView.pageCount {
-            if TutorialView.animatedPages.contains(step) {
+        for page in TutorialPage.all {
+            switch page.backdrop {
+            case let .still(name):
+                #expect(UIImage(named: name) != nil, "missing image \(name)")
+            case let .clip(name):
                 #expect(
-                    Bundle.main.url(forResource: "Tutorial\(step)", withExtension: "mp4") != nil,
-                    "missing clip for step \(step)"
-                )
-            } else {
-                #expect(
-                    UIImage(named: "Tutorial\(step)") != nil,
-                    "missing image for step \(step)"
+                    Bundle.main.url(forResource: name, withExtension: "mov") != nil,
+                    "missing clip \(name)"
                 )
             }
         }
+    }
+
+    /// Copy is resolved through the localization tables, so a page that has a
+    /// line must still have one after that round trip — an empty result means
+    /// the bubble renders as a blank box.
+    @Test func everyCaptionResolvesToText() {
+        for page in TutorialPage.all where page.message != nil {
+            #expect(page.localizedMessage?.isEmpty == false,
+                    "page \(page.id) resolved to nothing")
+        }
+    }
+
+    /// The anchors are hand-placed off the benchmark artwork, so this is the
+    /// check that one of them was not mistyped: the bubble is a fixed-size
+    /// piece of art, so it has to start on the page and still fit whole.
+    @Test func everyBubbleAnchorKeepsTheBubbleOnThePage() {
+        let widthShare = TutorialBubble.bodySize.width / TutorialView.pageSize.width
+        let heightShare = TutorialBubble.bodySize.height / TutorialView.pageSize.height
+
+        for page in TutorialPage.all where page.message != nil {
+            let anchor = page.bubbleAnchor
+            #expect(anchor.x >= 0 && anchor.y >= 0, "page \(page.id) starts off-page")
+            #expect(anchor.x + widthShare <= 1.001,
+                    "page \(page.id) runs off the right edge")
+            #expect(anchor.y + heightShare <= 1.001,
+                    "page \(page.id) runs off the bottom")
+        }
+    }
+
+    /// The popover artwork is used at 1×, and the page anchors are measured
+    /// against the body inside it. If the asset is ever re-exported at a
+    /// different size these numbers stop describing it, and every bubble
+    /// silently lands in the wrong place.
+    @Test func theBubbleArtworkMatchesItsMeasurements() throws {
+        let art = try #require(UIImage(named: "TutorialPopover"))
+
+        #expect(art.size == TutorialBubble.assetSize)
+        #expect(TutorialBubble.bodyOrigin.x + TutorialBubble.bodySize.width
+                <= TutorialBubble.assetSize.width)
+        #expect(TutorialBubble.bodyOrigin.y + TutorialBubble.bodySize.height
+                + TutorialBubble.tailDrop <= TutorialBubble.assetSize.height)
     }
 
     /// A zero-sized container must not divide by zero.
@@ -608,8 +715,8 @@ struct FormatRankingTests {
     /// last term is what actually chooses the format. Ranking it lowest-first
     /// is what fed a 640×480 image to a full-screen Retina preview.
     @Test func higherResolutionWinsAtEqualFieldOfView() {
-        let low = HandPoseManager.ranking(horizontalFieldOfView: 54, width: 640, height: 480)
-        let high = HandPoseManager.ranking(horizontalFieldOfView: 54, width: 1920, height: 1440)
+        let low = CameraManager.ranking(horizontalFieldOfView: 54, width: 640, height: 480)
+        let high = CameraManager.ranking(horizontalFieldOfView: 54, width: 1920, height: 1440)
 
         #expect(high > low)
     }
@@ -618,8 +725,8 @@ struct FormatRankingTests {
     /// horizontal angle, and the game is played in portrait — so height beats
     /// raw pixel count even though the 16:9 format is nominally larger.
     @Test func tallerFrameOutranksResolution() {
-        let fourThree = HandPoseManager.ranking(horizontalFieldOfView: 54, width: 640, height: 480)
-        let sixteenNine = HandPoseManager.ranking(horizontalFieldOfView: 54, width: 1920, height: 1080)
+        let fourThree = CameraManager.ranking(horizontalFieldOfView: 54, width: 640, height: 480)
+        let sixteenNine = CameraManager.ranking(horizontalFieldOfView: 54, width: 1920, height: 1080)
 
         #expect(fourThree > sixteenNine)
     }
@@ -627,16 +734,16 @@ struct FormatRankingTests {
     /// Horizontal angle dominates both other terms: seeing the player's hands
     /// at all matters more than seeing them sharply.
     @Test func widerLensOutranksEverythingElse() {
-        let narrowButSharp = HandPoseManager.ranking(horizontalFieldOfView: 54, width: 1920, height: 1440)
-        let wideButSoft = HandPoseManager.ranking(horizontalFieldOfView: 106, width: 640, height: 480)
+        let narrowButSharp = CameraManager.ranking(horizontalFieldOfView: 54, width: 1920, height: 1440)
+        let wideButSoft = CameraManager.ranking(horizontalFieldOfView: 106, width: 640, height: 480)
 
         #expect(wideButSoft > narrowButSharp)
     }
 
     /// A format that reports nothing usable must not outrank a real one.
     @Test func unusableFormatRanksLast() {
-        let broken = HandPoseManager.ranking(horizontalFieldOfView: 0, width: 0, height: 0)
-        let real = HandPoseManager.ranking(horizontalFieldOfView: 54, width: 640, height: 480)
+        let broken = CameraManager.ranking(horizontalFieldOfView: 0, width: 0, height: 0)
+        let real = CameraManager.ranking(horizontalFieldOfView: 54, width: 640, height: 480)
 
         #expect(real > broken)
     }
@@ -648,21 +755,21 @@ struct ZoomClampTests {
     /// zoom factors — 1.0 has to land on the floor wherever that sits, or the
     /// "widest" preset silently crops in on devices whose floor is below 1.
     @Test func wideMultipleLandsOnTheHardwareFloor() {
-        #expect(HandPoseManager.zoomFactor(multiple: 1.0, widest: 0.5, maximum: 8) == 0.5)
-        #expect(HandPoseManager.zoomFactor(multiple: 1.0, widest: 1.0, maximum: 8) == 1.0)
+        #expect(CameraManager.zoomFactor(multiple: 1.0, widest: 0.5, maximum: 8) == 0.5)
+        #expect(CameraManager.zoomFactor(multiple: 1.0, widest: 1.0, maximum: 8) == 1.0)
     }
 
     /// The 1× preset is exactly twice the widest view — the same 2× crop
     /// Apple's Camera app uses to get 1× out of an ultra-wide front sensor.
     @Test func normalMultipleDoublesTheFloor() {
-        #expect(HandPoseManager.zoomFactor(multiple: 2.0, widest: 0.5, maximum: 8) == 1.0)
+        #expect(CameraManager.zoomFactor(multiple: 2.0, widest: 0.5, maximum: 8) == 1.0)
     }
 
     /// Setting `videoZoomFactor` outside the format's range raises, so both
     /// ends are clamped rather than trusted.
     @Test func clampsToBothEnds() {
-        #expect(HandPoseManager.zoomFactor(multiple: 0.1, widest: 1.0, maximum: 8) == 1.0)
-        #expect(HandPoseManager.zoomFactor(multiple: 100, widest: 1.0, maximum: 8) == 8)
+        #expect(CameraManager.zoomFactor(multiple: 0.1, widest: 1.0, maximum: 8) == 1.0)
+        #expect(CameraManager.zoomFactor(multiple: 100, widest: 1.0, maximum: 8) == 8)
     }
 }
 
@@ -1084,7 +1191,7 @@ struct GameLoopTests {
 
         #expect(manager.plateContents.isEmpty)
         #expect(manager.currentRecipe == .chickenGeprek)
-        #expect(manager.score == 0)
+        #expect(manager.totalDishesServed == 0)
     }
 
     /// A stray downward swipe over an empty plate must not bump the token, or
@@ -1126,7 +1233,8 @@ struct GameLoopTests {
         manager.restart()
 
         #expect(manager.plateContents.isEmpty)
-        #expect(manager.score == 0)
+        #expect(manager.totalDishesServed == 0)
+        #expect(manager.speedBonus == 0)
         #expect(manager.lives == manager.startingLives)
         #expect(manager.elapsedTime == 0)
         #expect(manager.state == .idle)
@@ -1147,7 +1255,7 @@ struct GameLoopTests {
         #expect(manager.state == .cooking)
     }
 
-    @Test func servingAwardsTheRecipesOwnScore() async throws {
+    @Test func servingCountsTheDishThatWasServed() async throws {
         let manager = GameStateManager(recipes: [.chickenGeprek])
         manager.start()
         for ingredient in Recipe.chickenGeprek.ingredients {
@@ -1160,7 +1268,9 @@ struct GameLoopTests {
 
         manager.serveDish()
 
-        #expect(manager.score == 25, "Chicken Geprek is worth 25, not a flat 1")
+        #expect(manager.totalDishesServed == 1)
+        #expect(manager.dishesByType[Recipe.chickenGeprek.finishedDishImageName] == 1,
+                "counted against the dish that was actually served")
     }
 
     /// Serving is gated on the bell having rung. The plate passes over plenty
@@ -1173,7 +1283,7 @@ struct GameLoopTests {
 
         manager.serveDish()
 
-        #expect(manager.score == 0)
+        #expect(manager.totalDishesServed == 0)
         #expect(manager.state == .cooking, "still cooking")
     }
 
@@ -1298,10 +1408,10 @@ struct DishTimeLimitTests {
     /// field is still per-recipe, so a fiddly dish can be given more room
     /// without touching the others.
     @Test func everyRecipeDeclaresItsOwnLimit() {
-        #expect(Recipe.chickenMayonnaise.timeLimit == 30)
-        #expect(Recipe.chickenCheese.timeLimit == 30)
-        #expect(Recipe.chickenGeprek.timeLimit == 30)
-        #expect(Recipe.salad.timeLimit == 30)
+        #expect(Recipe.chickenMayonnaise.timeLimit == 10)
+        #expect(Recipe.chickenCheese.timeLimit == 10)
+        #expect(Recipe.chickenGeprek.timeLimit == 10)
+        #expect(Recipe.salad.timeLimit == 10)
     }
 
     /// Every recipe must be worth some time, or it would fail the instant it
@@ -1326,7 +1436,7 @@ struct LivesTests {
         manager.failDish()
 
         #expect(manager.lives == manager.startingLives - 1)
-        #expect(manager.score == 0)
+        #expect(manager.totalDishesServed == 0)
         #expect(manager.state == .cooking)
         #expect(manager.currentRecipe != recipeBefore)
         #expect(manager.plateContents.isEmpty)
@@ -1444,7 +1554,7 @@ struct LivesTests {
         manager.serveDish()
 
         #expect(manager.lives == manager.startingLives)
-        #expect(manager.score > 0)
+        #expect(manager.totalDishesServed > 0)
     }
 
     /// The bell has rung and the serve window is counting down. It is a real

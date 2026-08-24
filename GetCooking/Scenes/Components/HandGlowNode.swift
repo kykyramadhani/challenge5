@@ -109,6 +109,21 @@ final class HandGlowNode: SKNode {
         trail.particleBirthRate = visible ? Self.trailBirthRate : 0
     }
 
+    /// Dims away and then takes itself off the scene, for a hand that has
+    /// genuinely gone rather than one blinking through a dropped frame.
+    ///
+    /// Emission stops first: the trail's particles belong to the scene, so
+    /// they would otherwise keep spawning at full strength all the way through
+    /// the fade.
+    func fadeOutAndRemove(duration: TimeInterval = 0.25) {
+        trail.particleBirthRate = 0
+        removeAllActions()
+        run(.sequence([
+            .fadeOut(withDuration: duration),
+            .removeFromParent()
+        ]))
+    }
+
     // MARK: - Shared art
 
     /// A soft white radial dot: opaque at the centre, transparent at the rim.

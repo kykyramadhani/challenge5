@@ -19,8 +19,13 @@ import AVFoundation
 import SwiftUI
 
 struct LoopingVideoView: UIViewRepresentable {
-    /// File name in the bundle, without the `.mp4`.
+    /// File name in the bundle, without its extension.
     let resource: String
+
+    /// The clip's extension. Kept explicit rather than guessed: the tutorial
+    /// ships `.mov` exports straight from the designer, and re-encoding them
+    /// to `.mp4` would only cost quality.
+    var fileExtension: String = "mov"
 
     /// Whether this clip's page is the one on screen. Inactive clips hold
     /// their opening frame so they are ready to be shown instantly.
@@ -29,7 +34,7 @@ struct LoopingVideoView: UIViewRepresentable {
     func makeUIView(context: Context) -> PlayerView {
         let view = PlayerView()
 
-        guard let url = Bundle.main.url(forResource: resource, withExtension: "mp4") else {
+        guard let url = Bundle.main.url(forResource: resource, withExtension: fileExtension) else {
             return view
         }
 

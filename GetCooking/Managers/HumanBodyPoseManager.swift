@@ -10,6 +10,7 @@
 import AVFoundation
 import CoreGraphics
 import Foundation
+import QuartzCore
 import Vision
 
 final class HumanBodyPoseManager {
@@ -114,10 +115,20 @@ final class HumanBodyPoseManager {
     /// Minimum Vision joint confidence to trust a point.
     var jointConfidenceThreshold: Float = 0.25
 
-    /// Bodies from the most recent frame that actually ran the detector.
+    /// How long the last seen bodies stand in when the detector comes back
+    /// empty.
+    ///
+    /// Body pose only runs on one frame in `bodyPoseFrameInterval`, so a
+    /// single miss would otherwise leave the game with no body — and hence no
+    /// hands, since hands are matched to a shoulder — for several frames
+    /// running. That was a visible strobe on the aura.
+    var bodyGracePeriod: TimeInterval = 0.6
+
+    /// Bodies from the most recent frame that actually found any.
     private(set) var lastBodies: [BodyCandidate] = []
     private(set) var lastPublishedBody: BodyCandidate?
     private var frameCounter = 0
+    private var lastBodiesSeen: TimeInterval = 0
 
     // MARK: - Processing
 
@@ -129,12 +140,28 @@ final class HumanBodyPoseManager {
     }
 
     /// Extracts body candidates from body pose observation results.
-    func processObservations(_ observations: [VNHumanBodyPoseObservation]?) -> [BodyCandidate] {
+    ///
+    /// An empty result does not immediately clear `lastBodies`: the previous
+    /// bodies stand in until `bodyGracePeriod` lapses. The player has not
+    /// actually left the room because one inference pass missed their
+    /// shoulders, and dropping them instantly takes the hands down with them.
+    @discardableResult
+    func processObservations(
+        _ observations: [VNHumanBodyPoseObservation]?,
+        now: TimeInterval = CACurrentMediaTime()
+    ) -> [BodyCandidate] {
         let candidates = (observations ?? []).compactMap {
             Self.bodyCandidate(from: $0, jointConfidenceThreshold: jointConfidenceThreshold)
         }
-        lastBodies = candidates
-        return candidates
+
+        if !candidates.isEmpty {
+            lastBodies = candidates
+            lastBodiesSeen = now
+        } else if now - lastBodiesSeen > bodyGracePeriod {
+            lastBodies = []
+        }
+
+        return lastBodies
     }
 
     /// Resolves the nearest player body from detected candidates.

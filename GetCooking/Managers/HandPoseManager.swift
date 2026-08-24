@@ -144,7 +144,12 @@ final class HandPoseManager: NSObject, ObservableObject {
     private struct TrackedHand {
         let id: Int
         var smoothed: CGPoint
-        var isOpen: Bool
+        /// Evidence-based pinch state — see `PinchDetector`.
+        var pinch: PinchDetector
+        /// Last skeleton Vision gave for this hand. Kept so a hand that is
+        /// coasting through a dropped frame can still be drawn where it was,
+        /// rather than blinking out.
+        var skeleton: [[CGPoint]]
         /// Last time Vision actually reported this hand; drives the grace period.
         var lastSeen: TimeInterval
     }
@@ -680,10 +685,12 @@ final class HandPoseManager: NSObject, ObservableObject {
                 hand = tracked[previous]
             } else {
                 hand = TrackedHand(id: nextHandID, smoothed: classification.location,
-                                   isOpen: false, lastSeen: now)
+                                   pinch: PinchDetector(), skeleton: classification.skeleton,
+                                   lastSeen: now)
                 nextHandID += 1
             }
             hand.lastSeen = now
+            hand.skeleton = classification.skeleton
 
             // Smooth the cursor: Vision's per-frame jitter is easily 20–30pt on
             // screen, enough to slide off an ingredient mid-grab.
@@ -692,40 +699,49 @@ final class HandPoseManager: NSObject, ObservableObject {
                 y: hand.smoothed.y + (classification.location.y - hand.smoothed.y) * cursorSmoothing
             )
 
-            // Hysteresis is per hand, so one hand pinching can't flip the other.
-            // A missing pinch measurement opens the hand outright rather than
-            // holding the previous state — see `pinchRatio`.
-            let isOpen: Bool
-            if let pinch = classification.pinchRatio {
-                if pinch <= pinchCloseRatio {
-                    isOpen = false
-                } else if pinch >= pinchOpenRatio {
-                    isOpen = true
-                } else {
-                    isOpen = hand.isOpen
-                }
-            } else {
-                isOpen = true
-            }
-            hand.isOpen = isOpen
+            // Evidence-based, and per hand, so neither one bad frame nor the
+            // other hand can flip this one's state.
+            hand.pinch.record(
+                ratio: classification.pinchRatio,
+                closeRatio: pinchCloseRatio,
+                openRatio: pinchOpenRatio
+            )
 
             stillTracked.append(hand)
             result.append(HandData(
                 id: hand.id,
                 cursorPosition: hand.smoothed,
-                isOpenHand: isOpen,
-                isClosedFist: !isOpen,
-                skeleton: classification.skeleton
+                isOpenHand: !hand.pinch.isPinching,
+                isClosedFist: hand.pinch.isPinching,
+                skeleton: hand.skeleton
             ))
         }
 
-        // Hold on to hands Vision didn't report this frame. Their trajectory is
-        // still live for the grace period, so a flick that blurs out halfway
-        // through is still measurable when the hand reappears.
+        // Hands Vision didn't report this frame keep *coasting*: they stay
+        // tracked and stay published, sitting at their last known position,
+        // until the grace period lapses.
+        //
+        // Publishing them is the point. Reporting only what Vision saw this
+        // exact frame is what made the aura strobe — hand pose regularly drops
+        // a frame to motion blur or a turned palm, and every one of those was
+        // being handed downstream as "the hand is gone".
         let matched = Set(assignments.compactMap { $0 })
         for (index, previous) in tracked.enumerated()
         where !matched.contains(index) && now - previous.lastSeen <= handGracePeriod {
-            stillTracked.append(previous)
+            var coasting = previous
+            // A frame with no reading is no evidence either way, so the
+            // half-built case for a state change is discarded rather than
+            // resumed against a newer, contradicting run of frames.
+            coasting.pinch.clearEvidence()
+            stillTracked.append(coasting)
+
+            result.append(HandData(
+                id: coasting.id,
+                cursorPosition: coasting.smoothed,
+                isOpenHand: !coasting.pinch.isPinching,
+                isClosedFist: coasting.pinch.isPinching,
+                skeleton: coasting.skeleton
+            ))
         }
 
         tracked = stillTracked
@@ -766,14 +782,17 @@ final class HandPoseManager: NSObject, ObservableObject {
         return assignments
     }
 
-    /// No hand in this frame. Tracking records are kept for `handGracePeriod`
-    /// so a hand that blurs out for a moment keeps its identity — only the
-    /// published cursors go away immediately.
+    /// Vision found nothing usable this frame.
+    ///
+    /// Runs the *same* coasting rule as a frame that did find hands: anything
+    /// still inside the grace period keeps being published at its last known
+    /// position, and only a hand that has been missing longer than that
+    /// actually goes away. This used to blank the published list outright,
+    /// which is what made a single dropped frame kill the aura.
     private func publishNoHands() {
-        let now = CACurrentMediaTime()
-        tracked.removeAll { now - $0.lastSeen > handGracePeriod }
+        let hands = matchToTrackedHands([], now: CACurrentMediaTime())
         DispatchQueue.main.async {
-            if !self.hands.isEmpty { self.hands = [] }
+            if self.hands != hands { self.hands = hands }
         }
     }
 }

@@ -477,7 +477,10 @@ extension GameScene {
     /// countdown too, when there is nothing to be holding in the first place.
     func retireVanishedGlows(stillLive: Set<Int>) {
         for (id, node) in cursorNodes where !stillLive.contains(id) {
-            node.removeFromParent()
+            // Faded rather than yanked. By the time a hand gets here it has
+            // already coasted through the tracker's grace period, so it really
+            // is gone — but snapping the aura off still reads as a glitch.
+            node.fadeOutAndRemove()
             cursorNodes[id] = nil
         }
     }
