@@ -42,17 +42,27 @@ struct PayCheckView: View {
                             .frame(width: w, height: h * 0.42)
 
                         // Middle band — the itemised lines.
-                        VStack(spacing: h * 0.04) {
+                        VStack(spacing: result.hasMultiplier ? h * 0.02 : h * 0.04) {
                             lineRow(
-                                label: "\(result.totalDishesServed)x Dishes Served",
+                                count: result.totalDishesServed,
+                                label: "Dishes Served",
                                 value: result.dishesEarnings,
                                 height: h
                             )
+                            
                             lineRow(
                                 label: "Speed Bonus",
                                 value: result.speedBonus,
                                 height: h
                             )
+                            
+                            if result.hasMultiplier {
+                                lineRow(
+                                    label: "Coin Multiplier x2",
+                                    value: result.totalCoins,
+                                    height: h
+                                )
+                            }
                         }
                         .padding(.horizontal, sidePadding)
                         .frame(width: w, height: h * 0.37)
@@ -82,12 +92,25 @@ struct PayCheckView: View {
             }
     }
 
-    /// One "label ............ value" line in the middle band.
-    private func lineRow(label: String, value: Int, height: CGFloat) -> some View {
+    /// One "count label ............ value" line in the middle band.
+    ///
+    /// `count` and `value` are drawn with `Text(verbatim:)`, not plain
+    /// interpolation into a `LocalizedStringKey`: digits read the same in
+    /// every language this app ships, and keeping the noun (`label`) as its
+    /// own standalone catalog key — rather than baked into a key alongside
+    /// the count — means it does not depend on guessing the exact
+    /// placeholder syntax Xcode's string extractor would have produced.
+    private func lineRow(count: Int? = nil, label: LocalizedStringKey, value: Int, height: CGFloat) -> some View {
         HStack {
-            Text(label)
+            HStack(spacing: 4) {
+                if let count {
+                    Text(verbatim: "\(count)x")
+                }
+                Text(label)
+            }
             Spacer()
-            Text("\(value)")
+            
+            Text(verbatim: "\(value)")
         }
         .font(.system(size: height * 0.08, weight: .bold, design: .rounded))
         .foregroundStyle(.appBackground)

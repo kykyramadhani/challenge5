@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ButtonComponent: View {
-    var name: String
+    var name: LocalizedStringKey
     var icon: String
     var action: () -> Void
     var buttonStyle: ButtonComponentStyle

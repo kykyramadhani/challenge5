@@ -7,9 +7,8 @@
 //  MainMenuView), not a system sheet, so it matches the game's own styling.
 //
 //  Volumes are stored in UserDefaults under the keys AudioManager reads at
-//  launch, and pushed live into AudioManager as the sliders move. Language is
-//  UI-only for now — the toggle records a preference but no localization is
-//  applied yet.
+//  launch, and pushed live into AudioManager as the sliders move. Picking a
+//  language applies it immediately — see AppLocalization.
 //
 
 import SwiftUI
@@ -23,8 +22,7 @@ struct SettingsView: View {
     @AppStorage(AudioManager.musicVolumeKey) private var musicVolume: Double = 0.45
     @AppStorage(AudioManager.sfxVolumeKey) private var sfxVolume: Double = 1.0
 
-    // UI-only for now — recorded so the choice sticks, but not yet applied.
-    @AppStorage("settings.language") private var language: AppLanguage = .english
+    @AppStorage(AppLocalization.storageKey) private var language: AppLanguage = .english
 
     @AppStorage("oneHandModeEnabled") private var oneHandModeEnabled = false
     @AppStorage("preferredHand") private var preferredHand: HandSide = .right
@@ -74,11 +72,21 @@ struct SettingsView: View {
 
             settingRow(title: "Language") {
                 SegmentedPill(
-                    leftTitle: "English",
-                    rightTitle: "Indonesia",
+                    leftTitle: AppLanguage.english.displayName,
+                    rightTitle: AppLanguage.indonesia.displayName,
                     isRightSelected: Binding(
                         get: { language == .indonesia },
-                        set: { language = $0 ? .indonesia : .english }
+                        set: { isIndonesia in
+                            let next: AppLanguage = isIndonesia ? .indonesia : .english
+                            // Bundle first, stored value second. Writing the
+                            // preference is what rebuilds the view tree (see
+                            // ContentView's `.id`), and that rebuild has to
+                            // find the new strings already in place — the
+                            // other order redraws everything in the language
+                            // being switched away from.
+                            AppLocalization.apply(next)
+                            language = next
+                        }
                     )
                 )
             }
@@ -117,7 +125,7 @@ struct SettingsView: View {
 
     /// One labelled row: title on the left, its control filling the right half.
     private func settingRow<Control: View>(
-        title: String,
+        title: LocalizedStringKey,
         @ViewBuilder control: () -> Control
     ) -> some View {
         HStack(spacing: 24) {
@@ -207,8 +215,8 @@ struct VolumeSlider: View {
 /// The pill-shaped segmented control used for Language and One-hand Mode.
 /// The right option is selected when `isRightSelected` is true.
 struct SegmentedPill: View {
-    let leftTitle: String
-    let rightTitle: String
+    let leftTitle: LocalizedStringKey
+    let rightTitle: LocalizedStringKey
     @Binding var isRightSelected: Bool
     var isEnabled: Bool = true
 
@@ -226,7 +234,7 @@ struct SegmentedPill: View {
     }
 
     private func segment(
-        title: String,
+        title: LocalizedStringKey,
         selected: Bool,
         action: @escaping () -> Void
     ) -> some View {

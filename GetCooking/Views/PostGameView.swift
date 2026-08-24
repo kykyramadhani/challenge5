@@ -15,11 +15,15 @@ struct GameResult: Hashable {
     
     var dishesByType: [String: Int]
     var speedBonus: Int
+    var hasMultiplier: Bool = false
 
     /// Every dish completed this run, all kinds summed.
     var totalDishesServed: Int { dishesByType.values.reduce(0, +) }
     var dishesEarnings: Int { totalDishesServed * dishCost }
-    var totalCoins: Int { dishesEarnings + speedBonus }
+    var baseCoins: Int { dishesEarnings + speedBonus }
+    var totalCoins: Int {
+        hasMultiplier ? baseCoins * 2 : baseCoins
+    }
     
     var newHighScore: Bool {
         GameStorage.highscore < totalDishesServed
@@ -40,8 +44,6 @@ struct PostGameView: View {
         ("ChickenMozarella", "ChickenMozarella"),
     ]
 
-    @State private var showShopComingSoon = false
-
     /// Drives the staggered entrance. Flipped true on appear; each section
     /// reads it through `RevealOnAppear` with its own delay, so the paycheck,
     /// the dish tally and the buttons fade up one after another.
@@ -56,11 +58,7 @@ struct PostGameView: View {
             VStack(spacing: 80) {
                 VStack(spacing: 32) {
                     PayCheckView(
-                        result: result,
-//                        totalDishServed: result.totalDishesServed,
-//                        speedBonus: result.speedBonus,
-//                        dishesEarning: result.dishesEarnings,
-//                        totalCoins: result.totalCoins
+                        result: result
                     )
                     .modifier(RevealOnAppear(revealed: revealed, delay: 0.1))
 
@@ -88,7 +86,7 @@ struct PostGameView: View {
                     ButtonComponent(
                         name: "Shop",
                         icon: "cart.fill",
-                        action: { withAnimation(.easeInOut(duration: 0.2)) { showShopComingSoon = true } },
+                        action: sceneManager.goToShop,
                         buttonStyle: .text
                     )
 
@@ -104,14 +102,6 @@ struct PostGameView: View {
                 .allowsHitTesting(revealed)
             }
             .onAppear { revealed = true }
-
-            if showShopComingSoon {
-                ShopComingSoonPopup {
-                    withAnimation(.easeInOut(duration: 0.2)) { showShopComingSoon = false }
-                }
-                .transition(.opacity)
-                .zIndex(1)
-            }
         }
         // Its own screen now — no system back chrome.
         .navigationBarBackButtonHidden(true)
