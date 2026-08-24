@@ -10,55 +10,39 @@ import SwiftUI
 
 final class ResetButtonNode: SKNode {
     let resetRadius: CGFloat
-    private let circle: SKShapeNode
-    private let arrow: SKSpriteNode
+    private let button: SKSpriteNode
     private let label: SKLabelNode
 
     init(radius: CGFloat) {
         self.resetRadius = radius
-        
-        // Circle
-        circle = SKShapeNode(circleOfRadius: resetRadius)
-        circle.fillColor = SKColor(.appText)
-        circle.strokeColor = .clear
-        
-        // Arrow
-        let config = UIImage.SymbolConfiguration(
-            pointSize: 50,
-            weight: .bold,
-        )
-        
-        // TODO: FIX COLOR, it doesnt show in the game.
-        
-        guard let image = UIImage(
-            systemName: "arrow.counterclockwise",
-            withConfiguration: config
-        )?.withTintColor(.appTertiary)
-        else {
-            fatalError("Could not load SF Symbol: arrow.counterclockwise")
-        }
 
-        
-        arrow = SKSpriteNode(
-            texture: SKTexture(image: image)
-        )
-        
+        // Button artwork from Assets.xcassets ("ResetButton") instead of a
+        // drawn circle + SF Symbol arrow. Sized to the same footprint the old
+        // circle had — width = 2 × resetRadius — so hit-testing and layout that
+        // key off `resetRadius` are unaffected. The height follows the image's
+        // own aspect ratio so it never looks squashed.
+        let texture = SKTexture(imageNamed: "ResetButton")
+        button = SKSpriteNode(texture: texture)
+
+        let targetWidth = resetRadius * 2
+        let aspect = texture.size().height / max(texture.size().width, 1)
+        button.size = CGSize(width: targetWidth, height: targetWidth * aspect)
+
         label = SKLabelNode()
-         
+
         super.init()
-        
-        setupArrow()
+
+        button.position = .zero
         setupLabel()
-        
-        addChild(circle)
-        addChild(arrow)
+
+        addChild(button)
         addChild(label)
     }
 
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
+
     private func setupLabel() {
         let text = "Reset"
         let fontName = "SFPro-Bold"
@@ -97,9 +81,5 @@ final class ResetButtonNode: SKNode {
         node.verticalAlignmentMode = .center
         node.horizontalAlignmentMode = .center
         return node
-    }
- 
-    private func setupArrow() {
-        arrow.position = .zero
     }
 }

@@ -160,6 +160,22 @@ final class GameStateManager: ObservableObject {
         max(Self.baseSpawnStagger / difficultyMultiplier, Self.minimumSpawnStagger)
     }
 
+    /// How strongly the music tempo tracks the difficulty tier. `1.0` makes the
+    /// music speed equal `difficultyMultiplier` outright (so 1.25× on the first
+    /// speed-up); lower values ramp the tempo up more gently than the clock.
+    /// Tune to taste — 0.5 gives a noticeable-but-not-frantic climb.
+    private static let musicTempoIntensity: Float = 0.5
+
+    /// The background-music playback speed for the current tier. On tier 0 it is
+    /// `1.0` (normal speed) and it climbs from there, blended toward normal by
+    /// `musicTempoIntensity` and clamped to the `0.5...2.0` range `AVAudioPlayer`
+    /// honours. `AudioManager.setMusicRate` clamps too, so this can never drive
+    /// the player out of range.
+    var musicRate: Float {
+        let blended = 1.0 + (Float(difficultyMultiplier) - 1.0) * Self.musicTempoIntensity
+        return min(max(blended, 0.5), 2.0)
+    }
+
     /// Whether the assembly clock is running.
     ///
     /// Only while `.cooking`. The moment the plate matches, the dish is safe:
@@ -229,6 +245,11 @@ final class GameStateManager: ObservableObject {
         // A restart wipes the board, so any low-time warning still looping from
         // the run that just ended has to be silenced explicitly.
         AudioManager.shared.stopClockWarning()
+        
+        // A fresh run starts on tier 0, so drop the music back to normal speed —
+        // otherwise it would still be racing at last run's tempo through the
+        // countdown until the first dish resets it.
+        AudioManager.shared.setMusicRate(1.0)
         AudioManager.shared.play(.reset)
         dishesByType = [:]
         speedBonus = 0
@@ -316,6 +337,9 @@ final class GameStateManager: ObservableObject {
     private func beginDishClock() {
         dishTimeLimit = max(currentRecipe.timeLimit / difficultyMultiplier, Self.minimumDishTime)
         dishDeadline = playClock + dishTimeLimit
+        // Push the music tempo up in lock-step with the tier that just squeezed
+        // the clock, so the track audibly speeds up as the run gets harder.
+        AudioManager.shared.setMusicRate(musicRate)
     }
 
     /// The dish clock ran out: costs a life, then either ends the run or moves
@@ -434,8 +458,8 @@ final class GameStateManager: ObservableObject {
         // carries the plate to the bell, so reading it later would under-count.
         recordCompletedDish()
         state = .dishComplete
-        // The plate is right: ring the bell — the dish is up.
-        AudioManager.shared.play(.bell)
+        
+        // The plate is right
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.dishRevealDuration) { [weak self] in
             guard let self, self.state == .dishComplete else { return }
             self.bellSide = Bool.random() ? .left : .right
@@ -463,7 +487,7 @@ final class GameStateManager: ObservableObject {
         plateContents = []
         bellSide = nil
         currentRecipe = nextRecipe()
-        beginDishClock()
+        beginDishClock()   // also bumps the music tempo for the new tier
         state = .cooking
     }
 

@@ -233,6 +233,7 @@ final class AudioManager: NSObject {
             let player = try AVAudioPlayer(contentsOf: url)
             player.numberOfLoops = -1        // loop for the whole session
             player.volume = 0                // faded up below
+            player.enableRate = true
             player.prepareToPlay()
             player.play()
             player.setVolume(musicVolume, fadeDuration: fadeIn)
@@ -257,6 +258,20 @@ final class AudioManager: NSObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + fadeOut) {
             player.stop()
         }
+    }
+    
+    /// Sets the background music's playback speed directly. `1.0` is normal
+    /// speed, `2.0` is double-time; `AVAudioPlayer` only honours the range
+    /// `0.5...2.0`, so anything outside is clamped here rather than silently
+    /// ignored by the OS.
+    ///
+    /// This is an *absolute* setter, not a relative nudge — pass the tempo you
+    /// want, not the amount to change by. (The old `changeRate(by:)` added to
+    /// the current rate on every call, which pinned it to the 2.0 ceiling after
+    /// a round or two.)
+    func setMusicRate(_ rate: Float) {
+        guard let player = musicPlayer else { return }
+        player.rate = min(max(rate, 0.5), 2.0)
     }
 
     /// Pauses the music in place (e.g. the Pause button) — resume with `resumeMusic()`.

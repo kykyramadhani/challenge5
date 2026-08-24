@@ -94,6 +94,7 @@ extension GameScene {
         bell.run(animation)
 
         bellNode = bell
+        AudioManager.shared.play(.bell)
     }
 
     // MARK: - Serve animation

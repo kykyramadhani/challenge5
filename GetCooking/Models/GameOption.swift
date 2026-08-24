@@ -23,7 +23,7 @@ struct GameOption: Identifiable, Hashable, Equatable {
 
 extension GameOption {
     static let all: [GameOption] = [
-        GameOption(title: "GetCooking", type: .getCooking, imageName: "GetCooking", isAvailable: true, highScore: 1000, requiresCalibration: false),
+        GameOption(title: "GetCooking", type: .getCooking, imageName: "GetCooking", isAvailable: true, highScore: 1000, requiresCalibration: true),
 //        GameOption(title: "Coming Soon", type: .getCooking, imageName: "ComingSoon", isAvailable: false, highScore: nil),
     ]
 }
