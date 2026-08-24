@@ -45,23 +45,35 @@ struct TutorialPage: Identifiable {
     /// uses the same bubble with a plain bottom edge.
     let showsTail: Bool
 
+    /// Plays its clip once and then turns the page by itself, instead of
+    /// looping and waiting to be tapped. Only the wordless pinch beat does
+    /// this — there is nothing on it to read, so making the player tap past a
+    /// clip that has already finished is just a stop for no reason.
+    let advancesWhenClipEnds: Bool
+
     init(
         id: String,
         backdrop: Backdrop,
         message: String.LocalizationValue? = nil,
         bubbleAnchor: CGPoint = .zero,
-        showsTail: Bool = false
+        showsTail: Bool = false,
+        advancesWhenClipEnds: Bool = false
     ) {
         self.id = id
         self.backdrop = backdrop
         self.message = message
         self.bubbleAnchor = bubbleAnchor
         self.showsTail = showsTail
+        self.advancesWhenClipEnds = advancesWhenClipEnds
     }
 
-    /// The line, resolved for the current locale.
+    /// The line, resolved in the language the player picked.
+    ///
+    /// Routed through `AppLocalization` rather than a plain
+    /// `String(localized:)`: this is read outside the view tree, so it cannot
+    /// rely on the environment to tell it which language is in force.
     var localizedMessage: String? {
-        message.map { String(localized: $0) }
+        message.map(AppLocalization.string)
     }
 
     // MARK: - The script
@@ -90,7 +102,8 @@ struct TutorialPage: Identifiable {
         // board is explained piece by piece.
         TutorialPage(
             id: "4a",
-            backdrop: .clip("TutorialClip4a")
+            backdrop: .clip("TutorialClip4a"),
+            advancesWhenClipEnds: true
         ),
         TutorialPage(
             id: "4b",

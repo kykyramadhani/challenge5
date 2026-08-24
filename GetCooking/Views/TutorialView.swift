@@ -8,10 +8,9 @@
 //  "tap to continue" prompt and the Skip / Start Game buttons are drawn here,
 //  so every word can be localized without re-exporting a single page.
 //
-//  Each line types itself in. A tap while it is typing finishes the line; a
-//  tap once it has finished turns the page. That is two meanings for one tap,
-//  which is why `revealed` is compared against the line's length rather than
-//  the page keeping a separate "is typing" flag that could drift out of step.
+//  Each line types itself in, and a tap always turns the page — typing or not.
+//  One page is the exception: the wordless pinch clip plays once and hands
+//  over by itself, so there is nothing there to tap past.
 //
 
 import SwiftUI
@@ -105,7 +104,7 @@ struct TutorialView: View {
                     .frame(width: rect.width, height: rect.height)
                     .position(x: rect.midX, y: rect.midY)
 
-                // Tap anywhere: finishes the line, or turns the page.
+                // Tap anywhere to turn the page.
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture { advance() }
@@ -150,12 +149,16 @@ struct TutorialView: View {
             }
 
             ForEach(TutorialPage.clipNames, id: \.self) { name in
+                let showing = isShowing(clip: name)
+
                 LoopingVideoView(
                     resource: name,
                     fileExtension: "mov",
-                    isActive: isShowing(clip: name)
+                    isActive: showing,
+                    playsOnce: playsOnce(clip: name),
+                    onFinished: showing ? { advance() } : nil
                 )
-                .opacity(isShowing(clip: name) ? 1 : 0)
+                .opacity(showing ? 1 : 0)
             }
         }
     }
@@ -163,6 +166,18 @@ struct TutorialView: View {
     private func isShowing(clip name: String) -> Bool {
         if case let .clip(current) = page.backdrop { return current == name }
         return false
+    }
+
+    /// Whether this clip is the one that plays through once rather than
+    /// looping. Looked up by name because the clips are all mounted at once
+    /// and only one of them is the current page's.
+    private func playsOnce(clip name: String) -> Bool {
+        TutorialPage.all.contains {
+            if case let .clip(current) = $0.backdrop {
+                return current == name && $0.advancesWhenClipEnds
+            }
+            return false
+        }
     }
 
     /// The bubble and the prompt under it, pinned to the page's own geometry.
@@ -178,8 +193,9 @@ struct TutorialView: View {
                         scale: scale
                     )
 
-                    // Only offered once the line has finished, so it never
-                    // invites a tap that would merely cut the sentence short.
+                    // Held back until the line has finished, so it reads as
+                    // "you have read it, now move on" rather than hurrying the
+                    // player past a sentence still being typed.
                     Text("Tap anywhere to continue →")
                         .font(.system(size: 25 * scale))
                         .foregroundStyle(Self.promptGrey)
@@ -239,13 +255,9 @@ struct TutorialView: View {
         .position(x: rect.midX, y: rect.midY)
     }
 
-    /// One tap does one of two things: finish the line, or turn the page.
+    /// Turns the page. A tap does this whether or not the line has finished
+    /// typing — there is no tap-to-reveal step.
     private func advance() {
-        if isTyping {
-            revealed = line.count
-            return
-        }
-
         if index < TutorialPage.all.count - 1 {
             index += 1
         } else {

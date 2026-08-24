@@ -33,6 +33,11 @@ struct ContentView: View {
     @AppStorage("coin") private var coin: Int = 0
     @AppStorage("highscore") private var highscore: Int = 0
 
+    /// Watched, not just stored: switching language has to redraw everything
+    /// that has already been laid out, and views only rebuild for state they
+    /// actually read.
+    @AppStorage(AppLocalization.storageKey) private var language: AppLanguage = .english
+
     var body: some View {
         ZStack {
             // The camera preview lives inside GameplayView — the only screen that
@@ -82,12 +87,21 @@ struct ContentView: View {
                     .zIndex(100)
             }
         }
+        // Rebuilds the whole tree when the language changes. Redirecting the
+        // bundle is not enough on its own: views already on screen keep the
+        // text they resolved when they were built, so they have to be thrown
+        // away and made again.
+        .id(language)
+        .environment(\.locale, language.locale)
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 withAnimation(.easeInOut(duration: 0.5)) {
                     showSplashScreen = false
                 }
             }
+        }
+        .onChange(of: language) { _, newValue in
+            AppLocalization.apply(newValue)
         }
     }
 }
