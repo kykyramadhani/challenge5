@@ -154,10 +154,24 @@ struct SeatCalibrationView: View {
         }
     }
 
+    /// Routed through `AppLocalization` rather than `Text` with a plain
+    /// `String`: this is a computed `String`, and `Text(String)` renders its
+    /// argument verbatim with no catalog lookup at all — which is how this
+    /// stayed in English regardless of the language picker. Two full
+    /// sentences rather than one with the hand name interpolated in, since
+    /// Indonesian doesn't necessarily put "left"/"right" in the same spot in
+    /// the sentence that English does.
     private var instructionText: String {
-        oneHandModeEnabled
-            ? "Adjust your seat and raise your \(preferredHand.rawValue) hand"
-            : "Adjust your seat to fit in the frame"
+        let key: String.LocalizationValue
+        switch (oneHandModeEnabled, preferredHand) {
+        case (true, .left):
+            key = "Adjust your seat and raise your left hand"
+        case (true, .right):
+            key = "Adjust your seat and raise your right hand"
+        case (false, _):
+            key = "Adjust your seat to fit in the frame"
+        }
+        return AppLocalization.string(key)
     }
 
     private func isAligned(in size: CGSize, frame: CGRect) -> Bool {

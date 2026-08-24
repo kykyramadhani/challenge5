@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2D3CD0ED303BFDFC00CD8441 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 2D3CD0EC303BFDFC00CD8441 /* Localizable.xcstrings */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		2DD7B445302B444200DC904E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,14 +28,28 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		2D3CD0EC303BFDFC00CD8441 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		2DD7B437302B444200DC904E /* GetCooking.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GetCooking.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2DD7B444302B444200DC904E /* GetCookingTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GetCookingTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2DD7B44E302B444200DC904E /* GetCookingUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GetCookingUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		2D3CD0EF303BFF5100CD8441 /* Exceptions for "GetCooking" folder in "GetCooking" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 2DD7B436302B444200DC904E /* GetCooking */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		2DD7B439302B444200DC904E /* GetCooking */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				2D3CD0EF303BFF5100CD8441 /* Exceptions for "GetCooking" folder in "GetCooking" target */,
+			);
 			path = GetCooking;
 			sourceTree = "<group>";
 		};
@@ -75,6 +93,7 @@
 		2DD7B42E302B444200DC904E = {
 			isa = PBXGroup;
 			children = (
+				2D3CD0EC303BFDFC00CD8441 /* Localizable.xcstrings */,
 				2DD7B439302B444200DC904E /* GetCooking */,
 				2DD7B447302B444200DC904E /* GetCookingTests */,
 				2DD7B451302B444200DC904E /* GetCookingUITests */,
@@ -212,6 +231,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2D3CD0ED303BFDFC00CD8441 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -329,6 +349,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
@@ -386,6 +407,7 @@
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -400,6 +422,7 @@
 				DEVELOPMENT_TEAM = JLQK39AS23;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GetCooking/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "GetCooking uses the front camera so you can see yourself and control the game with hand gestures.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -433,6 +456,7 @@
 				DEVELOPMENT_TEAM = JLQK39AS23;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GetCooking/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "GetCooking uses the front camera so you can see yourself and control the game with hand gestures.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

@@ -152,8 +152,12 @@ struct GameOpening: View {
             }
     }
 
-    /// The "Most Dishes Served" card. The label and cloche are baked into the
-    /// asset; only the number is drawn, into the black panel below the label.
+    /// The "Most Dishes Served" card. The cloche is baked into the asset; the
+    /// label band is painted over in the same lime the art uses underneath it
+    /// (measured off the source PNG), because the English label itself is
+    /// baked into the pixels and cannot be translated any other way without a
+    /// redrawn asset. The number is drawn fresh either way, into the black
+    /// panel below.
     private func highscoreCard(w: CGFloat) -> some View {
         Image("HighscoreCard")
             .resizable()
@@ -161,13 +165,31 @@ struct GameOpening: View {
             .frame(width: w * 0.16)
             .overlay {
                 GeometryReader { g in
-                    Text("\(mostDishesServed)")
+                    // Band position measured from HighscoreCard.png: it spans
+                    // the full width, from 34% to 51% of the card's height.
+                    Self.highscoreLabelColor
+                        .frame(width: g.size.width, height: g.size.height * 0.170)
+                        .position(x: g.size.width * 0.5, y: g.size.height * 0.425)
+
+                    Text("Most Dishes Served")
+                        .font(.system(size: g.size.height * 0.072, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.black)
+                        .minimumScaleFactor(0.5)
+                        .lineLimit(1)
+                        .frame(width: g.size.width * 0.92)
+                        .position(x: g.size.width * 0.5, y: g.size.height * 0.425)
+
+                    Text(verbatim: "\(mostDishesServed)")
                         .font(.system(size: g.size.height * 0.22, weight: .heavy, design: .rounded))
                         .foregroundStyle(.white)
                         .position(x: g.size.width * 0.5, y: g.size.height * 0.72)
                 }
             }
     }
+
+    /// Sampled from the lime band in HighscoreCard.png, so the painted-over
+    /// label sits on a patch that matches the art around it exactly.
+    private static let highscoreLabelColor = Color(red: 0.87, green: 1.0, blue: 0.10)
 }
 
 #Preview {
