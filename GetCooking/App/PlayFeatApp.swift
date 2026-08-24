@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct PlayFeatApp: App {
@@ -11,5 +12,6 @@ struct PlayFeatApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(InventoryManager.shared.container)
     }
 }

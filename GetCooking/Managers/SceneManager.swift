@@ -74,4 +74,9 @@ final class SceneManager {
         selectedGame = nil
         isInGameplayFlow = false
     }
+
+    func goToShop() {
+        isInGameplayFlow = false
+        path.append("shop")
+    }
 }

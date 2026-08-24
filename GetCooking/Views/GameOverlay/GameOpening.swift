@@ -15,13 +15,10 @@ import SwiftUI
 struct GameOpening: View {
     @Bindable var sceneManager: SceneManager
 
-    // Placeholder values for now — these get wired to the AppStorage-saved
-    // game session later, so they read live from the player's best run.
-    private let coinCount = GameStorage.coins
-    private let mostDishesServed = GameStorage.highscore
+    @State private var coinCount = GameStorage.coins
+    @State private var mostDishesServed = GameStorage.highscore
 
     @State private var showSettings = false
-    @State private var showShopComingSoon = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -63,11 +60,11 @@ struct GameOpening: View {
                 playTray(w: w)
                     .position(x: w * 0.5, y: h * 0.77)
 
-                // Shop — the same button the results screen uses, kept enabled.
+                // Shop — routes to Shop screen.
                 ButtonComponent(
                     name: "Shop",
                     icon: "cart.fill",
-                    action: { withAnimation(.easeInOut(duration: 0.2)) { showShopComingSoon = true } },
+                    action: sceneManager.goToShop,
                     buttonStyle: .text
                 )
                 .position(x: w * 0.85, y: h * 0.85)
@@ -76,15 +73,6 @@ struct GameOpening: View {
                 // positions itself in the top-right corner.
                 SettingsButton {
                     showSettings = true
-                }
-
-                // Overlays, above everything.
-                if showShopComingSoon {
-                    ShopComingSoonPopup {
-                        withAnimation(.easeInOut(duration: 0.2)) { showShopComingSoon = false }
-                    }
-                    .transition(.opacity)
-                    .zIndex(2)
                 }
 
                 if showSettings {
@@ -98,6 +86,10 @@ struct GameOpening: View {
         .ignoresSafeArea()
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            coinCount = GameStorage.coins
+            mostDishesServed = GameStorage.highscore
+        }
         .animation(.easeInOut(duration: 0.2), value: showSettings)
     }
 

@@ -42,17 +42,24 @@ struct PayCheckView: View {
                             .frame(width: w, height: h * 0.42)
 
                         // Middle band — the itemised lines.
-                        VStack(spacing: h * 0.04) {
+                        VStack(spacing: result.hasMultiplier ? h * 0.02 : h * 0.04) {
                             lineRow(
                                 label: "\(result.totalDishesServed)x Dishes Served",
-                                value: result.dishesEarnings,
+                                value: "\(result.dishesEarnings)",
                                 height: h
                             )
                             lineRow(
                                 label: "Speed Bonus",
-                                value: result.speedBonus,
+                                value: "\(result.speedBonus)",
                                 height: h
                             )
+                            if result.hasMultiplier {
+                                lineRow(
+                                    label: "Coin Multiplier",
+                                    value: "x2",
+                                    height: h
+                                )
+                            }
                         }
                         .padding(.horizontal, sidePadding)
                         .frame(width: w, height: h * 0.37)
@@ -83,11 +90,11 @@ struct PayCheckView: View {
     }
 
     /// One "label ............ value" line in the middle band.
-    private func lineRow(label: String, value: Int, height: CGFloat) -> some View {
+    private func lineRow(label: String, value: String, height: CGFloat) -> some View {
         HStack {
             Text(label)
             Spacer()
-            Text("\(value)")
+            Text(value)
         }
         .font(.system(size: height * 0.08, weight: .bold, design: .rounded))
         .foregroundStyle(.appBackground)

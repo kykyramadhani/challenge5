@@ -31,10 +31,13 @@ final class GameStateManager: ObservableObject {
     /// "Dishes Served" count.
     var totalDishesServed: Int { dishesByType.values.reduce(0, +) }
 
+    /// Whether a coin multiplier is active for this run.
+    @Published private(set) var hasMultiplier: Bool = false
+
     /// A value snapshot of this run's outcome, handed to the results screen so
     /// it needs no live reference back to this manager.
     var result: GameResult {
-        GameResult(dishesByType: dishesByType, speedBonus: speedBonus)
+        GameResult(dishesByType: dishesByType, speedBonus: speedBonus, hasMultiplier: hasMultiplier)
     }
 
     /// Which edge the bell rang on, and so which way the plate has to be
@@ -229,6 +232,7 @@ final class GameStateManager: ObservableObject {
     /// the clock. Call once camera/hand tracking is ready.
     func start() {
         guard state == .idle else { return }
+        hasMultiplier = InventoryManager.shared.getMultiplierCount() > 0
         beginDishClock()
         state = .cooking
         startTimer()
@@ -260,6 +264,7 @@ final class GameStateManager: ObservableObject {
         playClock = 0
         elapsedTime = 0
         dishesCompleted = 0
+        hasMultiplier = InventoryManager.shared.getMultiplierCount() > 0
         currentRecipe = recipePool.randomElement()!
         resetToken += 1
         runToken += 1
@@ -385,6 +390,9 @@ final class GameStateManager: ObservableObject {
     /// loses, which is why the save only *sometimes* stuck. This transition
     /// runs exactly once per run, so the save always lands.
     private func persistResult() {
+        if hasMultiplier {
+            InventoryManager.shared.consumeMultiplier()
+        }
         let outcome = result
         GameStorage.coins += outcome.totalCoins
         // Read before the write, so `newHighScore` still compares against the

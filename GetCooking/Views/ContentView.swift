@@ -53,6 +53,8 @@ struct ContentView: View {
                                 sceneManager: sceneManager,
                                 handPoseManager: handPoseManager
                             )
+                        } else if destination == "shop" {
+                            ShopView(sceneManager: sceneManager)
                         }
                     }
                     .navigationDestination(for: GameResult.self) { result in
