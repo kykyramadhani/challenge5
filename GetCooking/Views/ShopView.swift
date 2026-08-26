@@ -144,14 +144,14 @@ struct ShopView: View {
                 .padding(.vertical, 8)
 
             // Item Title
-            Text(item.name)
+            Text(LocalizedStringKey(item.name))
                 .font(.system(size: 26, weight: .bold, design: .rounded))
-                .foregroundStyle(.black)
+                .foregroundStyle(.appTertiaryText)
 
             // Item Description
-            Text(item.description)
+            Text(LocalizedStringKey(item.description))
                 .font(.system(size: 15, weight: .medium, design: .rounded))
-                .foregroundStyle(.gray)
+                .foregroundStyle(.appSecondaryText)
                 .multilineTextAlignment(.center)
                 .frame(height: 44)
                 .padding(.horizontal, 8)
@@ -178,7 +178,7 @@ struct ShopView: View {
                 .padding(.vertical, 14)
                 .background(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(canAfford ? Color.appPrimary : Color.gray.opacity(0.6))
+                        .fill(canAfford ? Color.black.opacity(0.7) : Color.gray.opacity(0.6))
                 )
             }
             .buttonStyle(.plain)
