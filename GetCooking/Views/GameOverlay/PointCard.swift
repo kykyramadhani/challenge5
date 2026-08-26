@@ -24,7 +24,7 @@ struct PointCard: View {
                 .frame(width: 52, height: 52)
 
             Text("\(dishesServed)")
-                .font(.system(size: 44, weight: .bold))
+                .font(.atkinson(size: 44, weight: .bold))
                 .contentTransition(.numericText())
                 .animation(.snappy, value: dishesServed)
         }

@@ -36,7 +36,7 @@ struct PayCheckView: View {
                     VStack(spacing: 0) {
                         // Header band — the title.
                         Text(result.newHighScore ? "New Personal Best!" : "Nice work today!")
-                            .font(.system(size: h * 0.15, weight: .bold, design: .rounded))
+                            .font(.atkinson(size: h * 0.15, weight: .bold))
                             .foregroundStyle(.appTertiaryText)
                             .minimumScaleFactor(0.5)
                             .frame(width: w, height: h * 0.42)
@@ -70,7 +70,7 @@ struct PayCheckView: View {
                         // Footer band — the total, with a coin.
                         HStack(spacing: w * 0.02) {
                             Text("TOTAL")
-                                .font(.system(size: h * 0.1, weight: .bold, design: .rounded))
+                                .font(.atkinson(size: h * 0.1, weight: .bold))
 
                             Spacer()
                             
@@ -81,7 +81,7 @@ struct PayCheckView: View {
 
                             AnimatedCounterText(
                                 value: animatedTotal,
-                                font: .system(size: h * 0.12, weight: .bold, design: .rounded)
+                                font: .atkinson(size: h * 0.12, weight: .bold)
                             )
                         }
                         .foregroundStyle(.appBackground)
@@ -112,7 +112,7 @@ struct PayCheckView: View {
             
             Text(verbatim: "\(value)")
         }
-        .font(.system(size: height * 0.08, weight: .bold, design: .rounded))
+        .font(.atkinson(size: height * 0.08, weight: .bold))
         .foregroundStyle(.appBackground)
         .lineLimit(1)
         .minimumScaleFactor(0.6)

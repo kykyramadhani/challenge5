@@ -46,7 +46,7 @@ struct SettingsView: View {
     private var card: some View {
         VStack(spacing: 28) {
             Text("SETTINGS")
-                .font(.system(size: 48, weight: .bold))
+                .font(.atkinson(size: 48, weight: .bold))
                 .foregroundStyle(.appTertiary)
                 .padding(.top, 60)
                 .padding(.bottom, 60)
@@ -130,7 +130,7 @@ struct SettingsView: View {
     ) -> some View {
         HStack(spacing: 24) {
             Text(title)
-                .font(.system(size: 34, weight: .bold))
+                .font(.atkinson(size: 34, weight: .bold))
                 .foregroundStyle(.appTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -243,7 +243,7 @@ struct SegmentedPill: View {
             action()
         }) {
             Text(title)
-                .font(.system(size: 22, weight: .bold))
+                .font(.atkinson(size: 22, weight: .bold))
                 .foregroundStyle(selected ? Color.white : Color.appTertiaryText)
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)

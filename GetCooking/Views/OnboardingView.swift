@@ -84,7 +84,7 @@ struct OnboardingView: View {
                         )
 
                     Text("Tap anywhere to continue →")
-                        .font(.system(size: 28, weight: .regular))
+                        .font(.atkinson(size: 28, weight: .regular))
                         .foregroundStyle(.black.opacity(0.45))
                         .padding(.trailing, 6)
                 }
@@ -113,7 +113,7 @@ struct OnboardingView: View {
             Text(page.text).opacity(0)
             Text(typedText)
         }
-        .font(.system(size: 22, weight: .bold, design: .rounded))
+        .font(.atkinson(size: 22, weight: .bold))
         .foregroundStyle(.black)
         .multilineTextAlignment(.center)
         .frame(width: maxWidth)
