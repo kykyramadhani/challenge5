@@ -106,6 +106,7 @@ struct PostGameView: View {
         // Its own screen now — no system back chrome.
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .designScaled()
     }
 }
 

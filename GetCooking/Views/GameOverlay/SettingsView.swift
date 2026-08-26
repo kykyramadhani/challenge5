@@ -39,6 +39,7 @@ struct SettingsView: View {
                 .padding(.horizontal, 40)
                 .overlay(alignment: .topTrailing) { closeButton }
         }
+        .designScaled()
     }
 
     // MARK: - Card

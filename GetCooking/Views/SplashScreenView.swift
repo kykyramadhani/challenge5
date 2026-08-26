@@ -156,6 +156,7 @@ struct SplashScreenView: View {
             }
             startAnimationLoop()
         }
+        .designScaled()
     }
 
     private func startAnimationLoop() {
