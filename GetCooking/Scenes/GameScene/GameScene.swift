@@ -32,16 +32,35 @@ final class GameScene: SKScene {
     // numbers works from iPhone SE to iPad Pro.
 
     var shortEdge: CGFloat { min(size.width, size.height) }
-    var plateRadius: CGFloat { (shortEdge * 0.17).vc_clamped(to: 70...150) }
-    var resetRadius: CGFloat { (shortEdge * 0.09).vc_clamped(to: 38...60) }
-    var ingredientRadius: CGFloat { (shortEdge * 0.17).vc_clamped(to: 68...100) }
+
+    /// The board is drawn at the real screen size — it is deliberately left
+    /// out of the SwiftUI design canvas, since laying SpriteKit out on an
+    /// oversized canvas means rendering a framebuffer several times bigger
+    /// than the screen. The *limits* below are canvas points all the same, so
+    /// they get the canvas's scale applied by hand. On iPad this is 1 and
+    /// every number below is untouched.
+    var designScale: CGFloat { DesignCanvas.appliedScale(for: size) }
+
+    var plateRadius: CGFloat {
+        (shortEdge * 0.17).vc_clamped(to: 70 * designScale...150 * designScale)
+    }
+    var resetRadius: CGFloat {
+        (shortEdge * 0.09).vc_clamped(to: 38 * designScale...60 * designScale)
+    }
+    var ingredientRadius: CGFloat {
+        (shortEdge * 0.17).vc_clamped(to: 68 * designScale...100 * designScale)
+    }
 
     /// How deep the SwiftUI HUD reaches down from the top of the screen.
     ///
     /// The score, recipe and hearts cards are opaque and sit above the scene,
     /// so nothing the player must see or reach may be placed under them —
     /// spawned bubbles and a carried plate alike.
-    var hudExclusion: CGFloat { max(170, size.height * 0.16) }
+    /// 170 is measured off the HUD as drawn on the design canvas, so on a
+    /// phone — where the HUD is scaled down with everything else — it has to
+    /// come down too, or the board reserves 42% of a landscape screen for a
+    /// HUD that only reaches a sixth of the way down it.
+    var hudExclusion: CGFloat { max(170 * designScale, size.height * 0.16) }
 
     let grabSlack: CGFloat = 30
 

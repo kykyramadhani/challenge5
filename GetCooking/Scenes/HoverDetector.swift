@@ -12,7 +12,7 @@ import Foundation
 /// without a live SpriteKit view.
 struct HoverDetector {
     /// How long the hand must stay put before the gesture fires.
-    var dwellDuration: TimeInterval = 2.0
+    var dwellDuration: TimeInterval = 1.0
 
     /// Largest gap between two frames that still counts toward the dwell.
     ///

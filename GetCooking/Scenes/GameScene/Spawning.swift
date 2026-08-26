@@ -139,7 +139,11 @@ extension GameScene {
             - ingredientRadius
             - 30
 
-        let yRange = spawnMinY...spawnMaxY
+        // A screen short enough that the plate's clearance runs past the
+        // HUD's inverts this, and `a...b` traps on lowerBound > upperBound —
+        // which is exactly what froze the game on a phone in landscape.
+        // Guarded the same way `xRange` above is.
+        let yRange = spawnMinY...max(spawnMinY, spawnMaxY)
 
         func attempt(spacing: CGFloat) -> [CGPoint]? {
             var points: [CGPoint] = []

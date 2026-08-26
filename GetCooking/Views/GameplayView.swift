@@ -92,6 +92,7 @@ struct GameplayView: View {
                         SeatCalibrationView(handPoseManager: handPoseManager) {
                             hasCalibrated = true
                         }
+                        .designScaled()
                     } else {
                         gameBody
                     }
@@ -106,6 +107,7 @@ struct GameplayView: View {
                 GameOverOverlay {
                     sceneManager.goToPostGame(gameStateManager.result)
                 }
+                .designScaled()
                 .zIndex(200)
             }
         }
@@ -305,6 +307,7 @@ struct GameplayView: View {
                 showGameOver()
             }
         }
+        .designScaled()
     }
     
     private func showGameOver() {

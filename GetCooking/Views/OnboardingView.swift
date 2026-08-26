@@ -101,6 +101,7 @@ struct OnboardingView: View {
             if typedText.isEmpty { beginTyping() }
         }
         .onDisappear { typingTask?.cancel() }
+        .designScaled()
     }
 
     // MARK: - Speech bubble

@@ -94,6 +94,7 @@ struct ShopView: View {
             coinCount = GameStorage.coins
             inventoryManager.refresh()
         }
+        .designScaled()
     }
 
     // MARK: - Components

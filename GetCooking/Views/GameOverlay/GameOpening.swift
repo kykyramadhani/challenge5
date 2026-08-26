@@ -24,6 +24,10 @@ struct GameOpening: View {
         GeometryReader { proxy in
             let w = proxy.size.width
             let h = proxy.size.height
+            // Sizes are measured against this rather than the full width; see
+            // DesignCanvas.layoutWidth. Positions still use `w`, so the menu
+            // still spreads across the whole screen.
+            let lw = DesignCanvas.layoutWidth(for: proxy.size)
 
             ZStack {
                 // Full-bleed kitchen backdrop.
@@ -37,14 +41,14 @@ struct GameOpening: View {
                 Image("Title")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: w * 0.52)
+                    .frame(width: lw * 0.52)
                     .position(x: w * 0.5, y: h * 0.33)
 
                 // Mascot peeking in from the left edge.
                 Image("Happy")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: w * 0.3)
+                    .frame(width: lw * 0.3)
                     .rotationEffect(.degrees(50), anchor: .leading)
                     .position(x: w * 0.15, y: h * 0.3)
 
@@ -53,14 +57,14 @@ struct GameOpening: View {
                     .position(x: w * 0.14, y: h * 0.12)
 
                 // Most-dishes-served card, bottom-left.
-                highscoreCard(w: w)
+                highscoreCard(w: lw)
                     .position(x: w * 0.125, y: h * 0.82)
                     // The card already means "best run", so it doubles as the
                     // way into the Game Center leaderboard.
                     .onTapGesture { GameCenter.showLeaderboard() }
 
                 // Tap-to-Play tray, centred low.
-                playTray(w: w)
+                playTray(w: lw)
                     .position(x: w * 0.5, y: h * 0.77)
 
                 // Shop — routes to Shop screen.
@@ -98,6 +102,7 @@ struct GameOpening: View {
             AudioManager.shared.startMusic("home_soundtrack")
         }
         .animation(.easeInOut(duration: 0.2), value: showSettings)
+        .designScaled()
     }
 
     // MARK: - Pieces

@@ -354,7 +354,7 @@ struct HoverDetectorTests {
 
     /// The shipped `maxFrameGap` deliberately caps how much a single frame can
     /// contribute; these tests jump the clock in one step, so they lift it.
-    private func detector(dwell: TimeInterval = 2.0) -> HoverDetector {
+    private func detector(dwell: TimeInterval = 1.0) -> HoverDetector {
         var detector = HoverDetector()
         detector.dwellDuration = dwell
         detector.maxFrameGap = 60
