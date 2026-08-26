@@ -55,6 +55,9 @@ struct GameOpening: View {
                 // Most-dishes-served card, bottom-left.
                 highscoreCard(w: w)
                     .position(x: w * 0.125, y: h * 0.82)
+                    // The card already means "best run", so it doubles as the
+                    // way into the Game Center leaderboard.
+                    .onTapGesture { GameCenter.showLeaderboard() }
 
                 // Tap-to-Play tray, centred low.
                 playTray(w: w)

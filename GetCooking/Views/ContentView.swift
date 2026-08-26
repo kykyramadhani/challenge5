@@ -94,6 +94,11 @@ struct ContentView: View {
         .id(language)
         .environment(\.locale, language.locale)
         .onAppear {
+            // Here rather than in the App's init: GameKit's sign-in screen
+            // needs a window to be presented from, and there isn't one yet
+            // when the App value is built.
+            GameCenter.authenticate()
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 withAnimation(.easeInOut(duration: 0.5)) {
                     showSplashScreen = false
