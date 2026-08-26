@@ -134,7 +134,7 @@ final class GameStateManager: ObservableObject {
 
     /// How much the clock tightens at each step. 1.25 means each new tier gets
     /// 1 / 1.25 = 80% of the time the previous tier had for the same dish.
-    private static let speedUpFactor: Double = 1.25
+    private static let speedUpFactor: Double = 1.2
 
     /// A floor on the squeezed time, so a very long run stays *hard* rather
     /// than tipping into impossible. Tune or remove to taste.
@@ -149,7 +149,7 @@ final class GameStateManager: ObservableObject {
 
     /// Base stagger between one ingredient bubble popping in and the next,
     /// before any speed-up — the pace a round fills in at on the first tier.
-    private static let baseSpawnStagger: TimeInterval = 0.35
+    private static let baseSpawnStagger: TimeInterval = 0.2
 
     /// A floor on the squeezed stagger, so even a very long run's board still
     /// fills in visibly rather than snapping in all at once.
@@ -167,7 +167,7 @@ final class GameStateManager: ObservableObject {
     /// music speed equal `difficultyMultiplier` outright (so 1.25× on the first
     /// speed-up); lower values ramp the tempo up more gently than the clock.
     /// Tune to taste — 0.5 gives a noticeable-but-not-frantic climb.
-    private static let musicTempoIntensity: Float = 0.5
+    private static let musicTempoIntensity: Float = 0.3
 
     /// The background-music playback speed for the current tier. On tier 0 it is
     /// `1.0` (normal speed) and it climbs from there, blended toward normal by
@@ -400,6 +400,7 @@ final class GameStateManager: ObservableObject {
         if outcome.newHighScore {
             GameStorage.highscore = outcome.totalDishesServed
         }
+        GameCenter.submit(outcome.totalDishesServed)
     }
 
     // MARK: - Plate interaction (called by GameScene)

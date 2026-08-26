@@ -9,7 +9,6 @@ struct Recipe: Identifiable, Equatable, Hashable {
     var id: String { name }
     let name: String
     let ingredients: [Ingredient]
-    let scoreValue: Int
 
     /// Seconds the player gets to **assemble** this dish before it costs a
     /// life. Serving it afterwards is not timed.
@@ -28,32 +27,28 @@ extension Recipe {
     static let chickenMayonnaise: Recipe = Recipe(
         name: "Chichken Mayonnaise",
         ingredients: [.chicken, .mayonnaise],
-        scoreValue: 15,
-        timeLimit: 10,
+        timeLimit: 13,
         finishedDishImageName: "ChickenMayonnaise"
     )
 
     static let chickenCheese: Recipe = Recipe(
         name: "Chicken Cheese",
         ingredients: [.chicken, .cheese],
-        scoreValue: 15,
-        timeLimit: 10,
+        timeLimit: 13,
         finishedDishImageName: "ChickenMozarella"
     )
 
     static let salad = Recipe(
         name: "Salad",
         ingredients: [.lettuce, .cucumber, .tomato, .mayonnaise],
-        scoreValue: 20,
-        timeLimit: 10,
+        timeLimit: 23,
         finishedDishImageName: "salad"
     )
 
     static let chickenGeprek = Recipe(
         name: "Chichken Geprek",
         ingredients: [.chicken, .chili, .cucumber],
-        scoreValue: 25,
-        timeLimit: 10,
+        timeLimit: 18,
         finishedDishImageName: "ChickenGeprek"
     )
 
