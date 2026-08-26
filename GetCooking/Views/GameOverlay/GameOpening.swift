@@ -111,7 +111,7 @@ struct GameOpening: View {
                 .frame(width: h * 0.06, height: h * 0.06)
 
             Text("\(coinCount)")
-                .font(.system(size: h * 0.05, weight: .heavy, design: .rounded))
+                .font(.custom(size: h * 0.05, weight: .heavy))
                 .foregroundStyle(.black)
         }
         .padding(.horizontal, h * 0.028)
@@ -134,10 +134,10 @@ struct GameOpening: View {
                 GeometryReader { g in
                     VStack(spacing: g.size.height * 0.03) {
                         Image(systemName: "play.fill")
-                            .font(.system(size: g.size.height * 0.16, weight: .bold))
+                            .font(.custom(size: g.size.height * 0.16, weight: .bold))
                         
                         Text("Tap to Play")
-                            .font(.system(size: g.size.height * 0.1, weight: .bold, design: .rounded))
+                            .font(.custom(size: g.size.height * 0.1, weight: .bold))
                     }
                     .foregroundStyle(.black)
                     // The plate sits a touch above the tray's centre.
@@ -171,7 +171,7 @@ struct GameOpening: View {
                         .position(x: g.size.width * 0.5, y: g.size.height * 0.425)
 
                     Text("Most Dishes Served")
-                        .font(.system(size: g.size.height * 0.072, weight: .heavy, design: .rounded))
+                        .font(.custom(size: g.size.height * 0.072, weight: .bold))
                         .foregroundStyle(.black)
                         .minimumScaleFactor(0.5)
                         .lineLimit(1)
@@ -179,7 +179,7 @@ struct GameOpening: View {
                         .position(x: g.size.width * 0.5, y: g.size.height * 0.425)
 
                     Text(verbatim: "\(mostDishesServed)")
-                        .font(.system(size: g.size.height * 0.22, weight: .heavy, design: .rounded))
+                        .font(.custom(size: g.size.height * 0.22, weight: .bold))
                         .foregroundStyle(.white)
                         .position(x: g.size.width * 0.5, y: g.size.height * 0.72)
                 }

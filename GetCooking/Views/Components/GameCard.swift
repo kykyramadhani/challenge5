@@ -30,7 +30,7 @@ struct GameCard: View {
                 )
 
             Text(game.title)
-                .font(.system(size: 64, weight: .bold))
+                .font(.custom(size: 64, weight: .bold))
                 .foregroundStyle(.appPrimary)
         }
         .padding(24)

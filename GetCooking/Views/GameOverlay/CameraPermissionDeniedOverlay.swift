@@ -16,11 +16,11 @@ struct CameraPermissionDeniedOverlay: View {
                 .frame(width: 260, height: 260)
             
             Text("Camera Permission is Required")
-                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .font(.custom(size: 44, weight: .bold))
                 .foregroundStyle(.appTertiaryText)
             
             Text("Go to your settings and allow access to your camera")
-                .font(.system(size: 24, weight: .medium, design: .rounded))
+                .font(.custom(size: 24, weight: .medium))
                 .foregroundStyle(.appTertiaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 520)

@@ -75,7 +75,7 @@ struct SeatCalibrationView: View {
 
                 VStack(spacing: 0) {
                     Text(instructionText)
-                        .font(.system(size: 44, weight: .black))
+                        .font(.custom(size: 44, weight: .bold))
                         .foregroundStyle(.white)
                         .outlined(width: 4)
                         .frame(maxHeight: .infinity, alignment: .center)

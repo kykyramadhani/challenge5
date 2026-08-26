@@ -197,7 +197,7 @@ struct TutorialView: View {
                     // "you have read it, now move on" rather than hurrying the
                     // player past a sentence still being typed.
                     Text("Tap anywhere to continue →")
-                        .font(.system(size: 25 * scale))
+                        .font(.custom(size: 25 * scale))
                         .foregroundStyle(Self.promptGrey)
                         .padding(.leading, 12 * scale)
                         .opacity(isTyping ? 0 : 1)
@@ -219,7 +219,7 @@ struct TutorialView: View {
                     Image(systemName: "forward.fill")
                         .font(.system(size: 30 * scale, weight: .black))
                     Text(isLastPage ? "Start Game" : "Skip")
-                        .font(.system(size: 44 * scale, weight: .bold))
+                        .font(.custom(size: 44 * scale, weight: .bold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
                 }

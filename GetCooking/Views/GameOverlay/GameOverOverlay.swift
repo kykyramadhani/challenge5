@@ -31,7 +31,7 @@ struct GameOverOverlay: View {
                 .ignoresSafeArea()
 
             Text("Shift Over")
-                .font(.system(size: 96, weight: .heavy, design: .rounded))
+                .font(.custom(size: 96, weight: .bold))
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
                 .scaleEffect(titleScale)

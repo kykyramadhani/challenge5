@@ -4,7 +4,7 @@
 //
 //  The in-game settings card: music and sound-effects volume, language, and
 //  one-hand mode. Presented as a dimmed overlay from the main menu (see
-//  MainMenuView), not a system sheet, so it matches the game's own styling.
+//  MainMenuView), not a custom sheet, so it matches the game's own styling.
 //
 //  Volumes are stored in UserDefaults under the keys AudioManager reads at
 //  launch, and pushed live into AudioManager as the sliders move. Picking a
@@ -46,7 +46,7 @@ struct SettingsView: View {
     private var card: some View {
         VStack(spacing: 28) {
             Text("SETTINGS")
-                .font(.system(size: 48, weight: .bold))
+                .font(.custom(size: 48, weight: .bold))
                 .foregroundStyle(.appTertiary)
                 .padding(.top, 60)
                 .padding(.bottom, 60)
@@ -130,7 +130,7 @@ struct SettingsView: View {
     ) -> some View {
         HStack(spacing: 24) {
             Text(title)
-                .font(.system(size: 34, weight: .bold))
+                .font(.custom(size: 34, weight: .bold))
                 .foregroundStyle(.appTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -145,7 +145,7 @@ struct SettingsView: View {
             onClose()
         }) {
             Image(systemName: "xmark")
-                .font(.system(size: 34, weight: .bold))
+                .font(.custom(size: 34, weight: .bold))
                 .foregroundStyle(.appBackground)
                 .frame(width: 100, height: 100)
                 .background(.white, in: Circle())
@@ -243,7 +243,7 @@ struct SegmentedPill: View {
             action()
         }) {
             Text(title)
-                .font(.system(size: 22, weight: .bold))
+                .font(.custom(size: 22, weight: .bold))
                 .foregroundStyle(selected ? Color.white : Color.appTertiaryText)
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
