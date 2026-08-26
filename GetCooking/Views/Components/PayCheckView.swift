@@ -59,7 +59,7 @@ struct PayCheckView: View {
                             if result.hasMultiplier {
                                 lineRow(
                                     label: "Coin Multiplier x2",
-                                    value: result.totalCoins,
+                                    value: result.baseCoins,
                                     height: h
                                 )
                             }
