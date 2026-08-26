@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 struct ShopItem: Identifiable, Hashable {
     let id: String
@@ -17,11 +18,14 @@ struct ShopItem: Identifiable, Hashable {
 
     static let coinMultiplier = ShopItem(
         id: "coin_multiplier_2x",
-        name: "Coin Multiplier",
-        description: "Multiplies total coins earned by 2 in your next game run!",
+        name: "shopItem.coinMultiplier.name",
+        description: "shopItem.coinMultiplier.description",
         price: 100,
         multiplier: 2,
         imageName: "Coin"
+        
+        //        name: "Coin Multiplier",
+        //        description: "Multiplies total coins earned by 2 in your next game run!",
     )
 
     static let all: [ShopItem] = [

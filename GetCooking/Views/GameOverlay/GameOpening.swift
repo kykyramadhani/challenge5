@@ -92,6 +92,10 @@ struct GameOpening: View {
         .onAppear {
             coinCount = GameStorage.coins
             mostDishesServed = GameStorage.highscore
+            // Main-menu theme. Loops until the player starts a run, where
+            // GameplayView stops it. startMusic is idempotent, so returning to
+            // the menu (from the shop or the results screen) never restarts it.
+            AudioManager.shared.startMusic("home_soundtrack")
         }
         .animation(.easeInOut(duration: 0.2), value: showSettings)
     }
