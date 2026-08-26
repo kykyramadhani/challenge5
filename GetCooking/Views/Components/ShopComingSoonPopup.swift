@@ -24,11 +24,11 @@ struct ShopComingSoonPopup: View {
                     .frame(width: 260, height: 260)
 
                 Text("Shop Opening Soon!")
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .font(.atkinson(size: 44, weight: .bold))
                     .foregroundStyle(.appTertiaryText)
 
                 Text("Our shop is under maintanence — check back soon to spend your coins!")
-                    .font(.system(size: 24, weight: .medium, design: .rounded))
+                    .font(.atkinson(size: 24, weight: .medium))
                     .foregroundStyle(.appTertiaryText)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 520)

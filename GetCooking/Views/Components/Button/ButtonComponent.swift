@@ -26,7 +26,7 @@ struct ButtonComponent: View {
                     .foregroundStyle(buttonStyle.textColor)
 
                 Text(name)
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.atkinson(size: 34, weight: .bold))
                     .foregroundStyle(buttonStyle.textColor)
             }
             .padding(.horizontal, 40)

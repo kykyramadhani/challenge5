@@ -45,7 +45,7 @@ struct ShopView: View {
                 VStack(spacing: h * 0.04) {
                     // Screen Title "Shops" in the middle
                     Text("Shops")
-                        .font(.system(size: h * 0.09, weight: .heavy, design: .rounded))
+                        .font(.atkinson(size: h * 0.09, weight: .heavy))
                         .foregroundStyle(.appTertiaryText)
                         .padding(.top, h * 0.06)
 
@@ -69,7 +69,7 @@ struct ShopView: View {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.yellow)
                             Text("Not enough coins!")
-                                .font(.system(size: 22, weight: .bold, design: .rounded))
+                                .font(.atkinson(size: 22, weight: .bold))
                                 .foregroundStyle(.white)
                         }
                         .padding(.horizontal, 28)
@@ -107,7 +107,7 @@ struct ShopView: View {
                 .frame(width: h * 0.055, height: h * 0.055)
 
             Text("\(coinCount)")
-                .font(.system(size: h * 0.045, weight: .heavy, design: .rounded))
+                .font(.atkinson(size: h * 0.045, weight: .heavy))
                 .foregroundStyle(.black)
         }
         .padding(.horizontal, h * 0.024)
@@ -129,7 +129,7 @@ struct ShopView: View {
             HStack {
                 Spacer()
                 Text("Owned: \(inventoryManager.coinMultipliers)")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(.atkinson(size: 16, weight: .bold))
                     .foregroundStyle(.appTertiaryText)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
@@ -145,12 +145,12 @@ struct ShopView: View {
 
             // Item Title
             Text(LocalizedStringKey(item.name))
-                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .font(.atkinson(size: 26, weight: .bold))
                 .foregroundStyle(.appTertiaryText)
 
             // Item Description
             Text(LocalizedStringKey(item.description))
-                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .font(.atkinson(size: 15, weight: .medium))
                 .foregroundStyle(.appSecondaryText)
                 .multilineTextAlignment(.center)
                 .frame(height: 44)
@@ -167,11 +167,11 @@ struct ShopView: View {
                         .frame(width: 26, height: 26)
 
                     Text("\(item.price)")
-                        .font(.system(size: 22, weight: .heavy, design: .rounded))
+                        .font(.atkinson(size: 22, weight: .heavy))
                         .foregroundStyle(.white)
 
                     Text("Buy")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .font(.atkinson(size: 20, weight: .bold))
                         .foregroundStyle(.white)
                 }
                 .frame(maxWidth: .infinity)

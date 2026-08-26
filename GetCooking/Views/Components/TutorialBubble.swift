@@ -99,7 +99,7 @@ struct TutorialBubble: View {
 
     private func label(_ string: String) -> some View {
         Text(string)
-            .font(.system(size: Self.fontSize * scale, weight: .bold))
+            .font(.atkinson(size: Self.fontSize * scale, weight: .bold))
             .multilineTextAlignment(.center)
             .lineSpacing(Self.lineSpacing * scale)
             .foregroundStyle(.black)

@@ -21,7 +21,7 @@ struct GetReadyOverlay: View {
             // Only on the first beat. By the second the player has read it,
             // and leaving it up just crowds the numbers.
             Text("GET READY!")
-                .font(.system(size: 56, weight: .black))
+                .font(.atkinson(size: 56, weight: .black))
                 .opacity(count == 3 ? 1 : 0)
                 .padding(.top, 140)
 
@@ -31,7 +31,7 @@ struct GetReadyOverlay: View {
             // starts on is unmistakable. Sized down a little because three
             // glyphs at 160pt overflow a narrow screen.
             Text(count > 0 ? "\(count)" : "GO!")
-                .font(.system(size: count > 0 ? 160 : 130, weight: .black))
+                .font(.atkinson(size: count > 0 ? 160 : 130, weight: .black))
                 .contentTransition(.numericText(countsDown: true))
                 .animation(.snappy, value: count)
 

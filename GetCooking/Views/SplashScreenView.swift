@@ -144,7 +144,7 @@ struct SplashScreenView: View {
 
                 // App Title / Brand Text
                 Text("PlayFeat!")
-                    .font(.system(size: 42, weight: .heavy, design: .rounded))
+                    .font(.atkinson(size: 42, weight: .heavy))
                     .foregroundStyle(brandRedOrange)
                     .scaleEffect(isVisible ? 1.0 : 0.9)
                     .opacity(isVisible ? 1.0 : 0.0)

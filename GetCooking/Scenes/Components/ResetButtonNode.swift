@@ -45,7 +45,7 @@ final class ResetButtonNode: SKNode {
 
     private func setupLabel() {
         let text = "Reset"
-        let fontName = "SFPro-Bold"
+        let fontName = Atkinson.bold
         let fontSize = resetRadius * 0.8
         let outlineWidth: CGFloat = 2.0   // outline thickness in points
 

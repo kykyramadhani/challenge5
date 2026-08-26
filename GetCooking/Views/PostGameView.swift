@@ -141,7 +141,7 @@ struct foodPlate: View {
                 .frame(width: width * 0.7, height: height * 0.7)
 
             Text("x\(dishServed)")
-                .font(.system(size: 40, weight: .bold, design: .rounded))
+                .font(.atkinson(size: 40, weight: .bold))
                 .foregroundColor(.appPrimary)
                 .offset(x: width * 0.5, y: height * 0.4)
         }

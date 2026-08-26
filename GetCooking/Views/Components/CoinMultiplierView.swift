@@ -21,7 +21,7 @@ struct coinMultiplier: View {
                 .frame(width: width, height: height)
 
             Text("x2")
-                .font(.system(size: width * 0.28, weight: .bold, design: .rounded))
+                .font(.atkinson(size: width * 0.28, weight: .bold))
                 .foregroundColor(.appTertiaryText)
                 .offset(x: width * 0.5, y: height * 0.28)
         }
