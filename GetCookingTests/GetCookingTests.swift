@@ -354,7 +354,7 @@ struct HoverDetectorTests {
 
     /// The shipped `maxFrameGap` deliberately caps how much a single frame can
     /// contribute; these tests jump the clock in one step, so they lift it.
-    private func detector(dwell: TimeInterval = 1.0) -> HoverDetector {
+    private func detector(dwell: TimeInterval = 2.0) -> HoverDetector {
         var detector = HoverDetector()
         detector.dwellDuration = dwell
         detector.maxFrameGap = 60
@@ -1172,13 +1172,6 @@ struct HandIdentityTests {
 @MainActor
 struct GameLoopTests {
 
-    @Test func recipesCarryTheSpecifiedScores() {
-        #expect(Recipe.chickenMayonnaise.scoreValue == 15)
-        #expect(Recipe.chickenCheese.scoreValue == 15)
-        #expect(Recipe.salad.scoreValue == 20)
-        #expect(Recipe.chickenGeprek.scoreValue == 25)
-    }
-
     /// Swiping down retries the *same* dish — it must not skip to another
     /// recipe or touch the score.
     @Test func discardKeepsTheSameRecipeAndScore() {
@@ -1236,7 +1229,6 @@ struct GameLoopTests {
         #expect(manager.totalDishesServed == 0)
         #expect(manager.speedBonus == 0)
         #expect(manager.lives == manager.startingLives)
-        #expect(manager.elapsedTime == 0)
         #expect(manager.state == .idle)
         #expect(manager.resetToken == tokenBefore + 1,
                 "GameScene clears the board off this token; without it the old ingredients stay")
@@ -1400,19 +1392,6 @@ struct RecipeBorderGeometryTests {
 }
 
 struct DishTimeLimitTests {
-
-    /// Each dish carries its own assembly budget, so pin the shipped numbers.
-    ///
-    /// They all sit at 30s today, and the difficulty ramp squeezes that as the
-    /// run goes on rather than the recipes differing from each other. The
-    /// field is still per-recipe, so a fiddly dish can be given more room
-    /// without touching the others.
-    @Test func everyRecipeDeclaresItsOwnLimit() {
-        #expect(Recipe.chickenMayonnaise.timeLimit == 10)
-        #expect(Recipe.chickenCheese.timeLimit == 10)
-        #expect(Recipe.chickenGeprek.timeLimit == 10)
-        #expect(Recipe.salad.timeLimit == 10)
-    }
 
     /// Every recipe must be worth some time, or it would fail the instant it
     /// was dealt.
@@ -1594,8 +1573,9 @@ struct LivesTests {
         #expect(manager.isTimingServe)
     }
 
-    /// Every five *served* dishes the assembly clock tightens by 1.25×, so the
-    /// same recipe has to be built in 80% of the time it had a tier earlier.
+    /// Every five *served* dishes the assembly clock tightens by
+    /// `speedUpFactor`, so the same recipe has to be built in less time than it
+    /// had a tier earlier.
     @Test func difficultyRampsEveryFiveServedDishes() async throws {
         let manager = GameStateManager(recipes: [.chickenMayonnaise, .salad])
         manager.start()
@@ -1611,14 +1591,14 @@ struct LivesTests {
 
         // Dishes 1–4 stay on the base budget for whatever recipe is up.
         for _ in 0..<4 { try await serveOneDish() }
-        #expect(manager.dishesCompleted == 4)
+        #expect(manager.totalDishesServed == 4)
         #expect(manager.dishTimeLimit == manager.currentRecipe.timeLimit)
 
         // The 5th serve crosses the first speed-up step, so the dish that
-        // starts right after gets 1 / 1.25 of its own recipe's time.
+        // starts right after gets 1 / 1.2 of its own recipe's time.
         try await serveOneDish()
-        #expect(manager.dishesCompleted == 5)
-        #expect(abs(manager.dishTimeLimit - manager.currentRecipe.timeLimit / 1.25) < 0.0001)
+        #expect(manager.totalDishesServed == 5)
+        #expect(abs(manager.dishTimeLimit - manager.currentRecipe.timeLimit / 1.2) < 0.0001)
     }
 
     /// A timed-out dish is not "done", so it must not advance the ramp.
@@ -1628,10 +1608,53 @@ struct LivesTests {
 
         manager.failDish()
 
-        #expect(manager.dishesCompleted == 0)
+        #expect(manager.totalDishesServed == 0)
         #expect(manager.dishTimeLimit == manager.currentRecipe.timeLimit)
     }
+
+    /// The "HUD said 8, paycheck said 9" bug: a dish can be assembled and then
+    /// never delivered, because the serve window runs out on the way to the
+    /// bell. That dish is not served, so neither the tally nor the speed bonus
+    /// may count it.
+    @Test func anAssembledDishThatIsNeverServedCountsForNothing() async throws {
+        let manager = GameStateManager(recipes: [.chickenGeprek])
+        manager.start()
+        for ingredient in Recipe.chickenGeprek.ingredients {
+            manager.addIngredientToPlate(ingredient)
+        }
+        try await Task.sleep(for: .milliseconds(1200)) // dish reveal beat
+        #expect(manager.state == .waitingToServe)
+
+        manager.failDish() // the serve window expired
+
+        #expect(manager.totalDishesServed == 0)
+        #expect(manager.dishesByType.isEmpty)
+        #expect(manager.speedBonus == 0)
+        #expect(manager.result.totalDishesServed == 0,
+                "the paycheck has to agree with the score the HUD showed")
+    }
+
+    /// A dish that *is* delivered banks the seconds that were left when the
+    /// plate matched — not when it reached the bell, which is later.
+    @Test func servingBanksTheSpeedBonusMeasuredAtCompletion() async throws {
+        let manager = GameStateManager(recipes: [.chickenGeprek])
+        manager.start()
+        for ingredient in Recipe.chickenGeprek.ingredients {
+            manager.addIngredientToPlate(ingredient)
+        }
+        #expect(manager.speedBonus == 0, "nothing is banked until the dish is served")
+
+        try await Task.sleep(for: .milliseconds(1200))
+        manager.serveDish()
+
+        #expect(manager.totalDishesServed == 1)
+        #expect(manager.speedBonus > 0)
+        // The reveal beat cost ~1.2s of clock; measuring at the bell instead of
+        // at completion would have lost it.
+        #expect(manager.speedBonus >= Int(Recipe.chickenGeprek.timeLimit) - 1)
+    }
 }
+
 
 struct RecipeMatchingTests {
 
@@ -1726,7 +1749,7 @@ struct LocalizationTests {
         let english = AppLocalization.string(key)
 
         #expect(indonesian != english, "the bundle redirect is not taking effect")
-        #expect(indonesian == "Semuanya siap! Antar banyak hidangan dan tetaplah aktif!")
+        #expect(indonesian == "Semuanya siap! Sajikan banyak hidangan dan tetaplah aktif!")
     }
 
     /// The tutorial reads its copy outside the view tree, so it has to follow

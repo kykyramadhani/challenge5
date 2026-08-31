@@ -27,8 +27,9 @@ final class GameStateManager: ObservableObject {
     /// "Speed Bonus".
     @Published private(set) var speedBonus: Int = 0
 
-    /// Every dish completed this run, all kinds summed — the paycheck's
-    /// "Dishes Served" count.
+    /// Every dish served this run, all kinds summed. The one and only served
+    /// count: the HUD, the difficulty ramp and the paycheck all read this, so
+    /// they cannot drift apart the way a separate counter did.
     var totalDishesServed: Int { dishesByType.values.reduce(0, +) }
 
     /// Whether a coin multiplier is active for this run.
@@ -43,10 +44,6 @@ final class GameStateManager: ObservableObject {
     /// Which edge the bell rang on, and so which way the plate has to be
     /// carried. Nil whenever no dish is waiting to be served.
     @Published private(set) var bellSide: SwipeDirection?
-
-    /// Seconds survived so far. The run has no clock to beat — it ends when
-    /// the lives run out — so this counts *up*, and is what PostGame reports.
-    @Published private(set) var elapsedTime: Int = 0
 
     /// Lives left. Every dish that times out costs one; at zero the run ends.
     @Published private(set) var lives: Int
@@ -104,13 +101,17 @@ final class GameStateManager: ObservableObject {
     ///
     /// Deliberately not `@Published`: `GameScene` reads `dishTimeFraction` off
     /// it every frame, and republishing at frame rate would re-render the
-    /// whole SwiftUI HUD for a shape only SpriteKit draws. The whole-second
-    /// mirror the HUD *does* want is `elapsedTime`.
+    /// whole SwiftUI HUD for a shape only SpriteKit draws.
     private var playClock: TimeInterval = 0
     private var lastTick: TimeInterval = CACurrentMediaTime()
 
     /// `playClock` reading at which the current dish runs out.
     private var dishDeadline: TimeInterval = 0
+
+    /// Seconds left on the clock when the plate matched, held until the dish is
+    /// actually served. Only ever written by `checkForCompletion()` and read by
+    /// `serveDish()`, which can only run after it — so it never goes stale.
+    private var pendingSpeedBonus: Int = 0
 
     /// What the current dish started with, so the countdown ring knows the
     /// full sweep its fraction is measured against.
@@ -124,16 +125,11 @@ final class GameStateManager: ObservableObject {
     // slow ramps up at the same rate as one who rushes — progress, not the
     // wall clock, is what raises the stakes.
 
-    /// Dishes successfully served this run. Published so the HUD could show a
-    /// level later; it only changes once per dish, never per frame, so it
-    /// costs no per-frame re-render.
-    @Published private(set) var dishesCompleted: Int = 0
-
     /// How many served dishes between each speed-up step.
     private static let dishesPerSpeedUp = 5
 
-    /// How much the clock tightens at each step. 1.25 means each new tier gets
-    /// 1 / 1.25 = 80% of the time the previous tier had for the same dish.
+    /// How much the clock tightens at each step. 1.2 means each new tier gets
+    /// 1 / 1.2 ≈ 83% of the time the previous tier had for the same dish.
     private static let speedUpFactor: Double = 1.2
 
     /// A floor on the squeezed time, so a very long run stays *hard* rather
@@ -142,9 +138,9 @@ final class GameStateManager: ObservableObject {
 
     /// The compounding multiplier for the current tier: `speedUpFactor` raised
     /// to the number of speed-up steps reached so far. 0–4 dishes → 1.0,
-    /// 5–9 → 1.25, 10–14 → 1.5625, and so on.
+    /// 5–9 → 1.2, 10–14 → 1.44, and so on.
     private var difficultyMultiplier: Double {
-        pow(Self.speedUpFactor, Double(dishesCompleted / Self.dishesPerSpeedUp))
+        pow(Self.speedUpFactor, Double(totalDishesServed / Self.dishesPerSpeedUp))
     }
 
     /// Base stagger between one ingredient bubble popping in and the next,
@@ -262,8 +258,6 @@ final class GameStateManager: ObservableObject {
         bellSide = nil
         isPaused = false
         playClock = 0
-        elapsedTime = 0
-        dishesCompleted = 0
         hasMultiplier = InventoryManager.shared.getMultiplierCount() > 0
         currentRecipe = recipePool.randomElement()!
         resetToken += 1
@@ -301,11 +295,6 @@ final class GameStateManager: ObservableObject {
             return
         }
         playClock += delta
-
-        // Only whole seconds reach the HUD, so this publishes once a second
-        // rather than at the tick rate.
-        let whole = Int(playClock)
-        if whole != elapsedTime { elapsedTime = whole }
 
         // `isTimingDish` and not just the deadline: each clock only applies in
         // the phase it belongs to, so neither can fire while the other is the
@@ -445,10 +434,13 @@ final class GameStateManager: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             AudioManager.shared.play(.addPoint)
         }
-        // Counts only served dishes — a timed-out dish (failDish) doesn't ramp
-        // difficulty. startNewRound() reads the new count when it begins the
-        // next dish's clock, so the speed-up lands on the very next dish.
-        dishesCompleted += 1
+        // Banked here, not when the plate matched: an assembled dish whose
+        // serve window ran out never reached the bell, and counting it there
+        // was what made the paycheck read one dish higher than the HUD.
+        // startNewRound() reads the new count when it begins the next dish's
+        // clock, so the speed-up lands on the very next dish.
+        dishesByType[currentRecipe.finishedDishImageName, default: 0] += 1
+        speedBonus += pendingSpeedBonus
         startNewRound()
     }
 
@@ -462,10 +454,12 @@ final class GameStateManager: ObservableObject {
 
     private func checkForCompletion() {
         guard Self.matches(plateContents: plateContents, recipe: currentRecipe) else { return }
-        // Bank the dish and its leftover time *now*, while the dish clock still
-        // reads the moment of completion — it keeps ticking down as the player
-        // carries the plate to the bell, so reading it later would under-count.
-        recordCompletedDish()
+        // Measured *now*, while the dish clock still reads the moment of
+        // completion — it keeps ticking down as the player carries the plate to
+        // the bell, so reading it later would under-count. Paid out in
+        // serveDish(), so an undelivered dish banks nothing.
+        // Whole seconds only — 3.7s left banks 3.
+        pendingSpeedBonus = max(0, Int(dishDeadline - playClock))
         state = .dishComplete
         
         // The plate is right
@@ -477,16 +471,6 @@ final class GameStateManager: ObservableObject {
             self.serveDeadline = self.playClock + Self.serveTimeLimit
             self.state = .waitingToServe
         }
-    }
-
-    /// Records a just-completed dish: adds it to its per-type tally and banks
-    /// however many whole seconds were left on its clock as speed bonus.
-    private func recordCompletedDish() {
-        dishesByType[currentRecipe.finishedDishImageName, default: 0] += 1
-
-        // Whole seconds still on the clock — floored, so 3.7s left banks 3.
-        let secondsLeft = max(0, Int(dishDeadline - playClock))
-        speedBonus += secondsLeft
     }
 
     private func startNewRound() {

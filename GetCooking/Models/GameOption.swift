@@ -13,17 +13,14 @@ enum GameType: String, Codable {
 
 struct GameOption: Identifiable, Hashable, Equatable {
     let id = UUID()
-    let title: String
-    let type : GameType
+    let type: GameType
     let imageName: String
     let isAvailable: Bool
-    var highScore: Int?
     var requiresCalibration = false
 }
 
 extension GameOption {
     static let all: [GameOption] = [
-        GameOption(title: "GetCooking", type: .getCooking, imageName: "GetCooking", isAvailable: true, highScore: 1000, requiresCalibration: true),
-//        GameOption(title: "Coming Soon", type: .getCooking, imageName: "ComingSoon", isAvailable: false, highScore: nil),
+        GameOption(type: .getCooking, imageName: "GetCooking", isAvailable: true, requiresCalibration: true),
     ]
 }

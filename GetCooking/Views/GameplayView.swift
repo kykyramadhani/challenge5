@@ -177,7 +177,7 @@ struct GameplayView: View {
                         Spacer()
 
                         PointCard(
-                            dishesServed: gameStateManager.dishesCompleted
+                            dishesServed: gameStateManager.totalDishesServed
                         )
 
                         Spacer()

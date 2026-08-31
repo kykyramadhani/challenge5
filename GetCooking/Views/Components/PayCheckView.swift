@@ -8,11 +8,6 @@
 import SwiftUI
 
 struct PayCheckView: View {
-//    let totalDishServed: Int
-//    let speedBonus: Int
-//    let dishesEarning: Int
-//    let totalCoins: Int
-    
     let result: GameResult
 
     /// The coin total, tweened up from zero on appear. Kept as a `Double` so
