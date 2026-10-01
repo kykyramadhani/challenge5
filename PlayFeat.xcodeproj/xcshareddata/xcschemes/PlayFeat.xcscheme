@@ -1,27 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "2660"
+   LastUpgradeVersion = "2700"
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
       buildImplicitDependencies = "YES"
       buildArchitectures = "Automatic">
-      <BuildActionEntries>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "YES"
-            buildForProfiling = "YES"
-            buildForArchiving = "YES"
-            buildForAnalyzing = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "2DD7B436302B444200DC904E"
-               BuildableName = "GetCooking.app"
-               BlueprintName = "GetCooking"
-               ReferencedContainer = "container:GetCooking.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
-      </BuildActionEntries>
    </BuildAction>
    <TestAction
       buildConfiguration = "Debug"
@@ -36,9 +20,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2DD7B443302B444200DC904E"
-               BuildableName = "GetCookingTests.xctest"
-               BlueprintName = "GetCookingTests"
-               ReferencedContainer = "container:GetCooking.xcodeproj">
+               BuildableName = "PlayFeatTests.xctest"
+               BlueprintName = "PlayFeatTests"
+               ReferencedContainer = "container:PlayFeat.xcodeproj">
             </BuildableReference>
          </TestableReference>
          <TestableReference
@@ -47,9 +31,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2DD7B44D302B444200DC904E"
-               BuildableName = "GetCookingUITests.xctest"
-               BlueprintName = "GetCookingUITests"
-               ReferencedContainer = "container:GetCooking.xcodeproj">
+               BuildableName = "PlayFeatUITests.xctest"
+               BlueprintName = "PlayFeatUITests"
+               ReferencedContainer = "container:PlayFeat.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -71,9 +55,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2DD7B436302B444200DC904E"
-            BuildableName = "GetCooking.app"
-            BlueprintName = "GetCooking"
-            ReferencedContainer = "container:GetCooking.xcodeproj">
+            BuildableName = "PlayFeat.app"
+            ReferencedContainer = "container:PlayFeat.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -83,16 +66,14 @@
       savedToolIdentifier = ""
       useCustomWorkingDirectory = "NO"
       debugDocumentVersioning = "YES">
-      <BuildableProductRunnable
-         runnableDebuggingMode = "0">
+      <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2DD7B436302B444200DC904E"
-            BuildableName = "GetCooking.app"
-            BlueprintName = "GetCooking"
-            ReferencedContainer = "container:GetCooking.xcodeproj">
+            BuildableName = "PlayFeat.app"
+            ReferencedContainer = "container:PlayFeat.xcodeproj">
          </BuildableReference>
-      </BuildableProductRunnable>
+      </MacroExpansion>
    </ProfileAction>
    <AnalyzeAction
       buildConfiguration = "Debug">
