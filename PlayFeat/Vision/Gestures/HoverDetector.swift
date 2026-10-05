@@ -59,7 +59,9 @@ struct HoverDetector {
         guard !hasFired else { return false }
 
         elapsed += delta
-        guard elapsed >= dwellDuration else { return false }
+        guard elapsed >= dwellDuration else {
+            return false
+        }
 
         hasFired = true
         elapsed = 0

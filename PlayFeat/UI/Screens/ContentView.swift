@@ -37,7 +37,7 @@ struct ContentView: View {
     /// that has already been laid out, and views only rebuild for state they
     /// actually read.
     @AppStorage(AppLocalization.storageKey) private var language: AppLanguage = .english
-
+    
     var body: some View {
         ZStack {
             // The camera preview lives inside GameplayView — the only screen that

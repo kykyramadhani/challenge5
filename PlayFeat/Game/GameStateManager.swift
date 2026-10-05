@@ -441,10 +441,12 @@ final class GameStateManager: ObservableObject {
         guard state == .waitingToServe else { return }
         // The order is handed over…
         AudioManager.shared.play(.putOrder)
+        
         // …and the reward chime lands a beat later.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             AudioManager.shared.play(.addPoint)
         }
+        
         // Counts only served dishes — a timed-out dish (failDish) doesn't ramp
         // difficulty. startNewRound() reads the new count when it begins the
         // next dish's clock, so the speed-up lands on the very next dish.
