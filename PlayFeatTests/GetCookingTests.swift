@@ -10,7 +10,7 @@ import CoreGraphics
 import SpriteKit
 import SwiftUI
 import UIKit
-@testable import GetCooking
+@testable import PlayFeat
 
 @MainActor
 struct ArtAssetTests {

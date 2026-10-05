@@ -30,12 +30,25 @@ extension GameScene {
         // (previews / tests).
         let stagger = gameStateManager?.spawnStagger ?? spawnInterval
 
+        let plannedSize = size
         let steps = zip(toSpawn, scatterPoints(count: toSpawn.count)).map {
             ingredient,
             point in
             SKAction.sequence([
                 .wait(forDuration: stagger),
-                .run { [weak self] in self?.popIn(ingredient, at: point) },
+                .run { [weak self] in
+                    guard let self else { return }
+                    // The board was resized while this one was still queued,
+                    // so its planned spot belongs to the old size. Find it a
+                    // free one on the board as it is now.
+                    let spot = size == plannedSize
+                        ? point
+                        : scatterPoints(
+                            count: 1,
+                            avoiding: tableIngredients().map(\.position)
+                        )[0]
+                    popIn(ingredient, at: spot)
+                },
             ])
         }
         run(.sequence(steps), withKey: spawnActionKey)

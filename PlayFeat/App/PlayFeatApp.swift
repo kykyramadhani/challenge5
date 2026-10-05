@@ -18,7 +18,11 @@ struct PlayFeatApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG
+            ContentView().debugScreenSize()
+            #else
             ContentView()
+            #endif
         }
         .modelContainer(InventoryManager.shared.container)
     }

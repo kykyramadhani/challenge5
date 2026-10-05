@@ -37,9 +37,9 @@ final class GameScene: SKScene {
     /// out of the SwiftUI design canvas, since laying SpriteKit out on an
     /// oversized canvas means rendering a framebuffer several times bigger
     /// than the screen. The *limits* below are canvas points all the same, so
-    /// they get the canvas's scale applied by hand. On iPad this is 1 and
-    /// every number below is untouched.
-    var designScale: CGFloat { DesignCanvas.appliedScale(for: size) }
+    /// they get the canvas's scale applied by hand. On a 13" iPad this is 1
+    /// and every number below is untouched.
+    var designScale: CGFloat { DesignCanvas.scale(for: size) }
 
     var plateRadius: CGFloat {
         (shortEdge * 0.17).vc_clamped(to: 70 * designScale...150 * designScale)
@@ -185,6 +185,7 @@ final class GameScene: SKScene {
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
         layoutStaticNodes()
+        if size != oldSize { rescatterTableIngredients() }
     }
 
     // MARK: - Per-frame update
