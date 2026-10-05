@@ -1,4 +1,4 @@
-# GetCooking (aka VisionChef)
+# PlayFeat
 
 A hand-tracking cooking game for iOS/iPadOS (also runs iOS-on-Mac / Catalyst).
 The front camera fills the screen, Vision tracks your hands in real time, and
@@ -6,10 +6,7 @@ you grab floating ingredient bubbles with a fist, drag them onto a plate, and
 swipe left/right to serve once the plate matches the on-screen recipe.
 
 Product name in code is inconsistent on purpose-ish: the Xcode target/module
-is `GetCooking`, but several file headers and the app's `@main` struct still
-say `VisionChef` (`VisionChefApp.swift`) — same app, leftover naming from an
-earlier pass. Don't "fix" this without checking both names aren't relied on
-elsewhere (bundle id, scheme).
+is `PlayFeat`
 
 ## Stack
 
