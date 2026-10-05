@@ -18,11 +18,19 @@ struct PlayFeatApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            ContentView().debugScreenSize()
+            app.debugScreenSize()
             #else
-            ContentView()
+            app
             #endif
         }
-        .modelContainer(InventoryManager.shared.container)
+    }
+
+    private var app: some View {
+        PhoneSafeSides {
+            // Inside, not on the scene: PhoneSafeSides hosts the app
+            // separately, and environment doesn't reach across.
+            ContentView()
+                .modelContainer(InventoryManager.shared.container)
+        }
     }
 }
