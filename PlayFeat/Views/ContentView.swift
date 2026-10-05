@@ -86,6 +86,11 @@ struct ContentView: View {
                     .transition(.opacity.combined(with: .scale(scale: 1.02)))
                     .zIndex(100)
             }
+
+            #if DEBUG
+            DesignCanvasDebugBadge()
+                .zIndex(1000)
+            #endif
         }
         // Rebuilds the whole tree when the language changes. Redirecting the
         // bundle is not enough on its own: views already on screen keep the
@@ -98,6 +103,14 @@ struct ContentView: View {
             // needs a window to be presented from, and there isn't one yet
             // when the App value is built.
             GameCenter.authenticate()
+
+            #if DEBUG
+            if DebugLaunch.skipToGameplay {
+                hasCompletedOnboarding = true
+                sceneManager.finishTutorial()
+                sceneManager.play(GameOption.all[0])
+            }
+            #endif
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 withAnimation(.easeInOut(duration: 0.5)) {

@@ -63,7 +63,10 @@ struct GameplayView: View {
     /// The selected game asks for a seat check and the player hasn't passed it
     /// yet. Games without calibration skip straight to the board.
     private var needsCalibration: Bool {
-        sceneManager.selectedGame?.requiresCalibration ?? false
+        #if DEBUG
+        if DebugLaunch.skipToGameplay { return false }
+        #endif
+        return sceneManager.selectedGame?.requiresCalibration ?? false
     }
 
     var body: some View {
