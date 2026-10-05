@@ -87,10 +87,6 @@ struct ContentView: View {
                     .zIndex(100)
             }
 
-            #if DEBUG
-            DesignCanvasDebugBadge()
-                .zIndex(1000)
-            #endif
         }
         // Rebuilds the whole tree when the language changes. Redirecting the
         // bundle is not enough on its own: views already on screen keep the
@@ -105,6 +101,7 @@ struct ContentView: View {
             GameCenter.authenticate()
 
             #if DEBUG
+            DebugLaunch.applyLandscapeIfRequested()
             if DebugLaunch.skipToGameplay {
                 hasCompletedOnboarding = true
                 sceneManager.finishTutorial()

@@ -35,6 +35,54 @@ extension View {
     }
 }
 
+/// On a phone, turns the left and right safe areas into black bars and keeps
+/// the whole app between them.
+///
+/// Every screen here ignores the safe area to go full-bleed, which in
+/// landscape put the HUD, the menu buttons and the board's bubbles under the
+/// Dynamic Island or notch. Wrapped once around the root, so each screen
+/// (camera and SpriteKit board included) simply sees a narrower screen and the
+/// design canvas scales to fit it.
+///
+/// The app is hosted in its own UIHostingController rather than padded:
+/// SwiftUI hands a padded view the window's safe area all the same, so every
+/// `.ignoresSafeArea()` inside reached straight back out under the island.
+/// UIKit works the safe area out per view instead, and a view that starts
+/// where the island's inset ends has none left on that side — while top and
+/// bottom (the portrait island, the home indicator) still come through.
+///
+/// Environment does not cross that boundary, so anything the app reads from
+/// it has to be applied inside `content`. iPad gets `content` untouched.
+struct PhoneSafeSides<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            HostedContent(rootView: content)
+                // Full height, so top and bottom insets are the hosted app's
+                // to handle; the sides stay inside the safe area.
+                .ignoresSafeArea(edges: .vertical)
+                .background(Color.black.ignoresSafeArea())
+        } else {
+            content
+        }
+    }
+}
+
+private struct HostedContent<Content: View>: UIViewControllerRepresentable {
+    let rootView: Content
+
+    func makeUIViewController(context: Context) -> UIHostingController<Content> {
+        let host = UIHostingController(rootView: rootView)
+        host.view.backgroundColor = .clear
+        return host
+    }
+
+    func updateUIViewController(_ host: UIHostingController<Content>, context: Context) {
+        host.rootView = rootView
+    }
+}
+
 enum DesignCanvas {
     /// The page size the art and every hardcoded point value assume.
     static let size = TutorialView.pageSize
@@ -135,6 +183,9 @@ struct DesignCanvasDebugBadge: View {
 ///                                 8s, to exercise a mid-game rotation
 ///     -debugGameplay YES          skip onboarding, tutorial and seat check
 ///                                 and open straight onto the board
+///     -debugLandscape YES         turn a phone to landscape at launch, for
+///                                 checking the real Dynamic Island insets
+///                                 (which -debugScreenSize can't fake)
 enum DebugLaunch {
     static var screenSize: CGSize? {
         let parts = (UserDefaults.standard.string(forKey: "debugScreenSize") ?? "")
@@ -151,6 +202,13 @@ enum DebugLaunch {
 
     static var skipToGameplay: Bool {
         UserDefaults.standard.bool(forKey: "debugGameplay")
+    }
+
+    static func applyLandscapeIfRequested() {
+        guard UserDefaults.standard.bool(forKey: "debugLandscape"),
+              let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene
+        else { return }
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
     }
 }
 
