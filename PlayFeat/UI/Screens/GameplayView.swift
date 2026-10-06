@@ -24,9 +24,9 @@ import UIKit
 
 struct GameplayView: View {
     @Bindable var sceneManager: SceneManager
-    @ObservedObject var handPoseManager: HandPoseManager
+    var handPoseManager: HandPoseManager
 
-    @StateObject private var gameStateManager = GameStateManager()
+    @State private var gameStateManager = GameStateManager()
 
     @State private var scene = GameScene(size: CGSize(width: 1024, height: 768))
     @State private var showHandSkeleton = true

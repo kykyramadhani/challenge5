@@ -10,7 +10,7 @@
 import SwiftUI
 
 struct HandSkeletonView: View {
-    @ObservedObject var handPoseManager: HandPoseManager
+    var handPoseManager: HandPoseManager
 
     var body: some View {
         GeometryReader { proxy in

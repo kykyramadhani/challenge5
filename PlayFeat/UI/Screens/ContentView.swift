@@ -18,12 +18,11 @@
 //  every run starts fresh.
 //
 
-import Combine
 import SwiftUI
 
 struct ContentView: View {
     @State private var sceneManager = SceneManager()
-    @StateObject private var handPoseManager = HandPoseManager()
+    @State private var handPoseManager = HandPoseManager()
     @State private var showSplashScreen = true
 
     /// False until the player has been through onboarding once. Backed by
