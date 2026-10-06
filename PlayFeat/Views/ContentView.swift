@@ -88,6 +88,9 @@ struct ContentView: View {
             }
 
         }
+        // Inside the language handling below, so the prompt follows the
+        // in-game language like every other piece of text.
+        .requiresLandscape()
         // Rebuilds the whole tree when the language changes. Redirecting the
         // bundle is not enough on its own: views already on screen keep the
         // text they resolved when they were built, so they have to be thrown
