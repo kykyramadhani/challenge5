@@ -1,0 +1,25 @@
+{
+  "configurations" : [
+    {
+      "id" : "9628FB1D-B827-4141-AF4E-DE0B8F399B55",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "testInteropMode" : "complete",
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:PlayFeat.xcodeproj",
+        "identifier" : "2DD7B443302B444200DC904E",
+        "name" : "PlayFeatTests"
+      }
+    }
+  ],
+  "version" : 1
+}
