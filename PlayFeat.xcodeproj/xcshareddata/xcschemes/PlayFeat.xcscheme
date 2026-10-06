@@ -56,6 +56,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2DD7B436302B444200DC904E"
             BuildableName = "PlayFeat.app"
+            BlueprintName = "PlayFeat"
             ReferencedContainer = "container:PlayFeat.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -71,6 +72,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2DD7B436302B444200DC904E"
             BuildableName = "PlayFeat.app"
+            BlueprintName = "PlayFeat"
             ReferencedContainer = "container:PlayFeat.xcodeproj">
          </BuildableReference>
       </MacroExpansion>

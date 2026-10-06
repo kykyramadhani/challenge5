@@ -1,207 +1,271 @@
 # PlayFeat
 
-A hand-tracking cooking game for iOS/iPadOS (also runs iOS-on-Mac / Catalyst).
-The front camera fills the screen, Vision tracks your hands in real time, and
-you grab floating ingredient bubbles with a fist, drag them onto a plate, and
-swipe left/right to serve once the plate matches the on-screen recipe.
+A hand-tracking cooking game made with and for the community at Puspandi
+(Pusat Pemberdayaan Penyandang Disabilitas), Bali — Apple Developer Academy
+Challenge 5 & Final Challenge.
 
-Product name in code is inconsistent on purpose-ish: the Xcode target/module
-is `PlayFeat`
+The front camera fills the screen and Vision tracks the player's hands and
+upper body. Players pinch floating ingredient bubbles, drag them onto a plate
+to match the recipe, then carry the finished dish to the bell. No touch input
+is needed during play.
 
-## Stack
+The project started as an app and is now a game. The codebase is being
+refactored to match — see **Current development phase**.
 
-- Swift + SwiftUI + SpriteKit + AVFoundation + Vision (`VNDetectHumanHandPoseRequest`)
-- No third-party dependencies, no SPM packages
-- iOS/iPadOS only (`TARGETED_DEVICE_FAMILY = "1,2"`, `SDKROOT = iphoneos`),
-  deployment target 26.5. Also has an explicit Mac code path
-  (`ProcessInfo.isiOSAppOnMac` / `isMacCatalystApp`) since a Mac has no
-  device-orientation rotation coordinator.
-- Tests use the new Swift `Testing` framework (`import Testing`, `@Test`), not XCTest,
-  except the two UI test files which are stock XCTest scaffolding.
+## Platforms
 
-## Architecture: 3-layer stack
+| Platform | Status |
+|---|---|
+| iPadOS | **Published** — the only shipping target right now |
+| iOS (iPhone) | Planned. Layouts already scale, but it isn't released or fully tested |
+| macOS | Planned. Some Mac code paths exist (`ProcessInfo.isiOSAppOnMac`), not shipped |
 
-Assembled in `Views/ContentView.swift`, back to front:
+- **Minimum OS: iOS / iPadOS 17.0.** Don't use APIs newer than 17 without an
+  `if #available` check and a fallback.
+- Landscape lock (left and right), portrait is still being used but added hints unavailable, because of the new requirement of iOS 27.
+- Languages: English (`en`) and Indonesian (`id`), in `Localizable.xcstrings`.
 
-1. **Camera layer** — `Views/Camera/CameraPreviewView.swift`. Renders the live
-   front-camera feed via `AVCaptureVideoPreviewLayer`. Reuses
-   `HandPoseManager`'s existing `AVCaptureSession` rather than opening its own
-   — iOS only allows one session per camera.
-2. **Game layer** — `Scenes/GameScene/GameScene.swift`, a transparent
-   `SpriteKit` scene (`.allowsTransparency`) drawn on top. Owns all physical
-   interaction: ingredient bubbles, plate, trash bin, grab/drag/release,
-   animations.
-3. **HUD layer** — plain SwiftUI overlay: recipe card, score/timer badges,
-   pause button, game-over card, camera-permission-denied card.
+## Capabilities in use
 
-Two `ObservableObject`s live above all three layers, owned by `ContentView`
-as `@StateObject`, and injected down into the scene:
+- **Camera** — front camera through AVFoundation (`NSCameraUsageDescription`).
+  Picks the widest format and turns off Center Stage so both hands and the
+  torso stay in frame.
+- **Vision** — `VNDetectHumanHandPoseRequest` (hands) and
+  `VNDetectHumanBodyPoseRequest` (finds the nearest player, ignores bystanders).
+- **SpriteKit** — the transparent game board drawn over the camera feed.
+- **SwiftUI** — every screen, overlay and HUD element.
+- **Game Center** — sign-in and the "Most Dishes Served" leaderboard
+  (`com.apple.developer.game-center` entitlement). Always optional: the game
+  works fully offline or signed out.
+- **SwiftData + UserDefaults** — inventory (SwiftData); coins, high score and
+  settings (UserDefaults / `@AppStorage`).
+- **AVAudio** — music and sound effects.
+- **Accessibility** — Atkinson Hyperlegible font, one-hand mode in Settings.
 
-- **`HandPoseManager`** (`Managers/HandPoseManager.swift`) — owns the camera
-  session and all Vision inference.
-- **`GameStateManager`** (`Managers/GameStateManager.swift`) — the game's
-  state machine (recipe, plate contents, score, clock).
+No third-party dependencies and no SPM packages.
 
-`GameScene` polls both every frame in `update(_:)`; it does not use Combine
-subscriptions for its per-frame logic, just reads `@Published` values
-directly since SpriteKit's loop already runs every frame.
+## Game flow
 
-## Folder map
-
-```
-GetCooking/
-  App/                  App entry point + color theme
-    VisionChefApp.swift     @main struct, just wraps ContentView
-    AppTheme.swift           doc comment only — colors live in Assets.xcassets
-                              as named color sets (Color.appText etc, Xcode-synthesized)
-
-  Models/                Plain data, no logic beyond simple computed props
-    Ingredient.swift        7-case enum: cheese/chicken/chili/cucumber/lettuce/mayonnaise/tomato
-    Recipe.swift             struct + 4 static recipes + Recipe.all
-    GameArt.swift            string constants for non-ingredient art (bubble, plate)
-
-  Managers/              The "brains" — no UI code
-    CameraManager.swift          camera authorization status, permission requests, device discovery
-    GameStateManager.swift       state machine: idle → cooking → dishComplete →
-                                  waitingForSwipe → gameOver → (restart) → cooking
-    HandPoseManager.swift        AVFoundation capture + Vision hand-pose inference,
-                                  runs on a background queue, publishes HandData[]
-    HumanBodyPoseManager.swift   Vision body pose detection, nearest player resolution,
-                                  bystander filtering & alignment checking
-    Enums/
-      HandData.swift          one tracked hand, published to UI + scene
-      SwipeDirection.swift     .left / .right
-
-  Scenes/                SpriteKit game layer, split by concern
-    GameScene/
-      GameScene.swift          class decl, stored properties, update() loop,
-                                state-machine sync (syncWithGameState)
-      Input.swift               hand tracking → grab/drag/release/clap (extension)
-      Layout.swift              plate + trash bin creation/positioning (extension)
-      Spawning.swift            ingredient bubble spawning + scatter placement (extension)
-      Serving.swift             finished-dish display, swipe cue, serve animation,
-                                 plate commit/release/discard (extension)
-    Components/
-      IngredientNode.swift      SKNode: food sprite + bubble overlay sprite
-    HoverDetector.swift         standalone dwell-timer gesture detector, used
-                                 for "hold a hand over the bin to dump the
-                                 plate" (kept out of GameScene so it's
-                                 unit-testable without a live SpriteKit view)
-
-  Support/               Small stateless helpers
-    CGPoint+Distance.swift   vc_distance / vc_clamped (vc_ prefix avoids
-                              colliding with other distance(to:) extensions)
-    TrimmedArt.swift          crops PNGs to their opaque bounding box + caches
-                              UIImage/SKTexture by name (source art is padded
-                              on 1920×1080 canvases)
-
-  Views/                 SwiftUI
-    ContentView.swift        assembles the 3 layers, owns both managers
-    Camera/CameraPreviewView.swift
-    Components/
-      HandSkeletonView.swift   debug overlay: draws bones + joints per hand
-      PauseButton.swift
-    GameOverlay/
-      RecipeCardView.swift
-      StatBadge.swift
-      GameOverCard.swift
-      CameraPermissionDeniedOverlay.swift
-
-  Resources/
-    Assets.xcassets/         named colors + ingredient/dish art (imagesets)
-    *.png                     loose copies of the same art outside the asset
-                               catalog (currently unused by code — TrimmedArt
-                               reads via Assets.xcassets by name)
-
-GetCookingTests/          Swift Testing unit tests (see Known issues below)
-GetCookingUITests/        stock XCTest UI-test scaffolding, unmodified
-```
-
-## Game state machine (`GameStateManager`)
+### App flow
 
 ```
-idle --start()--> cooking --(plate matches recipe)--> dishComplete
-                     ^                                      |
-                     |                              (0.9s reveal beat)
-                     |                                      v
-              (serve animation)                    waitingForSwipe
-                     |                                      |
-                     +-------- handleSwipe(correct dir) ----+
-                     |
-              discardPlate() (clap gesture, keeps same recipe/score)
-
-any state --timer hits 0--> gameOver --restart()--> cooking (fresh recipe/score/clock)
+Splash → Onboarding (first launch only) → Game Opening (main menu)
+                                              │ Tap to Play
+                                              ▼
+                     Tutorial (until finished or skipped)
+                                              ▼
+                     Seat calibration (head, shoulders and hands inside the guide box)
+                                              ▼
+                     3-2-1-GO! countdown → Gameplay
+                                              ▼ last life lost
+                     Game Over → Post Game (paycheck: dishes, speed bonus, coins)
+                                              │ Play Again / Home
+                                              ▼
+                     Gameplay again or Game Opening
 ```
 
-- `resetToken` / `discardToken` are counters, bumped on `restart()` /
-  `discardPlate()`. `GameScene` watches the *tokens*, not just `state`,
-  because restarting can land on the same state and same recipe as before —
-  comparing state alone was the "Play Again does nothing" bug.
-- `matches(plateContents:recipe:)` is a multiset comparison (groups both
-  arrays by value, compares counts) — order-independent, but no missing
-  pieces and no extras allowed.
+- `SceneManager` (App/) owns navigation through a `NavigationStack` path.
+  Tutorial, calibration and countdown are *phases inside* `GameplayView`, not
+  separate destinations. That keeps the camera mounted across the handover.
+- Each run creates a fresh `GameStateManager`, so Play Again always starts clean.
+- The Shop exists but is "coming soon".
 
-## Hand tracking pipeline (`HandPoseManager`)
+### One round
 
-1. Camera session picks the **widest** available format on the front camera
-   (`widestCamera`, `selectWidestFormat`, `ranking`) and disables Center
-   Stage — the game needs both hands + torso in frame, which default
-   framing crops out.
-2. Every frame, `VNDetectHumanHandPoseRequest` runs on `videoQueue`
-   (background). `classify()` turns raw joints into palm centre + extended
-   finger count + skeleton.
-3. `extendedFingerCount` — a finger counts as extended when its tip is
-   ≥1.5 *palm lengths* from the wrist. Scale-free (works at any distance
-   from camera) — this is why it's ratio-based, not point-based.
-4. `matchToTrackedHands` / `matchAssignments` — greedy nearest-neighbour
-   identity tracking, because Vision returns hand observations in no
-   guaranteed order. Without this, two hands could swap whichever bubble
-   each was holding.
-5. `detectSwipe` / `swipeDirection` — needs both minimum speed AND minimum
-   net distance over a 0.3s window, and must be dominantly horizontal.
-   Deliberately ignores hand pose (open/fist) during a swipe, since motion
-   blur breaks pose classification exactly when a fast flick happens.
-6. `viewPoint(fromNormalized:...)` — maps Vision's normalized
-   (bottom-left-origin) coordinates to on-screen view space, undoing
-   whatever `.resizeAspect`/`.resizeAspectFill` cropping the preview layer
-   applies. Both the camera preview and the hand cursor read the same
-   `previewGravity` property so they can never disagree. This is the most
-   heavily unit-tested function in the project.
+1. A recipe card shows the dish and its ingredients, and the dish clock starts.
+2. The player **pinches** (thumb and index finger) an ingredient bubble, drags
+   it, and opens their fingers to drop it on the plate. Wrong ingredients count
+   as decoys.
+3. Holding a hand over the reset button empties the plate (dwell/hover gesture).
+4. When the plate matches the recipe, the finished dish appears and the
+   **bell rings on the left or right**. The player carries the plate to that side.
+5. A served dish adds to the score and banks leftover clock time as a speed
+   bonus. A dish that runs out of time **costs one life** and deals a new recipe.
+6. Difficulty ramps every 5 served dishes. The run ends when lives reach 0.
+   There is no overall timer; elapsed time counts up.
 
-All tuning knobs (thresholds, smoothing, cooldowns) are `var`s at the top of
-`HandPoseManager`, not constants — they're meant to be hand-tuned per device/
-lighting, not treated as fixed.
+### Game state (`GameStateManager`, Game/)
 
-## Known issues
+```
+idle ──start()──▶ cooking ──plate matches──▶ dishComplete ──bell rings──▶ waitingToServe
+                    ▲                                                        │
+                    └──────────────── plate carried to the bell ─────────────┘
 
-- `Resources/*.png` (loose files, e.g. `Resources/Cheese.png`) duplicate what's
-  already in `Assets.xcassets/*.imageset/` and don't appear to be read by any
-  code — `TrimmedArt` always loads by name via `UIImage(named:)`, which reads
-  the asset catalog. Worth confirming before deleting.
+dish clock runs out → lose a life, new recipe (resetToken)
+lives reach 0       → gameOver ──restart()──▶ cooking
+```
 
-## Conventions worth knowing before editing
+`resetToken`, `discardToken` and `runToken` are counters that tell the scene
+and UI about events that don't change `state`. Read the doc comments in
+`GameStateManager` before touching them.
 
-- `GameScene` is one class split across five files by concern
-  (`GameScene.swift` + `Input.swift`/`Layout.swift`/`Spawning.swift`/
-  `Serving.swift` as extensions) — mirrors the pattern in
-  `GameStateManager`/`HandPoseManager` where the state machine and the
-  hand-math live in one file each, not spread thin.
-- Anything gnarly (coordinate mapping, finger-extension ratio, swipe
-  detection, hover dwell) is pulled out as a `static func` or a standalone
-  struct (`HoverDetector`) specifically so it's unit-testable without
-  spinning up SpriteKit/AVFoundation/Vision.
-- `#expect` expands its argument into a closure that captures immutably, so
-  a `mutating` call has to be hoisted into a `let` before the macro — see
-  `HoverDetectorTests`.
-- An asset's lookup name is its **imageset folder name**, not the PNG inside
-  it (`Contents.json`'s `filename` points at the PNG independently), and
-  catalog lookups are **case-sensitive** even though macOS's filesystem is
-  not. `ArtAssetTests.everyReferencedAssetExists` walks every
-  `Ingredient.imageName` and `Recipe.finishedDishImageName` to catch drift —
-  three assets had already silently gone blank this way.
-- Distance/clamp helpers are prefixed `vc_` (`CGPoint.vc_distance`,
-  `CGFloat.vc_clamped`) to avoid colliding with other `distance(to:)`
-  extensions in scope (there's a second, private one inside
-  `HandPoseManager` itself).
-- Comments in this codebase explain *why*, not *what* — matches the
-  project's own style; keep that pattern when adding new code/comments.
+## Architecture
+
+Three layers, back to front, assembled in `GameplayView`:
+
+1. **Camera layer** — `CameraPreviewView` shows the live feed. It reuses the
+   capture session in `HandPoseManager` (only one session per camera).
+2. **Game layer** — `GameScene`, a transparent SpriteKit scene. Owns all
+   physical interaction: bubbles, plate, bell, grab/drag/release, animations.
+3. **HUD layer** — SwiftUI overlays: recipe card, hearts, points, pause,
+   countdown, game over, camera-permission card.
+
+Data flows one way: **Vision → Game → Scene / UI**. `GameScene` reads hand data
+and game state every frame in `update(_:)` (polling suits a 60 fps loop).
+SwiftUI observes the same objects.
+
+## Folder structure
+
+```
+PlayFeat/
+├── App/        Entry point, root navigation and screen routing
+├── Game/       Game rules and state: rounds, scoring, lives, clocks, difficulty.
+│               No SwiftUI or SpriteKit here.
+├── Vision/     Everything built on the Vision framework: hand and body pose
+│   └── Gestures/  Gesture detectors built on pose data (pinch, hover, swipe)
+├── Camera/     Camera permission, device and format selection, preview view
+├── Audio/      Music and sound effects
+├── Network/    Online services (Game Center)
+├── Data/
+│   ├── Models/   Plain data types (recipes, ingredients, shop items, ...)
+│   └── Storage/  Saving and loading (UserDefaults, SwiftData)
+├── Scenes/     Everything SpriteKit
+│   ├── GameScene/  The game scene, split into extensions by concern
+│   ├── Nodes/      Reusable SKNodes
+│   └── Animation/  Sprite animations
+├── UI/         Everything SwiftUI
+│   ├── Screens/     Full-screen views (one per navigation destination)
+│   ├── Overlays/    Views shown over gameplay
+│   ├── Components/  Reusable building blocks (buttons, cards, ...)
+│   └── Styles/      Button and view styles
+├── Shared/     Small helpers used everywhere: extensions, layout scaling,
+│               localization
+└── Resources/  Assets, fonts, sounds, videos
+
+PlayFeatTests/    Unit tests. Same folders as the app, so the tests for
+                  Vision/ live in PlayFeatTests/Vision/
+PlayFeatUITests/  UI tests (still starter scaffolding)
+```
+
+Put a new file in the folder whose job it matches. If it doesn't fit any of
+them, ask before making a new top-level folder. Don't create folders grouped
+by language construct (no `Enums/`, `Protocols/`, `Extensions/` at the top
+level). Keep a type next to the feature that uses it.
+
+All three targets use Xcode **synchronized folders**: moving or adding files on
+disk needs no `project.pbxproj` edits.
+
+## Clean code, style and conventions
+
+**Every time you write or change code, follow the clean-code skill:**
+@.claude/skills/clean-code/SKILL.md
+Full checklist for larger changes and reviews:
+@.claude/skills/clean-code/clean-code-rules.md
+
+Summary:
+
+- **Names explain intent.** Types are nouns (`RecipeCard`), functions are verbs
+  (`serveDish()`). Avoid vague names like `data`, `info`, `helper`, `temp`.
+- **Small functions that do one thing**, at one level of abstraction. Aim for
+  under ~20 lines.
+- **0–2 arguments**, 3 at most. Replace a Bool flag argument with two functions.
+- **Commands vs. queries:** a function changes state *or* returns a value, not both.
+- **Small types with one responsibility.** Find the type that owns new logic
+  instead of adding it wherever is nearby.
+- **Comments explain *why*, not *what*.** Rewrite confusing code rather than
+  commenting it. Never commit commented-out code.
+- **No force-unwraps (`!`) or silent failures.** Use optionals, `throws` and
+  typed errors with context.
+- **DRY, YAGNI, KISS, Boy Scout:** no duplication, nothing built for imagined
+  needs, the simplest working solution, and leave each file cleaner.
+- **Design patterns only when they remove a real problem**, not for show.
+
+### Naming and formatting
+
+- **camelCase** for variables, properties, functions and enum cases
+  (`dishTimeFraction`, `case waitingToServe`).
+- **UpperCamelCase** for types and protocols (`GameStateManager`, `HandInputSource`).
+- No `snake_case`, no Hungarian notation, no type prefixes. The existing `vc_`
+  helpers (`vc_distance`, `vc_clamped`) predate this rule; rename them when you
+  touch them.
+- One main type per file, and the file is named after it. Extensions that split
+  a type by concern go in a folder named after the type
+  (`Scenes/GameScene/Input.swift`).
+- Header for new files:
+  ```swift
+  //
+  //  FileName.swift
+  //  PlayFeat
+  //
+  //  One or two lines on what this type is for and why it exists.
+  //
+  ```
+- Lines under ~120 characters. Group code with `// MARK: -`.
+
+### Swift and SwiftUI
+
+- Use `let` and value types (`struct`, `enum`) by default.
+- Use `@Observable` for new observable classes, not `ObservableObject` /
+  `@Published`. Pass them with `@State` / `@Environment` / `@Bindable`.
+- Don't add new singletons (`static let shared`). Create objects once in
+  `PlayFeatApp` and inject them.
+- Keep SwiftUI `body` small; extract subviews as soon as it gets hard to scan.
+- Colors and fonts come from the asset catalog and `Font+Atkinson`; layout sizes
+  come from `DesignScale`. No magic numbers repeated across files.
+- Every user-facing string goes through `Localizable.xcstrings` with an
+  Indonesian translation. `LocalizationTests` fails if one is missing.
+- Pull tricky math (coordinate mapping, gesture timing, matching) into a
+  `static func` or a small struct so it can be unit-tested without a camera
+  or SpriteKit view.
+
+### Project-specific gotchas
+
+- An asset's lookup name is its **imageset folder name**, and lookups are
+  **case-sensitive**. `ArtAssetTests` catches mismatches.
+- `#expect` captures its argument immutably. Move a `mutating` call into a
+  `let` before the macro (see `HoverDetectorTests`).
+- Vision runs on a background video queue. Anything it publishes must be sent
+  to the main thread.
+
+## Testing
+
+- **⌘U** runs all unit tests (Swift Testing: `import Testing`, `@Test`, `#expect`).
+- Run the tests **before and after every refactor**. They should pass both
+  times with no changes to the tests.
+- New logic comes with tests in the matching `PlayFeatTests/` folder.
+- Camera and Vision changes also need a manual check on a real iPad: pinch,
+  drag, drop, hover reset, bell serve, rotation, one-hand mode.
+
+## Git workflow
+
+- **Never commit directly to `main`.** Every new feature or fix gets its own
+  branch from an up-to-date `main`:
+  - `feature/<short-name>`, e.g. `feature/shop-screen`
+  - `fix/<short-name>`, e.g. `fix/bell-side-swap`
+  - `refactor/<short-name>`, e.g. `refactor/observable-migration`
+- **Commit messages have no fixed format, but must summarize the changes:**
+  what changed and why, in plain words. One logical change per commit.
+  - Good: `Move hand-tracking rules into OneHandMode / TwoHandMode strategies`
+  - Bad: `update`, `fix stuff`, `wip`
+- Run ⌘U before merging. Merge back into `main` through a pull request on GitHub.
+- Claude: create or switch to the right branch **before** editing code, and
+  commit or push only when asked.
+
+## Current development phase
+
+Refactoring from an "app" structure to a game structure. Done: folder
+restructure, tests split by feature. Planned order (one branch or commit per
+step, ⌘U before and after):
+
+1. Move `ObservableObject` classes to `@Observable`
+2. Replace singletons (`AudioManager`, `CameraManager`, `InventoryManager`) with
+   dependency injection
+3. Split `HandPoseManager` into camera session, Vision processing and gesture
+   tracking
+4. Add protocols (`HandInputSource`, `SoundPlaying`) so gameplay can be tested
+   without a camera
+5. Strategy pattern for input modes (one-hand / two-hand)
+6. Clean up `GameState` (fold parallel flags and tokens into states/events) and
+   break up `GameStateManager`
+
+`CODE_AUDIT.md` lists known bugs and tech debt found in an earlier audit.
