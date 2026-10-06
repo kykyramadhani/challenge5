@@ -33,6 +33,44 @@ extension View {
     func designScaled() -> some View {
         modifier(DesignScaled())
     }
+
+    /// Covers the app with a prompt to turn the iPad whenever its window is
+    /// taller than it is wide.
+    ///
+    /// The game is played in landscape, but an iPad app that supports
+    /// windowing has to declare every orientation, and iPadOS 26 doesn't let
+    /// it refuse portrait at runtime either — so the app can't stop a
+    /// portrait window from happening, only decline to play in one.
+    func requiresLandscape() -> some View {
+        overlay {
+            GeometryReader { proxy in
+                if proxy.size.height > proxy.size.width {
+                    RotateToLandscapePrompt()
+                }
+            }
+            .ignoresSafeArea()
+        }
+    }
+}
+
+private struct RotateToLandscapePrompt: View {
+    var body: some View {
+        ZStack {
+            // Opaque, so nothing underneath can be tapped either.
+            Color.black
+
+            VStack(spacing: 24) {
+                Image(systemName: "rotate.right")
+                    .font(.system(size: 80, weight: .bold))
+                    .accessibilityHidden(true)
+                Text("Rotate your iPad to landscape to play")
+                    .font(.atkinson(size: 32, weight: .bold))
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(Color.appPrimary)
+            .padding(40)
+        }
+    }
 }
 
 /// On a phone, turns the left and right safe areas into black bars and keeps
