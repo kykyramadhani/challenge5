@@ -11,9 +11,6 @@ import AVFoundation
 
 @Observable
 final class CameraManager {
-    /// The shared CameraManager instance for app-wide camera authorization and configuration.
-    static let shared = CameraManager()
-
     /// Current camera authorization state, surfaced so UI can prompt the user.
     private(set) var authorizationStatus: AVAuthorizationStatus = .notDetermined
 

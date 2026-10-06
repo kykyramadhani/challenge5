@@ -12,8 +12,6 @@ import SwiftUI
 @MainActor
 @Observable
 final class InventoryManager {
-    static let shared = InventoryManager()
-
     let container: ModelContainer
     private var context: ModelContext {
         container.mainContext
@@ -21,10 +19,10 @@ final class InventoryManager {
 
     private(set) var coinMultipliers: Int = 0
 
-    init() {
+    init(inMemory: Bool = false) {
         do {
             let schema = Schema([UserInventory.self])
-            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
             self.container = try ModelContainer(for: schema, configurations: [config])
             refresh()
         } catch {

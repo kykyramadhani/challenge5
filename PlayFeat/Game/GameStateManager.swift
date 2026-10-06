@@ -80,10 +80,11 @@ final class GameStateManager {
     let startingLives: Int
 
     private let recipePool: [Recipe]
+    private let inventory: InventoryManager
     
     @ObservationIgnored private var timer: Timer?
 
-    init(recipes: [Recipe] = Recipe.all, startingLives: Int = 3) {
+    init(recipes: [Recipe] = Recipe.all, startingLives: Int = 3, inventory: InventoryManager) {
         precondition(!recipes.isEmpty, "GameStateManager needs at least one recipe")
         precondition(startingLives > 0, "GameStateManager needs at least one life")
         
@@ -91,6 +92,7 @@ final class GameStateManager {
         self.startingLives = startingLives
         self.lives = startingLives
         self.currentRecipe = recipes.randomElement()!
+        self.inventory = inventory
     }
 
     deinit { timer?.invalidate() }
@@ -235,7 +237,7 @@ final class GameStateManager {
     /// the clock. Call once camera/hand tracking is ready.
     func start() {
         guard state == .idle else { return }
-        hasMultiplier = InventoryManager.shared.getMultiplierCount() > 0
+        hasMultiplier = inventory.getMultiplierCount() > 0
         beginDishClock()
         state = .cooking
         startTimer()
@@ -267,7 +269,7 @@ final class GameStateManager {
         playClock = 0
         elapsedTime = 0
         dishesCompleted = 0
-        hasMultiplier = InventoryManager.shared.getMultiplierCount() > 0
+        hasMultiplier = inventory.getMultiplierCount() > 0
         currentRecipe = recipePool.randomElement()!
         resetToken += 1
         runToken += 1
@@ -394,7 +396,7 @@ final class GameStateManager {
     /// runs exactly once per run, so the save always lands.
     private func persistResult() {
         if hasMultiplier {
-            InventoryManager.shared.consumeMultiplier()
+            inventory.consumeMultiplier()
         }
         let outcome = result
         GameStorage.coins += outcome.totalCoins

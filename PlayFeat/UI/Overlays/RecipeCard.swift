@@ -24,8 +24,8 @@ struct RecipeCard: View {
     /// and doesn't trigger redraws. The TimelineView below polls it instead,
     /// so only this card redraws.
     var gameStateManager: GameStateManager
-    
-    private var wrongRecipe: Bool  {
+
+    private var wrongRecipe: Bool {
         gameStateManager.wrongIngredientPlaced
     }
 
@@ -76,7 +76,8 @@ struct RecipeCard: View {
     /// next dish resets the fraction.
     private func wobbleAngle(at date: Date, fraction: CGFloat) -> Double {
         guard isUrgent(fraction) else { return 0 }
-        return sin(date.timeIntervalSinceReferenceDate * Self.wobbleSpeed) * Self.wobbleDegrees
+        return sin(date.timeIntervalSinceReferenceDate * Self.wobbleSpeed)
+            * Self.wobbleDegrees
     }
 
     private func card(timeRemaining fraction: CGFloat) -> some View {
@@ -131,12 +132,17 @@ struct RecipeCard: View {
     /// The dish's actual ingredients.
     private var ingredientRow: some View {
         HStack(spacing: Self.iconSpacing) {
-            ForEach(Array(recipe.ingredients.enumerated()), id: \.offset) { _, ingredient in
-                Image(uiImage: TrimmedArt.image(named: ingredient.imageName) ?? UIImage())
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: Self.iconSize, height: Self.iconSize)
-                    .shadow(color: .black.opacity(0.55), radius: 4, y: 2)
+            ForEach(Array(recipe.ingredients.enumerated()), id: \.offset) {
+                _,
+                ingredient in
+                Image(
+                    uiImage: TrimmedArt.image(named: ingredient.imageName)
+                        ?? UIImage()
+                )
+                .resizable()
+                .scaledToFit()
+                .frame(width: Self.iconSize, height: Self.iconSize)
+                .shadow(color: .black.opacity(0.55), radius: 4, y: 2)
             }
         }
     }
@@ -181,7 +187,7 @@ struct CardBorder: Shape {
         path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
         path.addArc(
             center: CGPoint(x: rect.minX + radius, y: rect.maxY - radius),
-            radius: radius, 
+            radius: radius,
             startAngle: .degrees(90),
             endAngle: .degrees(180),
             clockwise: false
@@ -193,5 +199,8 @@ struct CardBorder: Shape {
 }
 
 #Preview {
-    RecipeCard(recipe: .salad, gameStateManager: GameStateManager())
+    RecipeCard(
+        recipe: .salad,
+        gameStateManager: GameStateManager(inventory: InventoryManager(inMemory: true))
+    )
 }

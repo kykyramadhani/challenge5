@@ -26,7 +26,15 @@ struct GameplayView: View {
     @Bindable var sceneManager: SceneManager
     var handPoseManager: HandPoseManager
 
-    @State private var gameStateManager = GameStateManager()
+    @State private var gameStateManager : GameStateManager
+    
+    init(sceneManager: SceneManager,
+         handPoseManager: HandPoseManager,
+         inventory: InventoryManager) {
+        self.sceneManager = sceneManager
+        self.handPoseManager = handPoseManager
+        _gameStateManager = State(initialValue: GameStateManager(inventory: inventory))
+    }
 
     @State private var scene = GameScene(size: CGSize(width: 1024, height: 768))
     @State private var showHandSkeleton = true
@@ -329,6 +337,7 @@ struct GameplayView: View {
 #Preview {
     GameplayView(
         sceneManager: SceneManager(),
-        handPoseManager: HandPoseManager()
+        handPoseManager: HandPoseManager(),
+        inventory: InventoryManager(inMemory: true)
     )
 }

@@ -163,7 +163,7 @@ final class HandPoseManager: NSObject {
     /// doesn't hop onto the main queue every frame.
     @ObservationIgnored private var lastPublishedBody: BodyCandidate?
 
-    private let cameraManager = CameraManager.shared
+    private let cameraManager = CameraManager.init()
 
     override init() {
         super.init()

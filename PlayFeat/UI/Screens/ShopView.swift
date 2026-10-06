@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ShopView: View {
     @Bindable var sceneManager: SceneManager
-    private var inventoryManager = InventoryManager.shared
+    @Environment(InventoryManager.self) private var inventoryManager
 
     @State private var coinCount: Int = GameStorage.coins
     @State private var items: [ShopItem] = ShopItem.all
@@ -217,4 +217,5 @@ struct ShopView: View {
 
 #Preview {
     ShopView(sceneManager: SceneManager())
+        .environment(InventoryManager(inMemory: true))
 }
