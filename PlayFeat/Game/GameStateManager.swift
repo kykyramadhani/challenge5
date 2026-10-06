@@ -7,32 +7,32 @@
 //  serving it.
 //
 
-import Combine
 import Foundation
 import QuartzCore
 
-final class GameStateManager: ObservableObject {
+@Observable
+final class GameStateManager {
 
-    @Published private(set) var state: GameState = .idle
-    @Published private(set) var currentRecipe: Recipe
-    @Published private(set) var plateContents: [Ingredient] = []
+    private(set) var state: GameState = .idle
+    private(set) var currentRecipe: Recipe
+    private(set) var plateContents: [Ingredient] = []
 
-    /// How many dishes of each kind the player completed this run, keyed by the
+    /// How many dishes of each kind the player completed this run, key ed by the
     /// recipe's `finishedDishImageName` (e.g. "salad", "ChickenGeprek"). The
     /// PostGame paycheck reads these for its per-dish tally.
-    @Published private(set) var dishesByType: [String: Int] = [:]
+    private(set) var dishesByType: [String: Int] = [:]
 
     /// Total seconds of leftover dish-clock banked across the run. A dish
     /// finished with 3 seconds still on its clock adds 3 here — the paycheck's
     /// "Speed Bonus".
-    @Published private(set) var speedBonus: Int = 0
+    private(set) var speedBonus: Int = 0
 
     /// Every dish completed this run, all kinds summed — the paycheck's
     /// "Dishes Served" count.
     var totalDishesServed: Int { dishesByType.values.reduce(0, +) }
 
     /// Whether a coin multiplier is active for this run.
-    @Published private(set) var hasMultiplier: Bool = false
+    private(set) var hasMultiplier: Bool = false
 
     /// A value snapshot of this run's outcome, handed to the results screen so
     /// it needs no live reference back to this manager.
@@ -42,18 +42,18 @@ final class GameStateManager: ObservableObject {
 
     /// Which edge the bell rang on, and so which way the plate has to be
     /// carried. Nil whenever no dish is waiting to be served.
-    @Published private(set) var bellSide: SwipeDirection?
+    private(set) var bellSide: SwipeDirection?
 
     /// Seconds survived so far. The run has no clock to beat — it ends when
     /// the lives run out — so this counts *up*, and is what PostGame reports.
-    @Published private(set) var elapsedTime: Int = 0
+    private(set) var elapsedTime: Int = 0
 
     /// Lives left. Every dish that times out costs one; at zero the run ends.
-    @Published private(set) var lives: Int
-    @Published var looseHeart: Bool = false
+    private(set) var lives: Int
+    var looseHeart: Bool = false
 
     /// When true the clocks and the scene are frozen (Pause button).
-    @Published private(set) var isPaused: Bool = false
+    private(set) var isPaused: Bool = false
 
     /// Bumped whenever `GameScene` must wipe the board outright: a fresh game,
     /// or a dish that timed out. Both change the recipe without necessarily
@@ -62,29 +62,31 @@ final class GameStateManager: ObservableObject {
     ///
     /// Serving is deliberately *not* in here: that keeps its slide-out
     /// animation, which needs the old plate and dish still on screen.
-    @Published private(set) var resetToken: Int = 0
+    private(set) var resetToken: Int = 0
 
     /// Bumped when the player dumps the plate. `GameScene` floats the contents
     /// back onto the table off this.
-    @Published private(set) var discardToken: Int = 0
+    private(set) var discardToken: Int = 0
 
     /// Bumped only when a brand-new run begins — i.e. `restart()`, never
     /// `failDish()`. `GameplayView` keys its 3-2-1-GO! countdown off this
     /// rather than `resetToken`: losing a life also wipes the board, but the
     /// run is still going and the player should not be made to sit through
     /// another countdown to carry on.
-    @Published private(set) var runToken: Int = 0
+    private(set) var runToken: Int = 0
     
-    @Published var wrongIngredientPlaced = false
+    var wrongIngredientPlaced = false
 
     let startingLives: Int
 
     private let recipePool: [Recipe]
-    private var timer: Timer?
+    
+    @ObservationIgnored private var timer: Timer?
 
     init(recipes: [Recipe] = Recipe.all, startingLives: Int = 3) {
         precondition(!recipes.isEmpty, "GameStateManager needs at least one recipe")
         precondition(startingLives > 0, "GameStateManager needs at least one life")
+        
         self.recipePool = recipes
         self.startingLives = startingLives
         self.lives = startingLives
@@ -102,15 +104,16 @@ final class GameStateManager: ObservableObject {
 
     /// Seconds of unpaused play.
     ///
-    /// Deliberately not `@Published`: `GameScene` reads `dishTimeFraction` off
-    /// it every frame, and republishing at frame rate would re-render the
-    /// whole SwiftUI HUD for a shape only SpriteKit draws. The whole-second
-    /// mirror the HUD *does* want is `elapsedTime`.
-    private var playClock: TimeInterval = 0
-    private var lastTick: TimeInterval = CACurrentMediaTime()
+    /// Deliberately `@ObservationIgnored`: it changes every tick (30×/s), and
+    /// tracking it would redraw every view that reads `dishTimeFraction`.
+    /// `RecipeCard` polls it with a TimelineView instead; the HUD reads the
+    /// whole-second `elapsedTime`.
+    
+    @ObservationIgnored private var playClock: TimeInterval = 0
+    @ObservationIgnored private var lastTick: TimeInterval = CACurrentMediaTime()
 
     /// `playClock` reading at which the current dish runs out.
-    private var dishDeadline: TimeInterval = 0
+    @ObservationIgnored private var dishDeadline: TimeInterval = 0
 
     /// What the current dish started with, so the countdown ring knows the
     /// full sweep its fraction is measured against.
@@ -127,7 +130,7 @@ final class GameStateManager: ObservableObject {
     /// Dishes successfully served this run. Published so the HUD could show a
     /// level later; it only changes once per dish, never per frame, so it
     /// costs no per-frame re-render.
-    @Published private(set) var dishesCompleted: Int = 0
+    private(set) var dishesCompleted: Int = 0
 
     /// How many served dishes between each speed-up step.
     private static let dishesPerSpeedUp = 5
@@ -202,7 +205,7 @@ final class GameStateManager: ObservableObject {
     static let serveTimeLimit: TimeInterval = 5
 
     /// `playClock` reading at which the waiting order is abandoned.
-    private var serveDeadline: TimeInterval = 0
+    @ObservationIgnored private var serveDeadline: TimeInterval = 0
 
     /// Whether the serve window is counting down.
     var isTimingServe: Bool { state == .waitingToServe }

@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct LoseHeartOverlay: View {
-    @ObservedObject var gameStateManager: GameStateManager
+    var gameStateManager: GameStateManager
     @State private var opacity: Double = 0
     
     var body: some View {

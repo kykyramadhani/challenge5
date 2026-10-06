@@ -7,17 +7,17 @@
 //  (thumb tip pinched to little-finger tip) or open (everything else).
 //
 //  Vision inference runs entirely on a background queue (`videoQueue`); only
-//  the final @Published updates are hopped onto the main queue, so a slow
+//  the observed updates are hopped onto the main queue, so a slow
 //  frame never stalls SwiftUI/SpriteKit.
 //
 
 import AVFoundation
 import Vision
-import Combine
 import CoreGraphics
 import QuartzCore
 
-final class HandPoseManager: NSObject, ObservableObject {
+@Observable
+final class HandPoseManager: NSObject {
     /// Alias for HumanBodyPoseManager's BodyCandidate for backward compatibility.
     typealias BodyCandidate = HumanBodyPoseManager.BodyCandidate
 
@@ -25,23 +25,23 @@ final class HandPoseManager: NSObject, ObservableObject {
     // All writes are dispatched onto the main queue; safe to read from SwiftUI.
 
     /// Every hand currently tracked, up to `maximumHandCount`.
-    @Published private(set) var hands: [HandData] = []
+    private(set) var hands: [HandData] = []
 
     /// The player's upper body in normalized Vision space, nil when nobody is
     /// tracked.
     ///
     /// Exactly one body ever appears here: the nearest. Other people in frame
     /// are never published, however much of them Vision can see.
-    @Published private(set) var playerBody: BodyCandidate?
+    private(set) var playerBody: BodyCandidate?
 
     /// Camera authorization state, surfaced so the UI can prompt the user.
-    @Published private(set) var authorizationStatus: AVAuthorizationStatus = .notDetermined
+    private(set) var authorizationStatus: AVAuthorizationStatus = .notDetermined
 
     /// Dimensions of the frames Vision is actually reading, after the capture
     /// connection's rotation. Needed to undo `.resizeAspectFill` cropping when
     /// mapping to the screen — without it the overlay only lines up when the
     /// screen happens to share the camera's 4:3 aspect.
-    @Published private(set) var bufferSize: CGSize = .zero
+    private(set) var bufferSize: CGSize = .zero
 
     var isHandVisible: Bool { !hands.isEmpty }
 
@@ -51,7 +51,7 @@ final class HandPoseManager: NSObject, ObservableObject {
     // shift the numbers below, so they are tuning knobs, not constants.
 
     /// Which camera to read frames from.
-    var cameraPosition: AVCaptureDevice.Position = .front
+    @ObservationIgnored var cameraPosition: AVCaptureDevice.Position = .front
 
     /// Digital zoom, as a multiple of the *widest* zoom the hardware supports.
     /// 1.0 would be "as wide as this camera goes".
@@ -65,26 +65,26 @@ final class HandPoseManager: NSObject, ObservableObject {
     ///
     /// The crop costs resolution, which is why `selectWidestFormat` picks the
     /// largest format available rather than the cheapest.
-    var previewZoomFactor: CGFloat = 2.0
+    @ObservationIgnored var previewZoomFactor: CGFloat = 2.0
 
     /// How the feed is fitted to the screen.
-    var previewGravity: AVLayerVideoGravity = .resizeAspectFill
+    @ObservationIgnored var previewGravity: AVLayerVideoGravity = .resizeAspectFill
 
     /// Whether to switch Center Stage off for this app.
-    var disablesCenterStage = true
+    @ObservationIgnored var disablesCenterStage = true
 
     /// Bounds on the capture format picked in `selectWidestFormat`.
-    var minimumCaptureWidth: Int32 = 640
-    var maximumCaptureWidth: Int32 = 1920
+    @ObservationIgnored var minimumCaptureWidth: Int32 = 640
+    @ObservationIgnored var maximumCaptureWidth: Int32 = 1920
 
     /// How many hands to actually play with — one player, two hands.
-    var maximumHandCount = 2
+    @ObservationIgnored var maximumHandCount = 2
 
     /// How many hands Vision may report before the single-player filter runs.
-    var handCandidateLimit = 4
+    @ObservationIgnored var handCandidateLimit = 4
 
     /// Whether hands are gated on the body they are attached to.
-    var tracksSinglePlayer = true
+    @ObservationIgnored var tracksSinglePlayer = true
 
     /// Run the body detector on one frame in this many, reusing the last
     /// result in between.
@@ -101,26 +101,26 @@ final class HandPoseManager: NSObject, ObservableObject {
     }
 
     /// Minimum Vision joint confidence to trust a point.
-    var jointConfidenceThreshold: Float = 0.25 {
+    @ObservationIgnored var jointConfidenceThreshold: Float = 0.25 {
         didSet { bodyPoseManager.jointConfidenceThreshold = jointConfidenceThreshold }
     }
 
     /// Grabbing is a **pinch**: thumb tip and index-finger tip brought together.
-    var pinchCloseRatio: CGFloat = 0.3
-    var pinchOpenRatio: CGFloat = 0.5
+    @ObservationIgnored var pinchCloseRatio: CGFloat = 0.3
+    @ObservationIgnored var pinchOpenRatio: CGFloat = 0.5
 
     /// Rotation used when running on a Mac.
-    var macCameraRotationAngle: CGFloat = 90
+    @ObservationIgnored var macCameraRotationAngle: CGFloat = 90
 
     /// Exponential smoothing applied to each cursor (0 = frozen, 1 = raw).
-    var cursorSmoothing: CGFloat = 0.35
+    @ObservationIgnored var cursorSmoothing: CGFloat = 0.35
 
     /// How far (in normalized units) a hand may travel between frames and still
     /// be considered the same hand.
-    var handMatchRadius: CGFloat = 0.45
+    @ObservationIgnored var handMatchRadius: CGFloat = 0.45
 
     /// How long a hand's trajectory survives after Vision stops reporting it.
-    var handGracePeriod: TimeInterval = 0.35
+    @ObservationIgnored var handGracePeriod: TimeInterval = 0.35
 
     // MARK: - AVFoundation / Vision plumbing
 
@@ -132,11 +132,12 @@ final class HandPoseManager: NSObject, ObservableObject {
     private let videoQueue = DispatchQueue(label: "com.visionchef.camera.video")
     private let handPoseRequest = VNDetectHumanHandPoseRequest()
     private let bodyPoseManager = HumanBodyPoseManager()
-    private var isConfigured = false
+    
+    @ObservationIgnored private var isConfigured = false
 
     private weak var previewLayer: AVCaptureVideoPreviewLayer?
-    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
-    private var rotationObservers: [NSKeyValueObservation] = []
+    @ObservationIgnored private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    @ObservationIgnored private var rotationObservers: [NSKeyValueObservation] = []
 
     // MARK: - Per-hand tracking (accessed only from videoQueue)
 
@@ -154,13 +155,13 @@ final class HandPoseManager: NSObject, ObservableObject {
         var lastSeen: TimeInterval
     }
 
-    private var tracked: [TrackedHand] = []
-    private var nextHandID = 0
-    private var lastMeasuredBufferSize: CGSize = .zero
+    @ObservationIgnored private var tracked: [TrackedHand] = []
+    @ObservationIgnored private var nextHandID = 0
+    @ObservationIgnored private var lastMeasuredBufferSize: CGSize = .zero
 
     /// videoQueue-local copy of what was last published, so an unchanged body
     /// doesn't hop onto the main queue every frame.
-    private var lastPublishedBody: BodyCandidate?
+    @ObservationIgnored private var lastPublishedBody: BodyCandidate?
 
     private let cameraManager = CameraManager.shared
 

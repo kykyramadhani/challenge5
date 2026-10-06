@@ -20,12 +20,10 @@ import SwiftUI
 struct RecipeCard: View {
     let recipe: Recipe
 
-    /// Read every frame for the clock. Not an `@ObservedObject` binding on the
-    /// fraction itself: `dishTimeFraction` is deliberately unpublished (it
-    /// changes continuously, and republishing it would re-render the whole HUD
-    /// at tick rate), so the TimelineView below polls it instead and only this
-    /// card redraws.
-    @ObservedObject var gameStateManager: GameStateManager
+    /// The dish clock changes every tick, so `playClock` is `@ObservationIgnored`
+    /// and doesn't trigger redraws. The TimelineView below polls it instead,
+    /// so only this card redraws.
+    var gameStateManager: GameStateManager
     
     private var wrongRecipe: Bool  {
         gameStateManager.wrongIngredientPlaced

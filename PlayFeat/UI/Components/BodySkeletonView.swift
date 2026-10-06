@@ -12,7 +12,7 @@
 import SwiftUI
 
 struct BodySkeletonView: View {
-    @ObservedObject var handPoseManager: HandPoseManager
+    var handPoseManager: HandPoseManager
 
     /// Distinct from the hands' green and cyan, so it is obvious at a glance
     /// which detector drew what.

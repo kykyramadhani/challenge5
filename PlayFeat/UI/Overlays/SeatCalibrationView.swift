@@ -16,7 +16,7 @@ import QuartzCore
 import SwiftUI
 
 struct SeatCalibrationView: View {
-    @ObservedObject var handPoseManager: HandPoseManager
+    var handPoseManager: HandPoseManager
 
     /// Called once the player has held the pose for the full dwell.
     var onCalibrated: () -> Void

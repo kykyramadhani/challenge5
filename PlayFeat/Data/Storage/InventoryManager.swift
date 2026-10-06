@@ -5,13 +5,13 @@
 //  Central manager providing SwiftData access for user inventory operations.
 //
 
-import Combine
 import Foundation
 import SwiftData
 import SwiftUI
 
 @MainActor
-final class InventoryManager: ObservableObject {
+@Observable
+final class InventoryManager {
     static let shared = InventoryManager()
 
     let container: ModelContainer
@@ -19,7 +19,7 @@ final class InventoryManager: ObservableObject {
         container.mainContext
     }
 
-    @Published private(set) var coinMultipliers: Int = 0
+    private(set) var coinMultipliers: Int = 0
 
     init() {
         do {

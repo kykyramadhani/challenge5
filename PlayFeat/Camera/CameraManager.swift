@@ -6,16 +6,16 @@
 //  and hardware capture formatting for the app.
 //
 
-import AVFoundation
-import Combine
 import CoreGraphics
+import AVFoundation
 
-final class CameraManager: ObservableObject {
+@Observable
+final class CameraManager {
     /// The shared CameraManager instance for app-wide camera authorization and configuration.
     static let shared = CameraManager()
 
     /// Current camera authorization state, surfaced so UI can prompt the user.
-    @Published private(set) var authorizationStatus: AVAuthorizationStatus = .notDetermined
+    private(set) var authorizationStatus: AVAuthorizationStatus = .notDetermined
 
     var isAuthorized: Bool {
         authorizationStatus == .authorized
