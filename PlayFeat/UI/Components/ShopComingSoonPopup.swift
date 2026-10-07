@@ -53,7 +53,6 @@ struct ShopComingSoonPopup: View {
 }
 
 #Preview {
-    ShopComingSoonPopup(onClose: {
-        
-    })
+    ShopComingSoonPopup(onClose: {})
+        .environment(AudioManager())
 }

@@ -201,6 +201,6 @@ struct CardBorder: Shape {
 #Preview {
     RecipeCard(
         recipe: .salad,
-        gameStateManager: GameStateManager(inventory: InventoryManager(inMemory: true))
+        gameStateManager: GameStateManager(inventory: InventoryManager(inMemory: true), audio: AudioManager())
     )
 }

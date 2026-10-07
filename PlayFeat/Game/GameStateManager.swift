@@ -12,7 +12,6 @@ import QuartzCore
 
 @Observable
 final class GameStateManager {
-
     private(set) var state: GameState = .idle
     private(set) var currentRecipe: Recipe
     private(set) var plateContents: [Ingredient] = []
@@ -81,10 +80,11 @@ final class GameStateManager {
 
     private let recipePool: [Recipe]
     private let inventory: InventoryManager
+    private let audio: AudioManager
     
     @ObservationIgnored private var timer: Timer?
 
-    init(recipes: [Recipe] = Recipe.all, startingLives: Int = 3, inventory: InventoryManager) {
+    init(recipes: [Recipe] = Recipe.all, startingLives: Int = 3, inventory: InventoryManager, audio: AudioManager) {
         precondition(!recipes.isEmpty, "GameStateManager needs at least one recipe")
         precondition(startingLives > 0, "GameStateManager needs at least one life")
         
@@ -93,6 +93,7 @@ final class GameStateManager {
         self.lives = startingLives
         self.currentRecipe = recipes.randomElement()!
         self.inventory = inventory
+        self.audio = audio
     }
 
     deinit { timer?.invalidate() }
@@ -253,13 +254,13 @@ final class GameStateManager {
         timer?.invalidate()
         // A restart wipes the board, so any low-time warning still looping from
         // the run that just ended has to be silenced explicitly.
-        AudioManager.shared.stopClockWarning()
+        audio.stopClockWarning()
         
         // A fresh run starts on tier 0, so drop the music back to normal speed —
         // otherwise it would still be racing at last run's tempo through the
         // countdown until the first dish resets it.
-        AudioManager.shared.setMusicRate(1.0)
-        AudioManager.shared.play(.reset)
+        audio.setMusicRate(1.0)
+        audio.play(.reset)
         dishesByType = [:]
         speedBonus = 0
         lives = startingLives
@@ -302,7 +303,7 @@ final class GameStateManager {
             // No dish is running down while paused or after the run ends, so a
             // low-time warning left looping would keep ticking over a frozen
             // clock — silence it here.
-            AudioManager.shared.stopClockWarning()
+            audio.stopClockWarning()
             return
         }
         playClock += delta
@@ -336,9 +337,9 @@ final class GameStateManager {
             && dishTimeFraction > 0
             && dishTimeFraction <= Self.lowTimeWarningFraction
         if runningLow {
-            AudioManager.shared.startClockWarning()
+            audio.startClockWarning()
         } else {
-            AudioManager.shared.stopClockWarning()
+            audio.stopClockWarning()
         }
     }
 
@@ -349,7 +350,7 @@ final class GameStateManager {
         dishDeadline = playClock + dishTimeLimit
         // Push the music tempo up in lock-step with the tier that just squeezed
         // the clock, so the track audibly speeds up as the run gets harder.
-        AudioManager.shared.setMusicRate(musicRate)
+        audio.setMusicRate(musicRate)
     }
 
     /// The dish clock ran out: costs a life, then either ends the run or moves
@@ -363,8 +364,8 @@ final class GameStateManager {
         looseHeart = true
         // The dish ran out from under the player — stop the warning it was
         // making and play the lost-life sting instead.
-        AudioManager.shared.stopClockWarning()
-        AudioManager.shared.play(.loseHeart)
+        audio.stopClockWarning()
+        audio.play(.loseHeart)
 
         guard lives > 0 else {
             gameOver()
@@ -426,7 +427,7 @@ final class GameStateManager {
         guard state == .cooking, !plateContents.isEmpty else { return }
         // The on-screen Reset button is what fires this, so it gets the reset
         // sound as its feedback — the dish itself keeps its recipe and clock.
-        AudioManager.shared.play(.reset)
+        audio.play(.reset)
         plateContents = []
 
         // Reset Wrong State
@@ -445,11 +446,11 @@ final class GameStateManager {
     func serveDish() {
         guard state == .waitingToServe else { return }
         // The order is handed over…
-        AudioManager.shared.play(.putOrder)
+        audio.play(.putOrder)
         
         // …and the reward chime lands a beat later.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            AudioManager.shared.play(.addPoint)
+            self.audio.play(.addPoint)
         }
         
         // Counts only served dishes — a timed-out dish (failDish) doesn't ramp

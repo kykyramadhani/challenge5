@@ -1,45 +1,50 @@
 //
 //  AudioManager.swift
-//  GetCooking
+//  PlayFeat
 //
 //  Created by Owen Limantoro on 22/08/26.
 //
-/// Centralized sound-effect manager for the game.
-///
-/// This is a Swift singleton (the idiomatic equivalent of a Unity "AudioManager"
-/// autoload/singleton). There is no inspector in SpriteKit/SwiftUI, so instead of
-/// dragging clips into slots you simply reference the sound by name — the manager
-/// finds and preloads the matching `.wav` from the app bundle automatically.
-///
-/// Usage from anywhere:
-///
-///     AudioManager.shared.play(.addPoint)          // one-shot
-///     AudioManager.shared.startClockWarning()      // begin looping tick
-///     AudioManager.shared.stopClockWarning()       // stop the loop
-///
-/// Convenience wrappers are also provided, e.g. `AudioManager.shared.playAddPoint()`.
-///
-
 
 import AVFoundation
-final class AudioManager: NSObject {
-    /// The single shared instance. Access everything through `AudioManager.shared`.
-    static let shared = AudioManager()
 
+/// Plays the game's sound effects, looping clock warning and background music.
+///
+/// There is exactly one instance, created in `PlayFeatApp` and handed out by
+/// dependency injection — never reached for globally:
+///
+/// - SwiftUI views read it from the environment:
+///   `@Environment(AudioManager.self) private var audio`
+/// - `GameStateManager` receives it through `init`.
+/// - `GameScene` receives it through its `audio` property.
+///
+/// Buttons don't call it directly: `ClickButton` plays the UI click.
+///
+///     audio.play(.addPoint)          // one-shot
+///     audio.startClockWarning()      // begin looping tick
+///     audio.stopClockWarning()       // stop the loop
+
+@Observable
+final class AudioManager: NSObject {
     // MARK: - Settings
 
     /// Master toggle. Set to false to mute all SFX (e.g. from a settings screen).
     var isEnabled: Bool = true
 
     /// Master volume for one-shot effects, 0.0...1.0.
-    var effectsVolume: Float = 1.0 {
+    ///
+    /// The volumes are `@ObservationIgnored` on purpose: their `didSet` clamps
+    /// by assigning the property again. Under `@Observable` that assignment
+    /// re-enters the setter forever and crashes with EXC_BAD_ACCESS. No view
+    /// reads them (SettingsView keeps its own @AppStorage copy), so nothing
+    /// needs to observe them anyway.
+    @ObservationIgnored var effectsVolume: Float = 1.0 {
         didSet { effectsVolume = min(max(effectsVolume, 0), 1) }
     }
 
     /// Background-music volume, 0.0...1.0. Kept under the effects so a chime or
     /// the bell always reads clearly over the loop. Changing it takes effect on
     /// any music already playing.
-    var musicVolume: Float = 0.45 {
+    @ObservationIgnored var musicVolume: Float = 0.45 {
         didSet {
             musicVolume = min(max(musicVolume, 0), 1)
             musicPlayer?.volume = musicVolume
@@ -50,21 +55,21 @@ final class AudioManager: NSObject {
 
     /// Preloaded raw audio data for each effect. Loading the bytes once up front
     /// means playback never touches the disk, so there is no first-play hitch.
-    private var soundData: [SoundEffect: Data] = [:]
+    @ObservationIgnored private var soundData: [SoundEffect: Data] = [:]
 
     /// Currently-playing one-shot players. We hold strong references here so ARC
     /// does not deallocate a player mid-sound; they are removed when they finish.
-    private var activePlayers: [AVAudioPlayer] = []
+    @ObservationIgnored private var activePlayers: [AVAudioPlayer] = []
 
     /// Dedicated player for the looping low-time warning so it can be stopped later.
-    private var clockWarningPlayer: AVAudioPlayer?
+    @ObservationIgnored private var clockWarningPlayer: AVAudioPlayer?
 
     /// Dedicated player for the looping background music.
-    private var musicPlayer: AVAudioPlayer?
+    @ObservationIgnored private var musicPlayer: AVAudioPlayer?
 
     /// The music track currently loaded, so a repeat `startMusic` for the same
     /// track is a no-op rather than a restart from the top.
-    private var currentMusicName: String?
+    @ObservationIgnored private var currentMusicName: String?
 
     // MARK: - Persistence
 
@@ -75,7 +80,7 @@ final class AudioManager: NSObject {
 
     // MARK: - Init
 
-    private override init() {
+    override init() {
         super.init()
         configureAudioSession()
         preloadAll()
@@ -290,19 +295,6 @@ final class AudioManager: NSObject {
         stopClockWarning()
         stopMusic(fadeOut: 0)
     }
-
-    // MARK: - Convenience wrappers
-    // Optional readable shortcuts so call sites can read like plain English.
-
-    func playAddPoint()   { play(.addPoint) }   // GameManager: on scoring a point
-    func playBell()       { play(.bell) }       // GameManager: dish finished / order up
-    func playBubbleGrab() { play(.bubbleGrab) } // PlayerController: pick up an item
-    func playBubblePut()  { play(.bubblePut) }  // PlayerController: place an item
-    func playCountdown()  { play(.countdown) }  // GameManager: round start
-    func playLoseHeart()  { play(.loseHeart) }  // GameManager: mistake / dropped order
-    func playPutOrder()   { play(.putOrder) }   // GameManager: order submitted
-    func playReset()      { play(.reset) }      // ResetButton: level restart
-    func playUIClick()    { play(.uiClick) }    // Any menu/UI button tap
 }
 
 // MARK: - AVAudioPlayerDelegate

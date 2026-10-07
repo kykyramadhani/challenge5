@@ -8,14 +8,13 @@ import SwiftData
 
 @main
 struct PlayFeatApp: App {
-//    @State private var audio = AudioManager()
+    @State private var audio = AudioManager()
     @State private var inventory = InventoryManager()
     @State private var camera: CameraManager
     @State private var handPoseManager: HandPoseManager
     
     init() {
-        let camera = CameraManager()
-        _camera = State(initialValue: camera)
+        _camera = State(initialValue: CameraManager())
         _handPoseManager = State(initialValue: HandPoseManager())
         
         // Before any text is drawn: point the bundle at the language the
@@ -40,7 +39,7 @@ struct PlayFeatApp: App {
             // Inside, not on the scene: PhoneSafeSides hosts the app
             // separately, and environment doesn't reach across.
             ContentView()
-//                .environment(audio)
+                .environment(audio)
                 .environment(inventory)
                 .environment(handPoseManager)
                 .modelContainer(inventory.container)

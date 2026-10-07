@@ -14,12 +14,7 @@ struct ButtonComponent: View {
     var buttonStyle: ButtonComponentStyle
 
     var body: some View {
-        // Every menu button routes through here, so the click sound lives in one
-        // place rather than at each call site.
-        Button(action: {
-            AudioManager.shared.play(.uiClick)
-            action()
-        }) {
+        ClickButton(action: action) {
             HStack(spacing: 16) {
                 Image(systemName: icon)
                     .font(.system(size: 34, weight: .bold))
@@ -41,4 +36,5 @@ struct ButtonComponent: View {
 
 #Preview {
     ButtonComponent(name: "Main Menu", icon: "house.fill", action: {}, buttonStyle: .text)
+    .environment(AudioManager())
 }

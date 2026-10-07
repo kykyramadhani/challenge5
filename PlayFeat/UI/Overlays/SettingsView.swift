@@ -14,6 +14,8 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(AudioManager.self) private var audio
+    
     var onClose: () -> Void
 
     // MARK: - Persisted settings
@@ -54,7 +56,7 @@ struct SettingsView: View {
 
             settingRow(title: "Music") {
                 VolumeSlider(value: $musicVolume, onChanged:  { newValue in
-                    AudioManager.shared.musicVolume = Float(newValue)
+                    audio.musicVolume = Float(newValue)
                 })
             }
 
@@ -63,9 +65,9 @@ struct SettingsView: View {
             settingRow(title: "Sound Effects") {
                 VolumeSlider(value: $sfxVolume, onEditingEnded: { _ in
                     // A quick tick so the player hears the new level.
-                    AudioManager.shared.play(.uiClick)
+                    audio.play(.uiClick)
                 }) { newValue in
-                    AudioManager.shared.effectsVolume = Float(newValue)
+                    audio.effectsVolume = Float(newValue)
                 }
             }
 
@@ -141,10 +143,7 @@ struct SettingsView: View {
     }
 
     private var closeButton: some View {
-        Button(action: {
-            AudioManager.shared.play(.uiClick)
-            onClose()
-        }) {
+        ClickButton(action: onClose) {
             Image(systemName: "xmark")
                 .font(.system(size: 34, weight: .bold))
                 .foregroundStyle(.appBackground)
@@ -239,10 +238,7 @@ struct SegmentedPill: View {
         selected: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: {
-            AudioManager.shared.play(.uiClick)
-            action()
-        }) {
+        ClickButton(action: action) {
             Text(title)
                 .font(.atkinson(size: 22, weight: .bold))
                 .foregroundStyle(selected ? Color.white : Color.appTertiaryText)
@@ -264,4 +260,5 @@ struct SegmentedPill: View {
         Color.gray
         SettingsView(onClose: {})
     }
+    .environment(AudioManager())
 }

@@ -13,6 +13,8 @@
 import SwiftUI
 
 struct GameOpening: View {
+    @Environment(AudioManager.self) private var audio
+    
     @Bindable var sceneManager: SceneManager
 
     @State private var coinCount = GameStorage.coins
@@ -99,7 +101,7 @@ struct GameOpening: View {
             // Main-menu theme. Loops until the player starts a run, where
             // GameplayView stops it. startMusic is idempotent, so returning to
             // the menu (from the shop or the results screen) never restarts it.
-            AudioManager.shared.startMusic("home_soundtrack")
+            audio.startMusic("home_soundtrack")
         }
         .animation(.easeInOut(duration: 0.2), value: showSettings)
         .designScaled()
@@ -151,7 +153,7 @@ struct GameOpening: View {
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                AudioManager.shared.play(.uiClick)
+                audio.play(.uiClick)
                 sceneManager.play(GameOption.all[0])
             }
     }
@@ -198,4 +200,5 @@ struct GameOpening: View {
 
 #Preview {
     GameOpening(sceneManager: SceneManager())
+    .environment(AudioManager())
 }

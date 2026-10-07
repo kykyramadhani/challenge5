@@ -23,6 +23,7 @@ import SwiftUI
 struct ContentView: View {
     @Environment(InventoryManager.self) private var inventory
     @Environment(HandPoseManager.self) private var handPoseManager
+    @Environment(AudioManager.self) private var audio
     
     @State private var sceneManager = SceneManager()
     @State private var showSplashScreen = true
@@ -58,7 +59,8 @@ struct ContentView: View {
                             GameplayView(
                                 sceneManager: sceneManager,
                                 handPoseManager: handPoseManager,
-                                inventory: inventory
+                                inventory: inventory,
+                                audio: audio
                             )
                         } else if destination == "shop" {
                             ShopView(sceneManager: sceneManager)
@@ -128,4 +130,7 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
+        .environment(InventoryManager(inMemory: true))
+        .environment(HandPoseManager())
+        .environment(AudioManager())
 }

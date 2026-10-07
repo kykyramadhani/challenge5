@@ -12,10 +12,7 @@ struct SettingsButton: View {
 
     var body: some View {
         GeometryReader { proxy in
-            Button(action: {
-                AudioManager.shared.play(.uiClick)
-                action()
-            }) {
+            ClickButton(action: action) {
                 Image(systemName: "gear")
                     .font(.system(size: 48, weight: .bold))
                     .foregroundStyle(.black)
@@ -37,4 +34,5 @@ struct SettingsButton: View {
     SettingsButton {
         print("test")
     }
+    .environment(AudioManager())
 }

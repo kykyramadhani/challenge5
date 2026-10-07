@@ -9,6 +9,8 @@
 import SwiftUI
 
 struct GameCard: View {
+    @Environment(AudioManager.self) private var audio
+    
     let game: GameOption
     let onSelect: () -> Void
 
@@ -38,7 +40,7 @@ struct GameCard: View {
             // Only an available game is a real selection — a tap on a locked
             // card does nothing, so it shouldn't click either.
             if game.isAvailable {
-                AudioManager.shared.play(.uiClick)
+                audio.play(.uiClick)
                 onSelect()
             }
         }
@@ -50,4 +52,5 @@ struct GameCard: View {
         Color.white
         GameCard(game: .all[1], onSelect: {})
     }
+    .environment(AudioManager())
 }

@@ -10,6 +10,7 @@ import SwiftUI
 struct ShopView: View {
     @Bindable var sceneManager: SceneManager
     @Environment(InventoryManager.self) private var inventoryManager
+    @Environment(AudioManager.self) private var audio
 
     @State private var coinCount: Int = GameStorage.coins
     @State private var items: [ShopItem] = ShopItem.all
@@ -197,12 +198,12 @@ struct ShopView: View {
 
     private func buyItem(_ item: ShopItem) {
         if coinCount >= item.price {
-            AudioManager.shared.play(.addPoint)
+            audio.play(.addPoint)
             GameStorage.coins -= item.price
             coinCount = GameStorage.coins
             inventoryManager.addMultipliers(1)
         } else {
-            AudioManager.shared.play(.loseHeart)
+            audio.play(.loseHeart)
             withAnimation(.easeInOut(duration: 0.25)) {
                 showNotEnoughCoinsAlert = true
             }
@@ -218,4 +219,5 @@ struct ShopView: View {
 #Preview {
     ShopView(sceneManager: SceneManager())
         .environment(InventoryManager(inMemory: true))
+        .environment(AudioManager())
 }

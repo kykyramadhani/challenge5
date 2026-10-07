@@ -25,7 +25,7 @@ extension GameScene {
             width: plateRadius * 3
         )
         // Sound for the puff of smoke the finished dish appears in.
-        AudioManager.shared.play(.scuffleCloud)
+        audio?.play(.scuffleCloud)
 
         if let texture = TrimmedArt.texture(named: recipe.finishedDishImageName)
         {
@@ -94,7 +94,7 @@ extension GameScene {
         bell.run(animation)
 
         bellNode = bell
-        AudioManager.shared.play(.bell)
+        audio?.play(.bell)
     }
 
     // MARK: - Serve animation
@@ -152,7 +152,7 @@ extension GameScene {
         if !ingredientList.contains(node.ingredient) {
             gameStateManager.wrongIngredientPlaced = true
             // This ingredient isn't in the recipe — sound the mistake.
-            AudioManager.shared.play(.wrongIngredient)
+            audio?.play(.wrongIngredient)
         }
 
         node.heldBy = nil
@@ -166,7 +166,7 @@ extension GameScene {
             y: .random(in: -scatter...scatter)
         )
         plateNode.addChild(node)
-        AudioManager.shared.play(.bubblePut)
+        audio?.play(.bubblePut)
         gameStateManager.addIngredientToPlate(node.ingredient)
     }
 

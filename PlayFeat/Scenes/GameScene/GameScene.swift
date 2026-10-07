@@ -25,6 +25,7 @@ final class GameScene: SKScene {
     // Weak so that when the game is finished, it will be de allocated from the memory.
     weak var gameStateManager: GameStateManager?
     weak var handPoseManager: HandPoseManager?
+    weak var audio: AudioManager?
 
     // MARK: - Layout metrics
     //
