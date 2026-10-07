@@ -163,7 +163,7 @@ struct GameplayView: View {
             .onAppear {
                 scene.size = proxy.size
                 scene.gameStateManager = gameStateManager
-                scene.handPoseManager = handPoseManager
+                scene.handInput = handPoseManager
                 scene.showsBoard = boardIsUp
                 scene.audio = audio
             }

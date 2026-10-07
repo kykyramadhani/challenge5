@@ -23,20 +23,20 @@ extension GameScene {
     /// (top-left origin, y-down) to scene space (bottom-left, y-up),
     /// and runs the grab / drag / release / trash-hover logic.
     func updateHandInput(now: TimeInterval, delta: TimeInterval = 0) {
-        guard let view, let handPoseManager else {
+        guard let view, let handInput else {
             hideAllCursors()
             return
         }
 
         let viewSize = view.bounds.size
-        let hands = handPoseManager.hands
+        let hands = handInput.hands
         let liveIDs = Set(hands.map(\.id))
 
         // The glow is drawn *before* any game-state gate, so a hand lights up
         // the moment it is detected — through the seat check and the countdown
         // as well as during play. Only the interaction below is gated.
         for hand in hands {
-            let cursor = convertPoint(fromView: handPoseManager.cursor(for: hand, in: viewSize))
+            let cursor = convertPoint(fromView: handInput.cursor(for: hand, in: viewSize))
             updateCursorNode(for: hand.id, at: cursor, isFist: hand.isClosedFist)
         }
         retireVanishedGlows(stillLive: liveIDs)
@@ -61,12 +61,12 @@ extension GameScene {
         var frameHands: [FrameHand] = []
 
         for hand in hands {
-            let cursor = convertPoint(fromView: handPoseManager.cursor(for: hand, in: viewSize))
+            let cursor = convertPoint(fromView: handInput.cursor(for: hand, in: viewSize))
             let state: HandState = hand.isClosedFist ? .fist : hand.isOpenHand ? .open : .unknown
             var tracker = trackers[hand.id] ?? HandTracker()
             tracker.lastSeen = now
 
-            var handPoints = handPoseManager.jointPoints(for: hand, in: viewSize)
+            var handPoints = handInput.jointPoints(for: hand, in: viewSize)
                 .map(convertPoint(fromView:))
             handPoints.append(cursor)
 

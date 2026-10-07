@@ -22,7 +22,7 @@ struct SeatCalibrationView: View {
     var onCalibrated: () -> Void
 
     /// Set from the Settings sheet. In one-hand mode only the chosen hand has
-    /// to be raised — the pose is otherwise impossible to hold with one arm
+    /// to be raised — the pose is otherwise impossible to hold  with one arm
     /// unavailable.
     @AppStorage(HandInputModeSetting.isOneHandKey) private var isOneHand = false
     @AppStorage(HandInputModeSetting.preferredHandKey) private var preferredHand: HandSide = .right

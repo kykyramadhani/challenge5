@@ -71,7 +71,7 @@ final class GameStateManager {
 
     private let deck: RecipeDeck
     private let inventory: InventoryManager
-    private let audio: AudioManager
+    private let audio: any SoundPlaying
 
     // MARK: - Clocks
 
@@ -124,7 +124,7 @@ final class GameStateManager {
         recipes: [Recipe] = Recipe.all,
         startingLives: Int = 3,
         inventory: InventoryManager,
-        audio: AudioManager
+        audio: any SoundPlaying
     ) {
         precondition(startingLives > 0, "GameStateManager needs at least one life")
         deck = RecipeDeck(recipes)
@@ -336,7 +336,7 @@ final class GameStateManager {
     /// Starts or stops the looping low-time warning to match the dish clock:
     /// only while a dish is being timed and has dropped into its last stretch.
     /// `> 0` leaves out the expired frame, which `failDish()` handles.
-    /// Both AudioManager calls are idempotent, so this can run every tick.
+    /// Both calls are idempotent, so this can run every tick.
     private func updateClockWarning() {
         let runningLow = isTimingDish
             && dishTimeFraction > 0
