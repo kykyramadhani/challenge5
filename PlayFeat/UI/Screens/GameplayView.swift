@@ -26,7 +26,18 @@ struct GameplayView: View {
     @Bindable var sceneManager: SceneManager
     var handPoseManager: HandPoseManager
 
-    @State private var gameStateManager = GameStateManager()
+    @State private var gameStateManager: GameStateManager
+    private let audio: AudioManager
+
+    init(sceneManager: SceneManager,
+         handPoseManager: HandPoseManager,
+         inventory: InventoryManager,
+         audio: AudioManager) {
+        self.sceneManager = sceneManager
+        self.handPoseManager = handPoseManager
+        self.audio = audio
+        _gameStateManager = State(initialValue: GameStateManager(inventory: inventory, audio: audio))
+    }
 
     @State private var scene = GameScene(size: CGSize(width: 1024, height: 768))
     @State private var showHandSkeleton = true
@@ -132,7 +143,7 @@ struct GameplayView: View {
             UIApplication.shared.isIdleTimerDisabled = false
             // Leaving gameplay entirely (quit, or back to the menu) — the music
             // belongs to this screen, so it goes with it.
-            AudioManager.shared.stopMusic()
+            audio.stopMusic()
         }
     }
 
@@ -154,6 +165,7 @@ struct GameplayView: View {
                 scene.gameStateManager = gameStateManager
                 scene.handPoseManager = handPoseManager
                 scene.showsBoard = boardIsUp
+                scene.audio = audio
             }
             .onChange(of: proxy.size) { _, newSize in
                 scene.size = newSize
@@ -284,7 +296,7 @@ struct GameplayView: View {
             // startMusic is a no-op if it's somehow already going.
 
             // One shot at the top of the beat — the clip already voices 3-2-1.
-            AudioManager.shared.play(.countdown)
+            audio.play(.countdown)
             for step in stride(from: 3, through: 0, by: -1) {
                 countdown = step  // 0 is the "GO!" beat
                 do {
@@ -295,13 +307,13 @@ struct GameplayView: View {
             }
             countdown = -1
             gameStateManager.start()
-            AudioManager.shared.startMusic()
+            audio.startMusic()
         }
         .onChange(of: gameStateManager.isPaused) { _, paused in
             scene.isPaused = paused
             // Hold the music with the game so a pause is actually quiet.
-            if paused { AudioManager.shared.pauseMusic() }
-            else { AudioManager.shared.resumeMusic() }
+            if paused { audio.pauseMusic() }
+            else { audio.resumeMusic() }
         }
         .onChange(of: gameStateManager.state) { _, state in
             scene.isPaused = (state == .gameOver)
@@ -315,7 +327,7 @@ struct GameplayView: View {
     
     private func showGameOver() {
         isEndingRun = true
-        AudioManager.shared.stopMusic()
+        audio.stopMusic()
         showGameOverCover = true
     }
 
@@ -327,8 +339,14 @@ struct GameplayView: View {
 }
 
 #Preview {
-    GameplayView(
+    // One instance for both: the view's own calls and its child buttons
+    // must share the same AudioManager.
+    let audio = AudioManager()
+    return GameplayView(
         sceneManager: SceneManager(),
-        handPoseManager: HandPoseManager()
+        handPoseManager: HandPoseManager(),
+        inventory: InventoryManager(inMemory: true),
+        audio: audio
     )
+    .environment(audio)
 }

@@ -16,7 +16,7 @@ struct GameLoopTests {
     /// Swiping down retries the *same* dish — it must not skip to another
     /// recipe or touch the score.
     @Test func discardKeepsTheSameRecipeAndScore() async {
-        let manager = GameStateManager(recipes: [.chickenGeprek])
+        let manager = makeGame(recipes: [.chickenGeprek])
         manager.start()
         manager.addIngredientToPlate(.cheese) // wrong ingredient
         #expect(manager.plateContents.count == 1)
@@ -31,7 +31,7 @@ struct GameLoopTests {
     /// or GameScene would replay the fly-away animation and respawn the table
     /// mid-round.
     @Test func discardingAnEmptyPlateDoesNothing() {
-        let manager = GameStateManager(recipes: [.salad])
+        let manager = makeGame(recipes: [.salad])
         manager.start()
         let eventsBefore = manager.events
 
@@ -41,7 +41,7 @@ struct GameLoopTests {
     }
 
     @Test func discardRecordsAnEventSoTheSceneCanAnimate() {
-        let manager = GameStateManager(recipes: [.salad])
+        let manager = makeGame(recipes: [.salad])
         manager.start()
         manager.addIngredientToPlate(.tomato)
 
@@ -53,7 +53,7 @@ struct GameLoopTests {
     /// The recipe card turns red while something on the plate isn't in the
     /// recipe, and clears as soon as the plate is emptied.
     @Test func aWrongIngredientShowsUntilThePlateIsEmptied() {
-        let manager = GameStateManager(recipes: [.salad])
+        let manager = makeGame(recipes: [.salad])
         manager.start()
         manager.addIngredientToPlate(.chicken)
         #expect(manager.hasWrongIngredient)
@@ -70,7 +70,7 @@ struct GameLoopTests {
     /// through the seat check and countdown again, and it's `start()` that
     /// actually resumes play once that beat finishes (see below).
     @Test func restartResetsEverythingAndRecordsARestart() {
-        let manager = GameStateManager(recipes: [.chickenMayonnaise])
+        let manager = makeGame(recipes: [.chickenMayonnaise])
         manager.start()
         manager.addIngredientToPlate(.chicken)
 
@@ -89,7 +89,7 @@ struct GameLoopTests {
     /// `restart()` alone must not resume play — GameplayView's countdown is
     /// what calls `start()` once it finishes, same as the very first run.
     @Test func restartDoesNotResumePlayOnItsOwn() {
-        let manager = GameStateManager(recipes: [.chickenMayonnaise])
+        let manager = makeGame(recipes: [.chickenMayonnaise])
         manager.start()
         manager.restart()
 
@@ -100,7 +100,7 @@ struct GameLoopTests {
     }
 
     @Test func servingCountsTheDishThatWasServed() async throws {
-        let manager = GameStateManager(recipes: [.chickenGeprek])
+        let manager = makeGame(recipes: [.chickenGeprek])
         manager.start()
         for ingredient in Recipe.chickenGeprek.ingredients {
             manager.addIngredientToPlate(ingredient)
@@ -121,7 +121,7 @@ struct GameLoopTests {
     /// of screen while ingredients are still being fetched, and none of that
     /// may count as a delivery.
     @Test func servingBeforeTheBellDoesNothing() {
-        let manager = GameStateManager(recipes: [.chickenMayonnaise])
+        let manager = makeGame(recipes: [.chickenMayonnaise])
         manager.start()
         #expect(manager.state == .cooking)
 
@@ -135,7 +135,7 @@ struct GameLoopTests {
     /// plate toward. It has to clear once the dish is gone, or the next round
     /// would start with a stale target.
     @Test func theBellRingsOnOneSideAndClearsAfterServing() async throws {
-        let manager = GameStateManager(recipes: [.chickenMayonnaise, .salad])
+        let manager = makeGame(recipes: [.chickenMayonnaise, .salad])
         manager.start()
         for ingredient in manager.currentRecipe.ingredients {
             manager.addIngredientToPlate(ingredient)
@@ -154,7 +154,7 @@ struct GameLoopTests {
 
     /// A wrong ingredient must not complete the dish.
     @Test func wrongIngredientDoesNotComplete() {
-        let manager = GameStateManager(recipes: [.chickenMayonnaise])
+        let manager = makeGame(recipes: [.chickenMayonnaise])
         manager.start()
         manager.addIngredientToPlate(.chicken)
         manager.addIngredientToPlate(.cheese) // should have been mayo

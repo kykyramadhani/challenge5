@@ -97,7 +97,7 @@ extension GameScene {
                     grabbed.removeAllActions()
                     grabbed.setScale(1)
                     tracker.held = grabbed
-                    AudioManager.shared.play(.bubbleGrab)
+                    audio?.play(.bubbleGrab)
                 }
             }
 
@@ -142,7 +142,7 @@ extension GameScene {
                         // A deliberate let-go, not a tracking dropout (which
                         // routes through retireVanishedHands instead), so this
                         // is the place the "put down" sound belongs.
-                        AudioManager.shared.play(.bubblePut)
+                        audio?.play(.bubblePut)
                         tracker.held = nil
                         tracker.openSince = nil
                     }
@@ -189,7 +189,7 @@ extension GameScene {
            }) {
             plateHeldBy = handID
             plateOpenSince = nil
-            AudioManager.shared.play(.bubbleGrab)
+            audio?.play(.bubbleGrab)
             plateNode.removeAllActions()
             // Above the hand's glow, like a held ingredient — otherwise the
             // additive aura washes over the plate the whole way to the tray.

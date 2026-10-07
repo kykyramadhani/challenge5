@@ -157,4 +157,5 @@ struct foodPlate: View {
         ),
         sceneManager: SceneManager()
     )
+    .environment(AudioManager())
 }

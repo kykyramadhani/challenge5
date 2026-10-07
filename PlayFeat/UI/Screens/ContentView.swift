@@ -21,8 +21,11 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(InventoryManager.self) private var inventory
+    @Environment(HandPoseManager.self) private var handPoseManager
+    @Environment(AudioManager.self) private var audio
+    
     @State private var sceneManager = SceneManager()
-    @State private var handPoseManager = HandPoseManager()
     @State private var showSplashScreen = true
 
     /// False until the player has been through onboarding once. Backed by
@@ -55,7 +58,9 @@ struct ContentView: View {
                         if destination == "gameplay" {
                             GameplayView(
                                 sceneManager: sceneManager,
-                                handPoseManager: handPoseManager
+                                handPoseManager: handPoseManager,
+                                inventory: inventory,
+                                audio: audio
                             )
                         } else if destination == "shop" {
                             ShopView(sceneManager: sceneManager)
@@ -125,4 +130,7 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
+        .environment(InventoryManager(inMemory: true))
+        .environment(HandPoseManager())
+        .environment(AudioManager())
 }

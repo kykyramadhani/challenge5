@@ -16,7 +16,7 @@ struct LivesTests {
     /// Running the clock out costs a life but keeps the run going, with the
     /// score intact — the player is being set back, not reset.
     @Test func aTimedOutDishCostsOneLifeAndDealsAnother() {
-        let manager = GameStateManager(recipes: Recipe.all)
+        let manager = makeGame(recipes: Recipe.all)
         manager.start()
         let recipeBefore = manager.currentRecipe
 
@@ -33,7 +33,7 @@ struct LivesTests {
     /// while already `.cooking` — so the event is the only signal that the
     /// board must be wiped for the new recipe.
     @Test func aTimedOutDishRecordsALostLife() {
-        let manager = GameStateManager(recipes: Recipe.all)
+        let manager = makeGame(recipes: Recipe.all)
         manager.start()
 
         manager.failDish()
@@ -45,7 +45,7 @@ struct LivesTests {
     /// must not be dropped back into a 3-2-1-GO! countdown. `runNumber` is
     /// what GameplayView keys that countdown off, and only `restart()` moves it.
     @Test func aTimedOutDishKeepsTheSameRun() {
-        let manager = GameStateManager(recipes: Recipe.all)
+        let manager = makeGame(recipes: Recipe.all)
         manager.start()
         let runBefore = manager.runNumber
 
@@ -58,7 +58,7 @@ struct LivesTests {
     /// Replay is the other half of that rule: a fresh run *does* get the
     /// countdown back.
     @Test func restartStartsTheNextRun() {
-        let manager = GameStateManager(recipes: Recipe.all)
+        let manager = makeGame(recipes: Recipe.all)
         manager.start()
         let runBefore = manager.runNumber
 
@@ -70,7 +70,7 @@ struct LivesTests {
     /// The run ends on the last life, and only then — this is the sole way to
     /// reach `.gameOver` now that the round countdown is gone.
     @Test func losingTheLastLifeEndsTheRun() {
-        let manager = GameStateManager(recipes: Recipe.all, startingLives: 2)
+        let manager = makeGame(recipes: Recipe.all, startingLives: 2)
         manager.start()
 
         manager.failDish()
@@ -84,7 +84,7 @@ struct LivesTests {
 
     /// Nothing should keep draining lives after the run is over.
     @Test func failingAfterGameOverChangesNothing() {
-        let manager = GameStateManager(recipes: Recipe.all, startingLives: 1)
+        let manager = makeGame(recipes: Recipe.all, startingLives: 1)
         manager.start()
         manager.failDish()
         #expect(manager.state == .gameOver)
@@ -98,7 +98,7 @@ struct LivesTests {
     /// away and the dish can no longer time out — otherwise a slow swipe would
     /// cost the life the player just cooked their way out of.
     @Test func theClockStopsOnceTheDishIsAssembled() {
-        let manager = GameStateManager(recipes: [.chickenMayonnaise])
+        let manager = makeGame(recipes: [.chickenMayonnaise])
         manager.start()
         #expect(manager.isTimingDish)
 
@@ -112,7 +112,7 @@ struct LivesTests {
 
     /// ...and picks up again for the next dish, with that dish's own budget.
     @Test func theClockRestartsForTheNextRecipe() async throws {
-        let manager = GameStateManager(recipes: [.chickenMayonnaise, .salad])
+        let manager = makeGame(recipes: [.chickenMayonnaise, .salad])
         manager.start()
         for ingredient in manager.currentRecipe.ingredients {
             manager.addIngredientToPlate(ingredient)
@@ -130,7 +130,7 @@ struct LivesTests {
     /// Serving is scored and does *not* cost a life, so a clean run keeps all
     /// three hearts however long it lasts.
     @Test func servingDoesNotCostALife() async throws {
-        let manager = GameStateManager(recipes: [.chickenMayonnaise, .chickenCheese])
+        let manager = makeGame(recipes: [.chickenMayonnaise, .chickenCheese])
         manager.start()
         for ingredient in manager.currentRecipe.ingredients {
             manager.addIngredientToPlate(ingredient)
@@ -147,7 +147,7 @@ struct LivesTests {
     /// deadline: let it lapse and the order is abandoned, same as a dish that
     /// never got assembled.
     @Test func theServeWindowStartsFullWhenTheBellRings() async throws {
-        let manager = GameStateManager(recipes: [.chickenMayonnaise])
+        let manager = makeGame(recipes: [.chickenMayonnaise])
         manager.start()
         for ingredient in manager.currentRecipe.ingredients {
             manager.addIngredientToPlate(ingredient)
@@ -165,7 +165,7 @@ struct LivesTests {
     /// The dish clock and the serve clock never run at the same time — each
     /// only applies in its own phase, so a waiting order can't be failed twice.
     @Test func onlyOneClockRunsAtATime() async throws {
-        let manager = GameStateManager(recipes: [.chickenMayonnaise])
+        let manager = makeGame(recipes: [.chickenMayonnaise])
         manager.start()
 
         #expect(manager.isTimingDish)
@@ -183,7 +183,7 @@ struct LivesTests {
     /// Every five *served* dishes the assembly clock tightens by 1.25×, so the
     /// same recipe has to be built in 80% of the time it had a tier earlier.
     @Test func difficultyRampsEveryFiveServedDishes() async throws {
-        let manager = GameStateManager(recipes: [.chickenMayonnaise, .salad])
+        let manager = makeGame(recipes: [.chickenMayonnaise, .salad])
         manager.start()
 
         func serveOneDish() async throws {
@@ -210,7 +210,7 @@ struct LivesTests {
 
     /// A timed-out dish is not "done", so it must not advance the ramp.
     @Test func failedDishesDoNotRampDifficulty() {
-        let manager = GameStateManager(recipes: [.chickenMayonnaise, .salad])
+        let manager = makeGame(recipes: [.chickenMayonnaise, .salad])
         manager.start()
 
         manager.failDish()

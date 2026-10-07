@@ -70,6 +70,8 @@ final class GameStateManager {
     }
 
     private let deck: RecipeDeck
+    private let inventory: InventoryManager
+    private let audio: AudioManager
 
     // MARK: - Clocks
 
@@ -118,12 +120,19 @@ final class GameStateManager {
 
     @ObservationIgnored private var timer: Timer?
 
-    init(recipes: [Recipe] = Recipe.all, startingLives: Int = 3) {
+    init(
+        recipes: [Recipe] = Recipe.all,
+        startingLives: Int = 3,
+        inventory: InventoryManager,
+        audio: AudioManager
+    ) {
         precondition(startingLives > 0, "GameStateManager needs at least one life")
         deck = RecipeDeck(recipes)
         self.startingLives = startingLives
         lives = startingLives
         currentRecipe = deck.randomRecipe()
+        self.inventory = inventory
+        self.audio = audio
     }
 
     deinit { timer?.invalidate() }
@@ -134,7 +143,7 @@ final class GameStateManager {
     /// once camera/hand tracking is ready.
     func start() {
         guard state == .idle else { return }
-        hasMultiplier = InventoryManager.shared.getMultiplierCount() > 0
+        hasMultiplier = inventory.getMultiplierCount() > 0
         beginDishClock()
         state = .cooking
         startTimer()
@@ -154,7 +163,7 @@ final class GameStateManager {
         isPaused = false
         clock.reset()
         elapsedTime = 0
-        hasMultiplier = InventoryManager.shared.getMultiplierCount() > 0
+        hasMultiplier = inventory.getMultiplierCount() > 0
         currentRecipe = deck.randomRecipe()
         events.record(.runRestarted)
         state = .idle
@@ -188,7 +197,7 @@ final class GameStateManager {
     func discardPlate() {
         guard state == .cooking, !plateContents.isEmpty else { return }
         // The on-screen Reset button fires this, so it gets the reset sound.
-        AudioManager.shared.play(.reset)
+        audio.play(.reset)
         plateContents = []
         events.record(.plateDiscarded)
     }
@@ -217,8 +226,8 @@ final class GameStateManager {
         lives -= 1
         // The dish ran out from under the player — stop its warning and play
         // the lost-life sting instead.
-        AudioManager.shared.stopClockWarning()
-        AudioManager.shared.play(.loseHeart)
+        audio.stopClockWarning()
+        audio.play(.loseHeart)
         events.record(.lifeLost(livesLeft: lives))
 
         guard lives > 0 else {
@@ -272,7 +281,7 @@ final class GameStateManager {
         dishCountdown = Countdown(duration: difficulty.dishTime(for: currentRecipe), startingAt: clock.elapsed)
         // The music speeds up in lock-step with the tier that just squeezed
         // the clock, so the run audibly gets harder.
-        AudioManager.shared.setMusicRate(difficulty.musicRate)
+        audio.setMusicRate(difficulty.musicRate)
     }
 
     /// Banks the run's coins and high score the instant the run ends.
@@ -283,7 +292,7 @@ final class GameStateManager {
     /// transition runs exactly once per run, so the save always lands.
     private func saveResult() {
         if hasMultiplier {
-            InventoryManager.shared.consumeMultiplier()
+            inventory.consumeMultiplier()
         }
         GameStorage.record(result)
         GameCenter.submit(totalDishesServed)
@@ -305,7 +314,7 @@ final class GameStateManager {
             clock.hold(at: now)
             // No dish is running down, so a warning left looping would keep
             // ticking over a frozen clock.
-            AudioManager.shared.stopClockWarning()
+            audio.stopClockWarning()
             return
         }
         clock.advance(to: now)
@@ -333,9 +342,9 @@ final class GameStateManager {
             && dishTimeFraction > 0
             && dishTimeFraction <= Self.lowTimeWarningFraction
         if runningLow {
-            AudioManager.shared.startClockWarning()
+            audio.startClockWarning()
         } else {
-            AudioManager.shared.stopClockWarning()
+            audio.stopClockWarning()
         }
     }
 
@@ -343,16 +352,16 @@ final class GameStateManager {
     /// the last run is silenced, and the music drops back to normal speed —
     /// otherwise it would race through the countdown at last run's tempo.
     private func resetAudioForNewRun() {
-        AudioManager.shared.stopClockWarning()
-        AudioManager.shared.setMusicRate(1.0)
-        AudioManager.shared.play(.reset)
+        audio.stopClockWarning()
+        audio.setMusicRate(1.0)
+        audio.play(.reset)
     }
 
     /// The order is handed over, and the reward chime lands a beat later.
     private func playServeSounds() {
-        AudioManager.shared.play(.putOrder)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            AudioManager.shared.play(.addPoint)
+        audio.play(.putOrder)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [audio] in
+            audio.play(.addPoint)
         }
     }
 }
