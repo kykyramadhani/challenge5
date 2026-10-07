@@ -13,10 +13,8 @@ import AVFoundation
 final class CameraManager {
     /// Current camera authorization state, surfaced so UI can prompt the user.
     private(set) var authorizationStatus: AVAuthorizationStatus = .notDetermined
-
-    var isAuthorized: Bool {
-        authorizationStatus == .authorized
-    }
+    
+    var isAuthorized: Bool { authorizationStatus == .authorized }
 
     init() {
         self.authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
