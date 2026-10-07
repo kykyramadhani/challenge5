@@ -30,42 +30,41 @@ struct LivesTests {
     }
 
     /// The scene has no state change to notice here — a dish can time out
-    /// while already `.cooking` — so the token is the only signal that the
+    /// while already `.cooking` — so the event is the only signal that the
     /// board must be wiped for the new recipe.
-    @Test func aTimedOutDishBumpsTheResetToken() {
+    @Test func aTimedOutDishRecordsALostLife() {
         let manager = makeGame(recipes: Recipe.all)
         manager.start()
-        let tokenBefore = manager.resetToken
 
         manager.failDish()
 
-        #expect(manager.resetToken == tokenBefore + 1)
+        #expect(manager.events.latest?.event == .lifeLost(livesLeft: manager.startingLives - 1))
     }
 
     /// Losing a life wipes the board but the run carries on, so the player
-    /// must not be dropped back into a 3-2-1-GO! countdown. `runToken` is what
-    /// GameplayView keys that countdown off, and only `restart()` bumps it.
-    @Test func aTimedOutDishDoesNotBumpTheRunToken() {
+    /// must not be dropped back into a 3-2-1-GO! countdown. `runNumber` is
+    /// what GameplayView keys that countdown off, and only `restart()` moves it.
+    @Test func aTimedOutDishKeepsTheSameRun() {
         let manager = makeGame(recipes: Recipe.all)
         manager.start()
-        let runBefore = manager.runToken
+        let runBefore = manager.runNumber
 
         manager.failDish()
 
         #expect(manager.state == .cooking, "still playing, just a life down")
-        #expect(manager.runToken == runBefore, "no countdown mid-run")
+        #expect(manager.runNumber == runBefore, "no countdown mid-run")
     }
 
     /// Replay is the other half of that rule: a fresh run *does* get the
     /// countdown back.
-    @Test func restartBumpsTheRunToken() {
+    @Test func restartStartsTheNextRun() {
         let manager = makeGame(recipes: Recipe.all)
         manager.start()
-        let runBefore = manager.runToken
+        let runBefore = manager.runNumber
 
         manager.restart()
 
-        #expect(manager.runToken == runBefore + 1)
+        #expect(manager.runNumber == runBefore + 1)
     }
 
     /// The run ends on the last life, and only then — this is the sole way to

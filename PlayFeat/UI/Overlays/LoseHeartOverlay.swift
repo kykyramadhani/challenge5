@@ -15,8 +15,8 @@ struct LoseHeartOverlay: View {
         redBorder()
             .opacity(opacity)
             .allowsHitTesting(false)
-            .onChange(of: gameStateManager.looseHeart) { _, isLosing in
-                if isLosing { blink() }
+            .onChange(of: gameStateManager.events.latest) { _, entry in
+                if case .lifeLost = entry?.event { blink() }
             }
     }
     
@@ -25,7 +25,6 @@ struct LoseHeartOverlay: View {
             opacity = 1
         } completion: {
             opacity = 0
-            gameStateManager.looseHeart = false   // reset so it can fire again
         }
     }
 

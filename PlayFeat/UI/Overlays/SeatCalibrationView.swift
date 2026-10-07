@@ -21,11 +21,15 @@ struct SeatCalibrationView: View {
     /// Called once the player has held the pose for the full dwell.
     var onCalibrated: () -> Void
 
-    /// Set from the Settings sheet. When on, only the chosen hand has to be
-    /// raised — this is the fix for the pose otherwise being impossible to
-    /// hold with one arm unavailable.
-    @AppStorage("oneHandModeEnabled") private var oneHandModeEnabled = false
-    @AppStorage("preferredHand") private var preferredHand: HandSide = .right
+    /// Set from the Settings sheet. In one-hand mode only the chosen hand has
+    /// to be raised — the pose is otherwise impossible to hold with one arm
+    /// unavailable.
+    @AppStorage(HandInputModeSetting.isOneHandKey) private var isOneHand = false
+    @AppStorage(HandInputModeSetting.preferredHandKey) private var preferredHand: HandSide = .right
+
+    private var inputMode: any HandInputMode {
+        HandInputModeSetting.mode(isOneHand: isOneHand, preferredHand: preferredHand)
+    }
 
     /// Same dwell detector the bin gesture uses, so "hold still for a moment"
     /// behaves identically across the game and the timing rules live in one
@@ -157,21 +161,9 @@ struct SeatCalibrationView: View {
     /// Routed through `AppLocalization` rather than `Text` with a plain
     /// `String`: this is a computed `String`, and `Text(String)` renders its
     /// argument verbatim with no catalog lookup at all — which is how this
-    /// stayed in English regardless of the language picker. Two full
-    /// sentences rather than one with the hand name interpolated in, since
-    /// Indonesian doesn't necessarily put "left"/"right" in the same spot in
-    /// the sentence that English does.
+    /// stayed in English regardless of the language picker.
     private var instructionText: String {
-        let key: String.LocalizationValue
-        switch (oneHandModeEnabled, preferredHand) {
-        case (true, .left):
-            key = "Adjust your seat and raise your left hand"
-        case (true, .right):
-            key = "Adjust your seat and raise your right hand"
-        case (false, _):
-            key = "Adjust your seat to fit in the frame"
-        }
-        return AppLocalization.string(key)
+        AppLocalization.string(inputMode.calibrationInstruction)
     }
 
     private func isAligned(in size: CGSize, frame: CGRect) -> Bool {
@@ -179,7 +171,7 @@ struct SeatCalibrationView: View {
         return body.isAligned(
             in: frame,
             minimumShoulderSpan: frame.width * Self.minimumShoulderShare,
-            requiredHand: oneHandModeEnabled ? preferredHand : nil
+            mode: inputMode
         )
     }
 }

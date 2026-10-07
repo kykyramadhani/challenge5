@@ -284,13 +284,13 @@ struct GameplayView: View {
             // still running.
             handPoseManager.start()
         }
-        .task(id: gameStateManager.runToken) {
+        .task(id: gameStateManager.runNumber) {
             // Runs when the board appears — i.e. after calibration — and again
-            // on every replay, keyed off runToken since a replay that skips
+            // on every replay, keyed off runNumber since a replay that skips
             // calibration (no calibration required) never remounts this view.
-            // Deliberately *not* resetToken: that also fires when a dish times
-            // out, which costs a life but leaves the run going, and a countdown
-            // there would interrupt play the player hasn't lost yet.
+            // A life lost mid-run doesn't change runNumber: that wipes the
+            // board too, but a countdown there would interrupt play the player
+            // hasn't lost yet.
             // The camera is already live, handed over by the seat check.
             // Bring the music up under the count so play starts already scored;
             // startMusic is a no-op if it's somehow already going.

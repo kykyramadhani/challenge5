@@ -26,8 +26,8 @@ struct SettingsView: View {
 
     @AppStorage(AppLocalization.storageKey) private var language: AppLanguage = .english
 
-    @AppStorage("oneHandModeEnabled") private var oneHandModeEnabled = false
-    @AppStorage("preferredHand") private var preferredHand: HandSide = .right
+    @AppStorage(HandInputModeSetting.isOneHandKey) private var isOneHand = false
+    @AppStorage(HandInputModeSetting.preferredHandKey) private var preferredHand: HandSide = .right
 
     var body: some View {
         ZStack {
@@ -101,7 +101,7 @@ struct SettingsView: View {
                     SegmentedPill(
                         leftTitle: "OFF",
                         rightTitle: "ON",
-                        isRightSelected: $oneHandModeEnabled
+                        isRightSelected: $isOneHand
                     )
                     SegmentedPill(
                         leftTitle: HandSide.left.displayName,
@@ -111,7 +111,7 @@ struct SettingsView: View {
                             set: { preferredHand = $0 ? .right : .left }
                         ),
                         // Which hand only matters when one-hand mode is on.
-                        isEnabled: oneHandModeEnabled
+                        isEnabled: isOneHand
                     )
                 }
             }

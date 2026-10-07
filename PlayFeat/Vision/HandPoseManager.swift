@@ -510,13 +510,7 @@ final class HandPoseManager: NSObject {
             return
         }
 
-        // Set from the Settings sheet (SettingsView). Read straight from
-        // UserDefaults rather than @AppStorage — this runs on videoQueue, off
-        // the main thread, once per frame.
-        let oneHandPreference: HandSide? = UserDefaults.standard.bool(forKey: "oneHandModeEnabled")
-            ? HandSide(rawValue: UserDefaults.standard.string(forKey: "preferredHand") ?? "") ?? .right
-            : nil
-        let handLimit = oneHandPreference != nil ? 1 : maximumHandCount
+        let mode = HandInputModeSetting.stored()
 
         // No body, no hands. A hand is only the player's if it can be tied to
         // a visible shoulder, so a torso out of frame means nothing is tracked
@@ -525,8 +519,8 @@ final class HandPoseManager: NSObject {
             handWrists: classifications.map(\.wrist),
             bodies: bodies,
             wristTolerance: wristMatchTolerance,
-            limit: handLimit,
-            requiredHand: oneHandPreference
+            limit: min(maximumHandCount, mode.handCount),
+            mode: mode
         ) ?? []
 
         let hands = matchToTrackedHands(keep.map { classifications[$0] }, now: now)
@@ -628,14 +622,14 @@ final class HandPoseManager: NSObject {
         bodies: [BodyCandidate],
         wristTolerance: CGFloat,
         limit: Int,
-        requiredHand: HandSide? = nil
+        mode: any HandInputMode = TwoHandMode()
     ) -> [Int]? {
         HumanBodyPoseManager.playerHandIndices(
             handWrists: handWrists,
             bodies: bodies,
             wristTolerance: wristTolerance,
             limit: limit,
-            requiredHand: requiredHand
+            mode: mode
         )
     }
 

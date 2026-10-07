@@ -27,41 +27,52 @@ struct GameLoopTests {
         #expect(manager.totalDishesServed == 0)
     }
 
-    /// A stray downward swipe over an empty plate must not bump the token, or
-    /// GameScene would replay the fly-away animation and respawn the table
+    /// A stray downward swipe over an empty plate must not record an event,
+    /// or GameScene would replay the fly-away animation and respawn the table
     /// mid-round.
     @Test func discardingAnEmptyPlateDoesNothing() {
         let manager = makeGame(recipes: [.salad])
         manager.start()
-        let tokenBefore = manager.discardToken
+        let eventsBefore = manager.events
 
         manager.discardPlate()
 
-        #expect(manager.discardToken == tokenBefore)
+        #expect(manager.events == eventsBefore)
     }
 
-    @Test func discardBumpsTokenSoTheSceneCanAnimate() {
+    @Test func discardRecordsAnEventSoTheSceneCanAnimate() {
         let manager = makeGame(recipes: [.salad])
         manager.start()
         manager.addIngredientToPlate(.tomato)
-        let discardTokenBefore = manager.discardToken
 
         manager.discardPlate()
 
-        #expect(manager.discardToken == discardTokenBefore + 1)
+        #expect(manager.events.latest?.event == .plateDiscarded)
+    }
+
+    /// The recipe card turns red while something on the plate isn't in the
+    /// recipe, and clears as soon as the plate is emptied.
+    @Test func aWrongIngredientShowsUntilThePlateIsEmptied() {
+        let manager = makeGame(recipes: [.salad])
+        manager.start()
+        manager.addIngredientToPlate(.chicken)
+        #expect(manager.hasWrongIngredient)
+
+        manager.discardPlate()
+
+        #expect(!manager.hasWrongIngredient)
     }
 
     /// The "Play Again does nothing" bug: restarting has to reset the score and
-    /// the plate, and bump the token GameScene keys its board wipe off.
+    /// the plate, and record the event GameScene keys its board wipe off.
     ///
     /// Leaves `state` at `.idle` rather than `.cooking` — a replay has to sit
     /// through the seat check and countdown again, and it's `start()` that
     /// actually resumes play once that beat finishes (see below).
-    @Test func restartResetsEverythingAndBumpsResetToken() {
+    @Test func restartResetsEverythingAndRecordsARestart() {
         let manager = makeGame(recipes: [.chickenMayonnaise])
         manager.start()
         manager.addIngredientToPlate(.chicken)
-        let resetTokenBefore = manager.resetToken
 
         manager.restart()
 
@@ -71,8 +82,8 @@ struct GameLoopTests {
         #expect(manager.lives == manager.startingLives)
         #expect(manager.elapsedTime == 0)
         #expect(manager.state == .idle)
-        #expect(manager.resetToken == resetTokenBefore + 1,
-                "GameScene clears the board off this token; without it the old ingredients stay")
+        #expect(manager.events.latest?.event == .runRestarted,
+                "GameScene clears the board off this event; without it the old ingredients stay")
     }
 
     /// `restart()` alone must not resume play — GameplayView's countdown is
@@ -97,7 +108,7 @@ struct GameLoopTests {
         #expect(manager.state == .dishComplete)
 
         try await Task.sleep(for: .milliseconds(1200)) // dish reveal beat
-        #expect(manager.state == .waitingToServe)
+        #expect(manager.state.isWaitingToServe)
 
         manager.serveDish()
 
@@ -131,7 +142,7 @@ struct GameLoopTests {
         }
         try await Task.sleep(for: .milliseconds(1200))
 
-        #expect(manager.state == .waitingToServe)
+        #expect(manager.state.isWaitingToServe)
         let side = try #require(manager.bellSide)
         #expect(side == .left || side == .right)
 

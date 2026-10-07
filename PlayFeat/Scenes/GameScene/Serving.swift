@@ -147,11 +147,9 @@ extension GameScene {
     ) {
         guard let plateNode else { return }
         
-        let ingredientList: [Ingredient] = gameStateManager.currentRecipe.ingredients
-        
-        if !ingredientList.contains(node.ingredient) {
-            gameStateManager.wrongIngredientPlaced = true
-            // This ingredient isn't in the recipe — sound the mistake.
+        // Not in the recipe — sound the mistake. The recipe card turns red on
+        // its own, from what is on the plate.
+        if !gameStateManager.currentRecipe.ingredients.contains(node.ingredient) {
             audio?.play(.wrongIngredient)
         }
 
