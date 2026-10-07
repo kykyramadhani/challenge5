@@ -66,7 +66,7 @@ struct SeatCalibrationTests {
         let leftHandOnly = body(wrists: [CGPoint(x: 390, y: 330)])
 
         #expect(leftHandOnly.isAligned(
-            in: frame, minimumShoulderSpan: minimumSpan, requiredHand: .left
+            in: frame, minimumShoulderSpan: minimumSpan, mode: OneHandMode(hand: .left)
         ))
     }
 
@@ -76,7 +76,7 @@ struct SeatCalibrationTests {
         let leftHandOnly = body(wrists: [CGPoint(x: 390, y: 330)])
 
         #expect(!leftHandOnly.isAligned(
-            in: frame, minimumShoulderSpan: minimumSpan, requiredHand: .right
+            in: frame, minimumShoulderSpan: minimumSpan, mode: OneHandMode(hand: .right)
         ))
     }
 

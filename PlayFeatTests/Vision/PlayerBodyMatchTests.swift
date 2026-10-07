@@ -38,14 +38,14 @@ struct PlayerBodyMatchTests {
         hands: [(CGFloat, CGFloat)],
         bodies: [HandPoseManager.BodyCandidate],
         limit: Int = 2,
-        requiredHand: HandSide? = nil
+        mode: any HandInputMode = TwoHandMode()
     ) -> [Int]? {
         HandPoseManager.playerHandIndices(
             handWrists: hands.map { CGPoint(x: $0.0, y: $0.1) },
             bodies: bodies,
             wristTolerance: 0.6,
             limit: limit,
-            requiredHand: requiredHand
+            mode: mode
         )
     }
 
@@ -66,7 +66,7 @@ struct PlayerBodyMatchTests {
             hands: [(0.40, 0.50), (0.60, 0.50)],
             bodies: [body(wrists: [(0.40, 0.50), (0.60, 0.50)], shoulders: 0.30)],
             limit: 1,
-            requiredHand: .left
+            mode: OneHandMode(hand: .left)
         )
 
         #expect(kept == [0], "index 0 sits on the left wrist (0.40, 0.50)")
@@ -79,7 +79,7 @@ struct PlayerBodyMatchTests {
             hands: [(0.40, 0.50), (0.60, 0.50)],
             bodies: [body(wrists: [(0.40, 0.50), (0.60, 0.50)], shoulders: 0.30)],
             limit: 1,
-            requiredHand: .right
+            mode: OneHandMode(hand: .right)
         )
 
         #expect(kept == [1], "index 1 sits on the right wrist (0.60, 0.50)")

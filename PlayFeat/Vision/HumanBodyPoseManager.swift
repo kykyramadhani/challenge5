@@ -36,13 +36,21 @@ final class HumanBodyPoseManager {
 
         /// Whichever wrists Vision was confident about — nil when that side
         /// wasn't seen. Kept as separate sides (rather than a merged list) so
-        /// one-hand mode can require *the chosen* wrist, not just any wrist.
+        /// `OneHandMode` can require *the chosen* wrist, not just any wrist.
         let leftWrist: CGPoint?
         let rightWrist: CGPoint?
 
         /// Whichever wrists Vision was confident about — 0, 1 or 2 of them.
         /// Empty is legitimate: the player is there, their hands are not.
         var wrists: [CGPoint] { [leftWrist, rightWrist].compactMap { $0 } }
+
+        /// The wrist on `side`, or nil when that side wasn't seen.
+        func wrist(on side: HandSide) -> CGPoint? {
+            switch side {
+            case .left: leftWrist
+            case .right: rightWrist
+            }
+        }
 
         /// Apparent shoulder span: how near this person is, and the yardstick
         /// the wrist tolerance is measured in.
@@ -74,26 +82,17 @@ final class HumanBodyPoseManager {
         }
 
         /// Whether the player is sitting the way the game needs: head,
-        /// shoulders and the required hand(s) inside `frame`, far enough back
-        /// that they all fit, close enough that the shoulders still span a
-        /// decent share of it.
+        /// shoulders and every hand `mode` plays with inside `frame`, far
+        /// enough back that they all fit, close enough that the shoulders
+        /// still span a decent share of it.
         func isAligned(
             in frame: CGRect,
             minimumShoulderSpan: CGFloat,
-            requiredHand: HandSide? = nil
+            mode: any HandInputMode = TwoHandMode()
         ) -> Bool {
-            guard let head else { return false }
+            guard let head, mode.seesEveryHand(on: self) else { return false }
 
-            let requiredWrists: [CGPoint]
-            if let requiredHand {
-                guard let wrist = requiredHand == .left ? leftWrist : rightWrist else { return false }
-                requiredWrists = [wrist]
-            } else {
-                guard wrists.count == 2 else { return false }
-                requiredWrists = wrists
-            }
-
-            let required = [head, leftShoulder, rightShoulder] + requiredWrists
+            let required = [head, leftShoulder, rightShoulder] + mode.playerWrists(of: self)
             guard required.allSatisfy(frame.contains) else { return false }
 
             return scale >= minimumShoulderSpan
@@ -219,7 +218,7 @@ final class HumanBodyPoseManager {
         bodies: [BodyCandidate],
         wristTolerance: CGFloat,
         limit: Int,
-        requiredHand: HandSide? = nil
+        mode: any HandInputMode = TwoHandMode()
     ) -> [Int]? {
         guard limit > 0 else { return [] }
         guard let player = nearestBody(in: bodies) else { return nil }
@@ -230,11 +229,7 @@ final class HumanBodyPoseManager {
             bodies[body].wrists.map { $0.distance(to: hand) }.min() ?? .greatestFiniteMagnitude
         }
 
-        let playerWrists: [CGPoint] = {
-            guard let requiredHand else { return bodies[player].wrists }
-            let wrist = requiredHand == .left ? bodies[player].leftWrist : bodies[player].rightWrist
-            return wrist.map { [$0] } ?? []
-        }()
+        let playerWrists = mode.playerWrists(of: bodies[player])
 
         let matched: [(index: Int, distance: CGFloat)] = handWrists.indices.compactMap { index in
             let hand = handWrists[index]
