@@ -64,5 +64,4 @@ fastlane/screenshots/**/*.png
 fastlane/test_output
 PlayFeat.xcodeproj/project.pbxproj
 
-.claude
 CODE_AUDIT.md
