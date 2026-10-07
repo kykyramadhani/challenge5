@@ -46,7 +46,7 @@ extension GameScene {
         // tray. Everything else parks them.
         guard let gameStateManager,
               gameStateManager.state == .cooking
-                || gameStateManager.state == .waitingToServe else {
+                || gameStateManager.state.isWaitingToServe else {
             abandonAllDrags()
             abandonPlateCarry()
             resetHoverDetector.reset()

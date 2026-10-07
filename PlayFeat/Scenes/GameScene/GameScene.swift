@@ -153,8 +153,8 @@ final class GameScene: SKScene {
 
     // MARK: - State-machine bookkeeping
     var lastKnownState: GameState?
-    var lastResetToken: Int = 0
-    var lastDiscardToken: Int = 0
+    /// The number of the last `GameEvent` this scene acted on.
+    var lastHandledEvent = 0
     var spawnedRecipeName: String?
     var lastServeDirection: SwipeDirection?
 
@@ -210,25 +210,20 @@ final class GameScene: SKScene {
     }
 
     // MARK: - State machine
-    /// Polled once per frame. Compares the current GameState against the
-    /// last-seen state and runs the appropriate scene transition.
+    /// Polled once per frame. Acts on any new `GameEvent`s, then compares the
+    /// current GameState against the last-seen one and runs the matching
+    /// scene transition.
     func syncWithGameState(force: Bool) {
         guard let gameStateManager else { return }
 
-        var force = force
-        if gameStateManager.resetToken != lastResetToken {
-            lastResetToken = gameStateManager.resetToken
-            resetBoard()
-            force = true
-        }
+        let newEvents = gameStateManager.events.entries(after: lastHandledEvent)
+        newEvents.forEach(handle)
 
-        if gameStateManager.discardToken != lastDiscardToken {
-            lastDiscardToken = gameStateManager.discardToken
-            returnPlateContentsToTable()
-        }
-
+        // A wiped board is laid out again below even when the phase reads the
+        // same as before — a timed-out dish stays `.cooking`.
+        let boardWasWiped = newEvents.contains { $0.event.wipesBoard }
         let state = gameStateManager.state
-        guard force || state != lastKnownState else { return }
+        guard force || boardWasWiped || state != lastKnownState else { return }
         lastKnownState = state
 
         switch state {
@@ -255,18 +250,22 @@ final class GameScene: SKScene {
             clearTableIngredientNodes()
             showFinishedDish(gameStateManager.currentRecipe)
 
-        case .waitingToServe:
-            if let side = gameStateManager.bellSide {
-                showBell(on: side)
-            }
+        case .waitingToServe(let bellSide):
+            showBell(on: bellSide)
 
         case .gameOver:
             // The run's coins and high score are banked in
-            // GameStateManager.persistResult() the instant the run ends. It
+            // GameStateManager.saveResult() the instant the run ends. It
             // must NOT be done here: `GameplayView` pauses the scene on
             // `.gameOver`, so this branch isn't guaranteed to run before the
             // update loop freezes — which is exactly why the save was flaky.
             break
         }
+    }
+
+    private func handle(_ entry: GameEventLog.Entry) {
+        lastHandledEvent = entry.number
+        if entry.event.wipesBoard { resetBoard() }
+        if entry.event == .plateDiscarded { returnPlateContentsToTable() }
     }
 }

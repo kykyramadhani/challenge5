@@ -26,4 +26,14 @@ struct GameStorage {
         }
     }
 
+    /// Banks a finished run: its coins, and its dish count if that beats the
+    /// best so far.
+    static func record(_ result: GameResult) {
+        coins += result.totalCoins
+        // Checked before the write, so it compares against the *previous*
+        // best rather than the value about to be stored.
+        if result.newHighScore {
+            highscore = result.totalDishesServed
+        }
+    }
 }
