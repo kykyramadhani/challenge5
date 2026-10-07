@@ -26,7 +26,7 @@ struct RecipeCard: View {
     var gameStateManager: GameStateManager
     
     private var wrongRecipe: Bool  {
-        gameStateManager.wrongIngredientPlaced
+        gameStateManager.hasWrongIngredient
     }
 
     private static let iconSize: CGFloat = 100
