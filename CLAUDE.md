@@ -253,19 +253,29 @@ Summary:
 
 ## Current development phase
 
-Refactoring from an "app" structure to a game structure. Done: folder
-restructure, tests split by feature. Planned order (one branch or commit per
-step, ⌘U before and after):
+Refactoring from an "app" structure to a game structure (one branch or commit
+per step, ⌘U before and after).
 
-1. Move `ObservableObject` classes to `@Observable`
-2. Replace singletons (`AudioManager`, `CameraManager`, `InventoryManager`) with
-   dependency injection
-3. Split `HandPoseManager` into camera session, Vision processing and gesture
+Done:
+
+- Folder restructure, tests split by feature
+- `ObservableObject` → `@Observable`
+- Singletons replaced with dependency injection (`AudioManager`,
+  `CameraManager`, `InventoryManager`); `ClickButton` plays the UI click
+- Strategy pattern for input modes (`HandInputMode`: one-hand / two-hand)
+- `GameState` cleanup: flags and tokens folded into states and events;
+  `GameStateManager` split (`PlayClock`, `Difficulty`, `RecipeDeck`, ...)
+- Protocols for gameplay dependencies: `GameScene` and `GameStateManager`
+  depend on `HandInputSource` and `SoundPlaying`, not on `HandPoseManager` /
+  `AudioManager`. Tests use `ScriptedHandInput` and `SoundRecorder`.
+
+Next:
+
+1. End-to-end gameplay test: a `ScriptedHandInput` hand carries an ingredient
+   onto the plate in a real `GameScene`
+2. Split `HandPoseManager` into camera session, Vision processing and gesture
    tracking
-4. Add protocols (`HandInputSource`, `SoundPlaying`) so gameplay can be tested
-   without a camera
-5. Strategy pattern for input modes (one-hand / two-hand)
-6. Clean up `GameState` (fold parallel flags and tokens into states/events) and
-   break up `GameStateManager`
+3. Move game-event sounds out of `GameStateManager` into a `GameAudio` that
+   reacts to game events
 
 `CODE_AUDIT.md` lists known bugs and tech debt found in an earlier audit.

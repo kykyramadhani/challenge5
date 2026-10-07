@@ -8,21 +8,23 @@
 import Testing
 @testable import PlayFeat
 
-/// Built once for the whole test target: AudioManager configures the audio
-/// session and preloads every clip, which is too slow to repeat per test.
-/// Muted, so `play`, music and the clock warning all stay silent.
-@MainActor private let silentAudio: AudioManager = {
-    let audio = AudioManager()
-    audio.isEnabled = false
-    return audio
-}()
-
+/// A game wired to test doubles: an inventory that lives only in memory, and
+/// a `SoundRecorder` instead of real audio. Pass your own recorder to check
+/// which sounds a rule plays.
+///
+/// The defaults are `nil` and filled in inside the body on purpose: default
+/// values are evaluated outside the main actor, where `Recipe.all` and
+/// `SoundRecorder()` (both main-actor isolated) can't be reached.
 @MainActor
-func makeGame(recipes: [Recipe] = Recipe.all, startingLives: Int = 3) -> GameStateManager {
+func makeGame(
+    recipes: [Recipe]? = nil,
+    startingLives: Int = 3,
+    sounds: SoundRecorder? = nil
+) -> GameStateManager {
     GameStateManager(
-        recipes: recipes,
+        recipes: recipes ?? Recipe.all,
         startingLives: startingLives,
         inventory: InventoryManager(inMemory: true),
-        audio: silentAudio
+        audio: sounds ?? SoundRecorder()
     )
 }
