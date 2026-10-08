@@ -18,12 +18,12 @@ enum GameState: Equatable {
     /// The bell has rung on `bellSide`; waiting for the player to carry the
     /// plate to it. The side travels with the phase, so a bell can't be
     /// waiting without one, or linger once the dish is served.
-    case waitingToServe(bellSide: SwipeDirection)
+    case waitingToServe(bellSide: ServeDirection)
     /// The player ran out of lives; play is over until `restart()`.
     case gameOver
 
     /// Which edge the plate has to be carried to. Nil in every other phase.
-    var bellSide: SwipeDirection? {
+    var bellSide: ServeDirection? {
         guard case let .waitingToServe(side) = self else { return nil }
         return side
     }

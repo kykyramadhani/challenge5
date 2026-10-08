@@ -50,7 +50,7 @@ extension GameScene {
 
     /// Slides the serving station — tray plus ringing bell — in from one edge.
     /// That edge is where the player has to carry the plate to serve the dish.
-    func showBell(on direction: SwipeDirection) {
+    func showBell(on direction: ServeDirection) {
         bellNode?.removeFromParent()
 
         // Wide enough that the shrunken plate drops in comfortably, and that
@@ -107,7 +107,7 @@ extension GameScene {
     /// the dish with it and the order reads as being carried away to the
     /// kitchen. The dish itself is still a child of the plate, so it rides
     /// along too.
-    func animateServe(direction: SwipeDirection, then nextRecipe: Recipe) {
+    func animateServe(direction: ServeDirection, then nextRecipe: Recipe) {
         let slideX: CGFloat = direction == .left ? -size.width : size.width
         let slideOut = SKAction.moveBy(x: slideX, y: 0, duration: 0.35)
         slideOut.timingMode = .easeIn

@@ -157,7 +157,7 @@ final class GameScene: SKScene {
     /// The number of the last `GameEvent` this scene acted on.
     var lastHandledEvent = 0
     var spawnedRecipeName: String?
-    var lastServeDirection: SwipeDirection?
+    var lastServeDirection: ServeDirection?
 
     /// Where the plate sits. SpriteKit is y-up, so 0.18 is near the bottom.
     var plateHome: CGPoint {

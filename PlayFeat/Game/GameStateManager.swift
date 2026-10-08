@@ -36,7 +36,7 @@ final class GameStateManager {
 
     /// Which edge the bell rang on, and so which way the plate has to be
     /// carried. Nil whenever no dish is waiting to be served.
-    var bellSide: SwipeDirection? { state.bellSide }
+    var bellSide: ServeDirection? { state.bellSide }
 
     /// Something on the plate isn't in the recipe. Worked out from the plate
     /// itself, so it clears the moment the plate is emptied, however that

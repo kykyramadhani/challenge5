@@ -50,7 +50,7 @@ final class BellNode: SKNode {
 
     private static let ringingKey = "ringing"
 
-    init(direction: SwipeDirection, width: CGFloat = 220) {
+    init(direction: ServeDirection, width: CGFloat = 220) {
         size = CGSize(width: width, height: width * Self.trayAspect)
 
         tray = SKSpriteNode(imageNamed: "Tray")

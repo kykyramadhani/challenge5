@@ -7,7 +7,7 @@ import SpriteKit
 
 enum BellAnimation {
     static func entrance(
-        direction: SwipeDirection,
+        direction: ServeDirection,
         to targetPosition: CGPoint
     ) -> SKAction {
 
