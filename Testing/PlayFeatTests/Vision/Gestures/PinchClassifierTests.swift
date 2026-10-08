@@ -24,7 +24,7 @@ struct PinchClassifierTests {
     /// Tips touching. They never reach 0 — the joints sit inside the fingers —
     /// so this has to clear the grab threshold with room, not just beat zero.
     @Test func tipsTogetherReadAsAPinch() {
-        let ratio = HandPoseManager.pinchRatio(
+        let ratio = HandClassifier.pinchRatio(
             thumbTip: CGPoint(x: 0, y: 0),
             indexTip: CGPoint(x: 0.15, y: 0),
             palmLength: palmLength
@@ -37,7 +37,7 @@ struct PinchClassifierTests {
     /// A spread open hand puts the two tips a full palm-width apart or more —
     /// comfortably past the open threshold, never mistakeable for a grab.
     @Test func aSpreadHandIsWellClearOfTheGrabThreshold() {
-        let ratio = HandPoseManager.pinchRatio(
+        let ratio = HandClassifier.pinchRatio(
             thumbTip: CGPoint(x: 0, y: 0),
             indexTip: CGPoint(x: 1.1, y: 0),
             palmLength: palmLength
@@ -53,7 +53,7 @@ struct PinchClassifierTests {
     /// nearer each other than any other pair on the hand. ~0.6 palm lengths
     /// still has to land on the open side of the threshold.
     @Test func aClenchedFistIsNotAGrab() {
-        let ratio = HandPoseManager.pinchRatio(
+        let ratio = HandClassifier.pinchRatio(
             thumbTip: CGPoint(x: 0, y: 0),
             indexTip: CGPoint(x: 0.6, y: 0),
             palmLength: palmLength
@@ -65,12 +65,12 @@ struct PinchClassifierTests {
     /// Scale-free: the same pinch twice as far from the camera must classify
     /// identically, since the gap is divided by palm length.
     @Test func pinchIsIndependentOfDistanceFromCamera() {
-        let near = HandPoseManager.pinchRatio(
+        let near = HandClassifier.pinchRatio(
             thumbTip: CGPoint(x: 0, y: 0),
             indexTip: CGPoint(x: 0.3, y: 0),
             palmLength: palmLength
         )
-        let far = HandPoseManager.pinchRatio(
+        let far = HandClassifier.pinchRatio(
             thumbTip: CGPoint(x: 0, y: 0),
             indexTip: CGPoint(x: 0.15, y: 0),
             palmLength: palmLength / 2
@@ -82,17 +82,17 @@ struct PinchClassifierTests {
     /// A tip that dropped out of tracking is not a grab — the caller opens the
     /// hand rather than clamping shut on whatever is nearby.
     @Test func aMissingTipHasNoPinchMeasurement() {
-        #expect(HandPoseManager.pinchRatio(
+        #expect(HandClassifier.pinchRatio(
             thumbTip: nil, indexTip: CGPoint(x: 0.2, y: 0), palmLength: palmLength
         ) == nil)
 
-        #expect(HandPoseManager.pinchRatio(
+        #expect(HandClassifier.pinchRatio(
             thumbTip: CGPoint(x: 0, y: 0), indexTip: nil, palmLength: palmLength
         ) == nil)
     }
 
     @Test func anUnmeasurablePalmHasNoPinchMeasurement() {
-        #expect(HandPoseManager.pinchRatio(
+        #expect(HandClassifier.pinchRatio(
             thumbTip: CGPoint(x: 0, y: 0),
             indexTip: CGPoint(x: 0.2, y: 0),
             palmLength: 0

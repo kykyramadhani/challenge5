@@ -21,7 +21,7 @@ struct HandPoseMappingTests {
     @Test func normalizedTopOfFrameMapsToTopOfView() {
         let view = CGSize(width: 960, height: 1280) // exactly 3:4, no cropping
 
-        let mapped = HandPoseManager.viewPoint(
+        let mapped = CameraViewMapping.viewPoint(
             fromNormalized: CGPoint(x: 0.5, y: 0.9), viewSize: view, bufferSize: buffer
         )
 
@@ -36,7 +36,7 @@ struct HandPoseMappingTests {
                      CGSize(width: 834, height: 1194),  // iPad Pro 11"
                      CGSize(width: 1024, height: 1366)] // iPad Pro 13"
         {
-            let mapped = HandPoseManager.viewPoint(
+            let mapped = CameraViewMapping.viewPoint(
                 fromNormalized: CGPoint(x: 0.5, y: 0.5), viewSize: view, bufferSize: buffer
             )
             #expect(abs(mapped.x - view.width / 2) < 0.001)
@@ -50,10 +50,10 @@ struct HandPoseMappingTests {
     @Test func aspectFillCropPushesFrameEdgesOffScreen() {
         let iPhone = CGSize(width: 393, height: 852)
 
-        let leftEdge = HandPoseManager.viewPoint(
+        let leftEdge = CameraViewMapping.viewPoint(
             fromNormalized: CGPoint(x: 0, y: 0.5), viewSize: iPhone, bufferSize: buffer
         )
-        let rightEdge = HandPoseManager.viewPoint(
+        let rightEdge = CameraViewMapping.viewPoint(
             fromNormalized: CGPoint(x: 1, y: 0.5), viewSize: iPhone, bufferSize: buffer
         )
 
@@ -69,7 +69,7 @@ struct HandPoseMappingTests {
     @Test func matchingAspectCropsNothing() {
         let squareIsh = CGSize(width: 1024, height: 1366) // 3:4 within rounding
 
-        let leftEdge = HandPoseManager.viewPoint(
+        let leftEdge = CameraViewMapping.viewPoint(
             fromNormalized: CGPoint(x: 0, y: 0.5), viewSize: squareIsh, bufferSize: buffer
         )
 
@@ -81,7 +81,7 @@ struct HandPoseMappingTests {
     @Test func missingBufferSizeFallsBackToStretch() {
         let view = CGSize(width: 400, height: 800)
 
-        let mapped = HandPoseManager.viewPoint(
+        let mapped = CameraViewMapping.viewPoint(
             fromNormalized: CGPoint(x: 0.25, y: 0.75), viewSize: view, bufferSize: .zero
         )
 

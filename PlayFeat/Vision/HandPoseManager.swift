@@ -1,10 +1,10 @@
 //
 //  HandPoseManager.swift
-//  VisionChef
+//  PlayFeat
 //
 //  Captures camera frames, runs VNDetectHumanHandPoseRequest on each frame,
 //  tracks up to two hands independently, and classifies each as grabbing
-//  (thumb tip pinched to little-finger tip) or open (everything else).
+//  (thumb tip pinched to index-finger tip) or open (everything else).
 //
 //  Vision inference runs entirely on a background queue (`videoQueue`); only
 //  the observed updates are hopped onto the main queue, so a slow
@@ -42,6 +42,11 @@ final class HandPoseManager: NSObject {
     /// mapping to the screen — without it the overlay only lines up when the
     /// screen happens to share the camera's 4:3 aspect.
     private(set) var bufferSize: CGSize = .zero
+    
+    /// The current mapping from Vision points to the screen.
+    private var mapping: CameraViewMapping {
+        CameraViewMapping(bufferSize: bufferSize, gravity: previewGravity)
+    }
 
     var isHandVisible: Bool { !hands.isEmpty }
 
@@ -203,27 +208,18 @@ final class HandPoseManager: NSObject {
     /// `GameScene` must run this through `convertPoint(fromView:)` rather
     /// than assigning the result to a node position directly.
     func cursor(for hand: HandData, in size: CGSize) -> CGPoint {
-        Self.viewPoint(fromNormalized: hand.cursorPosition, viewSize: size,
-                       bufferSize: bufferSize, gravity: previewGravity)
+        mapping.viewPoint(hand.cursorPosition, in: size)
     }
 
     /// A hand's skeleton mapped into view space, one chain per finger.
     func jointChains(for hand: HandData, in size: CGSize) -> [[CGPoint]] {
-        hand.skeleton.map { chain in
-            chain.map {
-                Self.viewPoint(fromNormalized: $0, viewSize: size,
-                               bufferSize: bufferSize, gravity: previewGravity)
-            }
-        }
+        hand.skeleton.map { chain in chain.map { mapping.viewPoint($0, in: size) } }
     }
 
     /// The player's upper body in view space. Runs through the same mapping as
     /// the hands, so the two can never disagree about where the player is.
     func playerBody(in size: CGSize) -> BodyCandidate? {
-        playerBody?.mapped {
-            Self.viewPoint(fromNormalized: $0, viewSize: size,
-                           bufferSize: bufferSize, gravity: previewGravity)
-        }
+        playerBody?.mapped { mapping.viewPoint($0, in: size) }
     }
 
     /// The player's body as bone chains in view space, one chain per bone.
@@ -233,57 +229,7 @@ final class HandPoseManager: NSObject {
 
     /// Every joint of a hand in view space, as a flat list.
     func jointPoints(for hand: HandData, in size: CGSize) -> [CGPoint] {
-        hand.recognizedJoints.map {
-            Self.viewPoint(fromNormalized: $0, viewSize: size,
-                           bufferSize: bufferSize, gravity: previewGravity)
-        }
-    }
-
-    /// Maps a normalized Vision point (origin bottom-left) into view space
-    /// (origin top-left), reproducing what the preview layer's `gravity` does
-    /// to the image: scale the frame to cover (`.resizeAspectFill`) or to fit
-    /// inside (`.resizeAspect`) the view, centre it, and let any overflow hang
-    /// off the edges.
-    ///
-    /// Skipping that crop is what pulled the skeleton off the hand on device —
-    /// it costs up to ~123pt of horizontal error on a 19.5:9 iPhone, and
-    /// exactly 0 on a 4:3 iPad, which is why it looked fine in some places.
-    ///
-    /// No horizontal flip here: the capture connection is mirrored at source
-    /// (see `configureSessionIfNeeded`), so Vision already sees the same
-    /// left-right arrangement the player does.
-    static func viewPoint(
-        fromNormalized normalized: CGPoint,
-        viewSize: CGSize,
-        bufferSize: CGSize,
-        gravity: AVLayerVideoGravity = .resizeAspectFill
-    ) -> CGPoint {
-        let flipped = CGPoint(x: normalized.x, y: 1 - normalized.y)
-
-        guard viewSize.width > 0, viewSize.height > 0,
-              bufferSize.width > 0, bufferSize.height > 0,
-              gravity != .resize else {
-            // No frame measured yet (or an outright stretch was asked for) —
-            // a plain stretch is the best mapping available.
-            return CGPoint(x: flipped.x * viewSize.width, y: flipped.y * viewSize.height)
-        }
-
-        let widthScale = viewSize.width / bufferSize.width
-        let heightScale = viewSize.height / bufferSize.height
-        let scale = gravity == .resizeAspect
-            ? min(widthScale, heightScale)   // fit: whole frame, letterboxed
-            : max(widthScale, heightScale)   // fill: covers the view, cropped
-        let displayed = CGSize(width: bufferSize.width * scale, height: bufferSize.height * scale)
-        let origin = CGPoint(
-            // Negative when filling (that edge is cropped off-screen),
-            // positive when fitting (that edge is a letterbox bar).
-            x: (viewSize.width - displayed.width) / 2,
-            y: (viewSize.height - displayed.height) / 2
-        )
-        return CGPoint(
-            x: origin.x + flipped.x * displayed.width,
-            y: origin.y + flipped.y * displayed.height
-        )
+        hand.recognizedJoints.map { mapping.viewPoint($0, in: size) }
     }
 
     // MARK: - Session configuration
@@ -500,10 +446,7 @@ final class HandPoseManager: NSObject {
 
         let now = CACurrentMediaTime()
         let classifications = observations.compactMap {
-            try? Self.classify(
-                observation: $0,
-                jointConfidenceThreshold: jointConfidenceThreshold
-            )
+            try? HandClassifier.classify($0, jointConfidenceThreshold: jointConfidenceThreshold)
         }
         guard !classifications.isEmpty else {
             publishNoHands()
@@ -525,83 +468,6 @@ final class HandPoseManager: NSObject {
 
         let hands = matchToTrackedHands(keep.map { classifications[$0] }, now: now)
         DispatchQueue.main.async { self.hands = hands }
-    }
-
-    /// Result of classifying a single Vision hand observation.
-    private struct Classification {
-        let location: CGPoint // normalized, Vision space — palm centre
-        /// The hand's own wrist joint. Matched against the *body* detector's
-        /// wrists to work out whose arm this hand is on.
-        let wrist: CGPoint
-        /// Wrist → knuckles, normalized. Doubles as a distance-from-camera
-        /// cue: the same hand twice as far away measures half as long.
-        let palmLength: CGFloat
-        /// Thumb-tip to index-tip gap, in palm lengths. Nil when either tip
-        /// was missing this frame — the hand is then treated as open, since a
-        /// grab has to be seen to count.
-        let pinchRatio: CGFloat?
-        let skeleton: [[CGPoint]]
-    }
-
-    /// Joint chains used both for the skeleton overlay and for the palm
-    /// measurements below — wrist first, fingertip last.
-    private static let fingerChains: [[VNHumanHandPoseObservation.JointName]] = [
-        [.wrist, .thumbCMC, .thumbMP, .thumbIP, .thumbTip],
-        [.wrist, .indexMCP, .indexPIP, .indexDIP, .indexTip],
-        [.wrist, .middleMCP, .middlePIP, .middleDIP, .middleTip],
-        [.wrist, .ringMCP, .ringPIP, .ringDIP, .ringTip],
-        [.wrist, .littleMCP, .littlePIP, .littleDIP, .littleTip]
-    ]
-
-    private static func classify(
-        observation: VNHumanHandPoseObservation,
-        jointConfidenceThreshold: Float
-    ) throws -> Classification {
-        let allPoints = try observation.recognizedPoints(.all)
-
-        func point(_ name: VNHumanHandPoseObservation.JointName) -> CGPoint? {
-            guard let joint = allPoints[name], joint.confidence >= jointConfidenceThreshold else {
-                return nil
-            }
-            return CGPoint(x: joint.location.x, y: joint.location.y)
-        }
-
-        guard let wrist = point(.wrist) else { throw HandPoseError.noReliableWrist }
-
-        let skeleton = fingerChains.map { $0.compactMap(point) }
-
-        // Palm length = wrist → knuckles, the scale reference every other
-        // measurement is divided by. Taking the largest available MCP keeps a
-        // sane value when the middle knuckle briefly drops out.
-        let knuckles: [VNHumanHandPoseObservation.JointName] = [.middleMCP, .indexMCP, .ringMCP, .littleMCP]
-        let knucklePoints = knuckles.compactMap(point)
-        guard let palmLength = knucklePoints.map({ wrist.distance(to: $0) }).max(), palmLength > 0 else {
-            throw HandPoseError.noReliablePalm
-        }
-
-        // The grab gesture: thumb tip meeting little-finger tip. Only these two
-        // joints matter — what the other three fingers are doing is ignored
-        // entirely, so a fist and a flat palm both read as open.
-        let pinch = pinchRatio(
-            thumbTip: point(.thumbTip),
-            indexTip: point(.indexTip),
-            palmLength: palmLength
-        )
-
-        // Track the palm centre (wrist + knuckles) rather than including the
-        // fingertips: the palm barely moves when the hand opens and closes, so
-        // the cursor stays put at the exact moment the player clenches to grab.
-        let palmPoints = [wrist] + knucklePoints
-        let sum = palmPoints.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
-        let centre = CGPoint(x: sum.x / CGFloat(palmPoints.count), y: sum.y / CGFloat(palmPoints.count))
-
-        return Classification(
-            location: centre,
-            wrist: wrist,
-            palmLength: palmLength,
-            pinchRatio: pinch,
-            skeleton: skeleton
-        )
     }
 
     // MARK: - Forwarded Static Helpers for Body Pose
@@ -633,29 +499,6 @@ final class HandPoseManager: NSObject {
         )
     }
 
-    /// The gap between thumb tip and little-finger tip, in palm lengths —
-    /// small means the two are pinched together, which is the grab gesture.
-    ///
-    /// Nil when either tip is missing, or the palm couldn't be measured: the
-    /// caller reads that as "not grabbing", so a hand whose thumb drops out of
-    /// tracking opens rather than clamping shut on whatever is nearby.
-    ///
-    /// Extracted from `classify` so the tuning maths can be exercised without
-    /// having to fabricate a `VNHumanHandPoseObservation`.
-    static func pinchRatio(
-        thumbTip: CGPoint?,
-        indexTip: CGPoint?,
-        palmLength: CGFloat
-    ) -> CGFloat? {
-        guard palmLength > 0, let thumbTip, let indexTip else { return nil }
-        return thumbTip.distance(to: indexTip) / palmLength
-    }
-
-    private enum HandPoseError: Error {
-        case noReliableWrist
-        case noReliablePalm
-    }
-
     // MARK: - Identity tracking + swipes (runs on videoQueue)
 
     /// Assigns each fresh observation to the tracked hand it most likely
@@ -664,7 +507,10 @@ final class HandPoseManager: NSObject {
     /// Vision hands back observations in no particular order, so without this
     /// the two hands would trade identities at random — and with them, whatever
     /// each was dragging.
-    private func matchToTrackedHands(_ classifications: [Classification], now: TimeInterval) -> [HandData] {
+    private func matchToTrackedHands(
+        _ classifications: [HandClassifier.Classification],
+        now: TimeInterval
+    ) -> [HandData] {
         let assignments = Self.matchAssignments(
             newPositions: classifications.map(\.location),
             previousPositions: tracked.map(\.smoothed),

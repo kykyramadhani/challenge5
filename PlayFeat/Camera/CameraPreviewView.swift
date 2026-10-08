@@ -21,7 +21,7 @@ struct CameraPreviewView: UIViewRepresentable {
 
         
         // The manager owns this setting because its hand → screen mapping has
-        // to undo exactly the same fitting; see `HandPoseManager.viewPoint`.
+        // to undo exactly the same fitting; see `CameraViewMapping`.
         layer.videoGravity = handPoseManager.previewGravity
 
         if let connection = layer.connection, connection.isVideoMirroringSupported {
