@@ -17,7 +17,7 @@
 
 import CoreGraphics
 
-struct PinchDetector: Equatable {
+nonisolated struct PinchDetector: Equatable {
 
     /// Consecutive agreeing frames needed before the state actually changes.
     ///

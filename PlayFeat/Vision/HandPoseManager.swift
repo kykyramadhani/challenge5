@@ -110,22 +110,8 @@ final class HandPoseManager: NSObject {
         didSet { bodyPoseManager.jointConfidenceThreshold = jointConfidenceThreshold }
     }
 
-    /// Grabbing is a **pinch**: thumb tip and index-finger tip brought together.
-    @ObservationIgnored var pinchCloseRatio: CGFloat = 0.3
-    @ObservationIgnored var pinchOpenRatio: CGFloat = 0.5
-
     /// Rotation used when running on a Mac.
     @ObservationIgnored var macCameraRotationAngle: CGFloat = 90
-
-    /// Exponential smoothing applied to each cursor (0 = frozen, 1 = raw).
-    @ObservationIgnored var cursorSmoothing: CGFloat = 0.35
-
-    /// How far (in normalized units) a hand may travel between frames and still
-    /// be considered the same hand.
-    @ObservationIgnored var handMatchRadius: CGFloat = 0.45
-
-    /// How long a hand's trajectory survives after Vision stops reporting it.
-    @ObservationIgnored var handGracePeriod: TimeInterval = 0.35
 
     // MARK: - AVFoundation / Vision plumbing
 
@@ -146,22 +132,11 @@ final class HandPoseManager: NSObject {
 
     // MARK: - Per-hand tracking (accessed only from videoQueue)
 
-    /// videoQueue-local record of a hand between frames.
-    private struct TrackedHand {
-        let id: Int
-        var smoothed: CGPoint
-        /// Evidence-based pinch state — see `PinchDetector`.
-        var pinch: PinchDetector
-        /// Last skeleton Vision gave for this hand. Kept so a hand that is
-        /// coasting through a dropped frame can still be drawn where it was,
-        /// rather than blinking out.
-        var skeleton: [[CGPoint]]
-        /// Last time Vision actually reported this hand; drives the grace period.
-        var lastSeen: TimeInterval
-    }
+    /// Keeps each hand's ID, smoothed cursor and pinch state between frames.
+    /// The hand-tracking tuning knobs (smoothing, grace period, pinch
+    /// thresholds) live on it.
+    @ObservationIgnored private var identityTracker = HandIdentityTracker()
 
-    @ObservationIgnored private var tracked: [TrackedHand] = []
-    @ObservationIgnored private var nextHandID = 0
     @ObservationIgnored private var lastMeasuredBufferSize: CGSize = .zero
 
     /// videoQueue-local copy of what was last published, so an unchanged body
@@ -466,7 +441,7 @@ final class HandPoseManager: NSObject {
             mode: mode
         ) ?? []
 
-        let hands = matchToTrackedHands(keep.map { classifications[$0] }, now: now)
+        let hands = identityTracker.update(with: keep.map { classifications[$0] }, at: now)
         DispatchQueue.main.async { self.hands = hands }
     }
 
@@ -499,130 +474,6 @@ final class HandPoseManager: NSObject {
         )
     }
 
-    // MARK: - Identity tracking + swipes (runs on videoQueue)
-
-    /// Assigns each fresh observation to the tracked hand it most likely
-    /// continues, so `HandData.id` stays put frame to frame.
-    ///
-    /// Vision hands back observations in no particular order, so without this
-    /// the two hands would trade identities at random — and with them, whatever
-    /// each was dragging.
-    private func matchToTrackedHands(
-        _ classifications: [HandClassifier.Classification],
-        now: TimeInterval
-    ) -> [HandData] {
-        let assignments = Self.matchAssignments(
-            newPositions: classifications.map(\.location),
-            previousPositions: tracked.map(\.smoothed),
-            radius: handMatchRadius
-        )
-
-        var result: [HandData] = []
-        var stillTracked: [TrackedHand] = []
-
-        for (index, classification) in classifications.enumerated() {
-            var hand: TrackedHand
-            if let previous = assignments[index] {
-                hand = tracked[previous]
-            } else {
-                hand = TrackedHand(id: nextHandID, smoothed: classification.location,
-                                   pinch: PinchDetector(), skeleton: classification.skeleton,
-                                   lastSeen: now)
-                nextHandID += 1
-            }
-            hand.lastSeen = now
-            hand.skeleton = classification.skeleton
-
-            // Smooth the cursor: Vision's per-frame jitter is easily 20–30pt on
-            // screen, enough to slide off an ingredient mid-grab.
-            hand.smoothed = CGPoint(
-                x: hand.smoothed.x + (classification.location.x - hand.smoothed.x) * cursorSmoothing,
-                y: hand.smoothed.y + (classification.location.y - hand.smoothed.y) * cursorSmoothing
-            )
-
-            // Evidence-based, and per hand, so neither one bad frame nor the
-            // other hand can flip this one's state.
-            hand.pinch.record(
-                ratio: classification.pinchRatio,
-                closeRatio: pinchCloseRatio,
-                openRatio: pinchOpenRatio
-            )
-
-            stillTracked.append(hand)
-            result.append(HandData(
-                id: hand.id,
-                cursorPosition: hand.smoothed,
-                isOpenHand: !hand.pinch.isPinching,
-                isClosedFist: hand.pinch.isPinching,
-                skeleton: hand.skeleton
-            ))
-        }
-
-        // Hands Vision didn't report this frame keep *coasting*: they stay
-        // tracked and stay published, sitting at their last known position,
-        // until the grace period lapses.
-        //
-        // Publishing them is the point. Reporting only what Vision saw this
-        // exact frame is what made the aura strobe — hand pose regularly drops
-        // a frame to motion blur or a turned palm, and every one of those was
-        // being handed downstream as "the hand is gone".
-        let matched = Set(assignments.compactMap { $0 })
-        for (index, previous) in tracked.enumerated()
-        where !matched.contains(index) && now - previous.lastSeen <= handGracePeriod {
-            var coasting = previous
-            // A frame with no reading is no evidence either way, so the
-            // half-built case for a state change is discarded rather than
-            // resumed against a newer, contradicting run of frames.
-            coasting.pinch.clearEvidence()
-            stillTracked.append(coasting)
-
-            result.append(HandData(
-                id: coasting.id,
-                cursorPosition: coasting.smoothed,
-                isOpenHand: !coasting.pinch.isPinching,
-                isClosedFist: coasting.pinch.isPinching,
-                skeleton: coasting.skeleton
-            ))
-        }
-
-        tracked = stillTracked
-        return result
-    }
-
-    /// For each freshly detected hand position, the index of the previously
-    /// tracked hand it continues — or nil when it's a new hand.
-    ///
-    /// Greedy nearest-neighbour, each previous hand claimable once. This is
-    /// what keeps `HandData.id` attached to the same physical hand: Vision
-    /// hands back its observations in no guaranteed order, so matching by
-    /// array position would let the two hands trade identities between frames,
-    /// and each would inherit whatever the other was dragging.
-    static func matchAssignments(
-        newPositions: [CGPoint],
-        previousPositions: [CGPoint],
-        radius: CGFloat
-    ) -> [Int?] {
-        var claimed = Set<Int>()
-        var assignments = [Int?](repeating: nil, count: newPositions.count)
-
-        for (index, position) in newPositions.enumerated() {
-            var best: Int?
-            var bestDistance = radius
-            for (candidate, previous) in previousPositions.enumerated() where !claimed.contains(candidate) {
-                let distance = position.distance(to: previous)
-                if distance < bestDistance {
-                    bestDistance = distance
-                    best = candidate
-                }
-            }
-            if let best {
-                claimed.insert(best)
-                assignments[index] = best
-            }
-        }
-        return assignments
-    }
-
     /// Vision found nothing usable this frame.
     ///
     /// Runs the *same* coasting rule as a frame that did find hands: anything
@@ -631,7 +482,7 @@ final class HandPoseManager: NSObject {
     /// actually goes away. This used to blank the published list outright,
     /// which is what made a single dropped frame kill the aura.
     private func publishNoHands() {
-        let hands = matchToTrackedHands([], now: CACurrentMediaTime())
+        let hands = identityTracker.update(with: [], at: CACurrentMediaTime())
         DispatchQueue.main.async {
             if self.hands != hands { self.hands = hands }
         }
@@ -648,13 +499,5 @@ extension HandPoseManager: AVCaptureVideoDataOutputSampleBufferDelegate {
     ) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         process(pixelBuffer: pixelBuffer)
-    }
-}
-
-// MARK: - Geometry helper
-
-private extension CGPoint {
-    func distance(to other: CGPoint) -> CGFloat {
-        hypot(x - other.x, y - other.y)
     }
 }

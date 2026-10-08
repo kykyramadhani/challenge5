@@ -25,7 +25,7 @@ struct HandIdentityTests {
         let incoming = [CGPoint(x: 0.81, y: 0.51),
                         CGPoint(x: 0.19, y: 0.49)]
 
-        let assignments = HandPoseManager.matchAssignments(
+        let assignments = HandIdentityTracker.matchAssignments(
             newPositions: incoming, previousPositions: previous, radius: radius
         )
 
@@ -34,7 +34,7 @@ struct HandIdentityTests {
 
     @Test func stationaryHandsKeepTheirIndices() {
         let previous = [CGPoint(x: 0.3, y: 0.4), CGPoint(x: 0.7, y: 0.6)]
-        let assignments = HandPoseManager.matchAssignments(
+        let assignments = HandIdentityTracker.matchAssignments(
             newPositions: previous, previousPositions: previous, radius: radius
         )
         #expect(assignments == [0, 1])
@@ -46,7 +46,7 @@ struct HandIdentityTests {
         let previous = [CGPoint(x: 0.5, y: 0.5)]
         let incoming = [CGPoint(x: 0.51, y: 0.5), CGPoint(x: 0.52, y: 0.5)]
 
-        let assignments = HandPoseManager.matchAssignments(
+        let assignments = HandIdentityTracker.matchAssignments(
             newPositions: incoming, previousPositions: previous, radius: radius
         )
 
@@ -56,7 +56,7 @@ struct HandIdentityTests {
     /// A hand that appears far from anything known is a new hand, not a
     /// teleporting old one.
     @Test func distantHandCountsAsNew() {
-        let assignments = HandPoseManager.matchAssignments(
+        let assignments = HandIdentityTracker.matchAssignments(
             newPositions: [CGPoint(x: 0.9, y: 0.9)],
             previousPositions: [CGPoint(x: 0.1, y: 0.1)],
             radius: radius
@@ -65,7 +65,7 @@ struct HandIdentityTests {
     }
 
     @Test func firstFrameHasNothingToMatchAgainst() {
-        let assignments = HandPoseManager.matchAssignments(
+        let assignments = HandIdentityTracker.matchAssignments(
             newPositions: [CGPoint(x: 0.3, y: 0.3), CGPoint(x: 0.7, y: 0.7)],
             previousPositions: [],
             radius: radius

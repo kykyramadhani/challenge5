@@ -16,7 +16,6 @@ import CoreGraphics
 /// A caseless enum: a namespace for functions, never instantiated.
 /// `nonisolated` so frames can be classified on the camera's background queue.
 nonisolated enum HandClassifier {
-
     /// What one Vision hand observation says about that hand.
     struct Classification {
         /// Palm centre, normalized Vision space.
