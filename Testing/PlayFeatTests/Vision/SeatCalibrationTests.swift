@@ -28,8 +28,8 @@ struct SeatCalibrationTests {
         shoulderY: CGFloat = 420,
         head: CGPoint? = CGPoint(x: 500, y: 320),
         wrists: [CGPoint] = [CGPoint(x: 390, y: 330), CGPoint(x: 610, y: 330)]
-    ) -> HandPoseManager.BodyCandidate {
-        HandPoseManager.BodyCandidate(
+    ) -> HumanBodyPoseManager.BodyCandidate {
+        HumanBodyPoseManager.BodyCandidate(
             head: head,
             leftShoulder: CGPoint(x: centre - span / 2, y: shoulderY),
             rightShoulder: CGPoint(x: centre + span / 2, y: shoulderY),

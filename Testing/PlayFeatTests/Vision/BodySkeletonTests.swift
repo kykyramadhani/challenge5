@@ -13,8 +13,8 @@ import CoreGraphics
 /// The upper-body skeleton that gets drawn.
 struct BodySkeletonTests {
 
-    private func body(hips: Bool) -> HandPoseManager.BodyCandidate {
-        HandPoseManager.BodyCandidate(
+    private func body(hips: Bool) -> HumanBodyPoseManager.BodyCandidate {
+        HumanBodyPoseManager.BodyCandidate(
             head: CGPoint(x: 0.5, y: 0.85), // never drawn — see the test below
             leftShoulder: CGPoint(x: 0.4, y: 0.7),
             rightShoulder: CGPoint(x: 0.6, y: 0.7),

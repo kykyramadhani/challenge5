@@ -91,7 +91,7 @@ struct GameplayView: View {
             // below, so it stays mounted across the seat-check → board swap —
             // no camera re-mount, no re-created capture session (that's owned by
             // HandPoseManager). Both the seat check and the board draw over it.
-            CameraPreviewView(handPoseManager: handPoseManager)
+            CameraPreviewView(camera: handPoseManager.camera)
                 .ignoresSafeArea()
 
             // Mounted here rather than inside `gameBody` so the scene is alive

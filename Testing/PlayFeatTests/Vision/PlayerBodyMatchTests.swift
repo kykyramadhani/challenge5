@@ -21,9 +21,9 @@ struct PlayerBodyMatchTests {
         shoulders span: CGFloat,
         at centre: CGFloat = 0.5,
         hips: Bool = false
-    ) -> HandPoseManager.BodyCandidate {
+    ) -> HumanBodyPoseManager.BodyCandidate {
         let points = wrists.map { CGPoint(x: $0.0, y: $0.1) }
-        return HandPoseManager.BodyCandidate(
+        return HumanBodyPoseManager.BodyCandidate(
             head: nil, // irrelevant to wrist matching
             leftShoulder: CGPoint(x: centre - span / 2, y: 0.70),
             rightShoulder: CGPoint(x: centre + span / 2, y: 0.70),
@@ -36,11 +36,11 @@ struct PlayerBodyMatchTests {
 
     private func keep(
         hands: [(CGFloat, CGFloat)],
-        bodies: [HandPoseManager.BodyCandidate],
+        bodies: [HumanBodyPoseManager.BodyCandidate],
         limit: Int = 2,
         mode: any HandInputMode = TwoHandMode()
     ) -> [Int]? {
-        HandPoseManager.playerHandIndices(
+        HumanBodyPoseManager.playerHandIndices(
             handWrists: hands.map { CGPoint(x: $0.0, y: $0.1) },
             bodies: bodies,
             wristTolerance: 0.6,
@@ -190,6 +190,6 @@ struct PlayerBodyMatchTests {
             body(wrists: [], shoulders: 0.20, at: 0.8)
         ]
 
-        #expect(HandPoseManager.nearestBody(in: bodies) == 1)
+        #expect(HumanBodyPoseManager.nearestBody(in: bodies) == 1)
     }
 }
