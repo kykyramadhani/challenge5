@@ -9,7 +9,7 @@ import Testing
 @testable import PlayFeat
 
 /// A game wired to test doubles: an inventory that lives only in memory, and
-/// a `SoundRecorder` instead of real audio. Pass your own recorder to check
+/// `GameAudio` playing into a `SoundRecorder` instead of real speakers. Pass your own recorder to check
 /// which sounds a rule plays.
 ///
 /// The defaults are `nil` and filled in inside the body on purpose: default
@@ -21,10 +21,11 @@ func makeGame(
     startingLives: Int = 3,
     sounds: SoundRecorder? = nil
 ) -> GameStateManager {
-    GameStateManager(
+    let game = GameStateManager(
         recipes: recipes ?? Recipe.all,
         startingLives: startingLives,
-        inventory: InventoryManager(inMemory: true),
-        audio: sounds ?? SoundRecorder()
+        inventory: InventoryManager(inMemory: true)
     )
+    GameAudio.attach(to: game, sounds: sounds ?? SoundRecorder())
+    return game
 }

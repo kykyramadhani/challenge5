@@ -20,6 +20,11 @@ final class GameStateManager {
     /// `GameScene` and the HUD react to each entry once.
     private(set) var events = GameEventLog()
 
+    /// Hears each event the moment it is recorded, in the same call — for
+    /// listeners that can't wait for the next frame, like `GameAudio`.
+    /// One listener only; the scene and HUD read `events` instead.
+    @ObservationIgnored var onEvent: ((GameEvent) -> Void)?
+
     /// Which run this is, counting from 1. The 3-2-1-GO! countdown restarts
     /// with each one — and only then, never for a life lost mid-run.
     var runNumber: Int { 1 + events.count(of: .runRestarted) }
@@ -28,6 +33,10 @@ final class GameStateManager {
     /// apart from `state` on purpose: a run can be paused in any phase, and
     /// resuming has to land back in exactly the phase it left.
     private(set) var isPaused = false
+
+    /// The current dish is in the last stretch of its clock. Changes a few
+    /// times per dish at most, so it is safe to observe.
+    private(set) var isTimeRunningLow = false
 
     // MARK: - Round
 
@@ -62,6 +71,8 @@ final class GameStateManager {
     var totalDishesServed: Int { tally.totalDishesServed }
     var dishesCompleted: Int { difficulty.dishesServed }
     var spawnStagger: TimeInterval { difficulty.spawnStagger }
+    /// How fast the music should play for the current difficulty tier.
+    var musicRate: Float { difficulty.musicRate }
 
     /// A value snapshot of this run's outcome, handed to the results screen so
     /// it needs no live reference back to this manager.
@@ -71,7 +82,6 @@ final class GameStateManager {
 
     private let deck: RecipeDeck
     private let inventory: InventoryManager
-    private let audio: any SoundPlaying
 
     // MARK: - Clocks
 
@@ -115,7 +125,7 @@ final class GameStateManager {
     /// `state` once per frame) instead of being skipped straight past.
     private static let dishRevealDuration: TimeInterval = 0.9
 
-    /// Below this fraction of the dish clock, the looping low-time warning plays.
+    /// Below this fraction of the dish clock, the time counts as running low.
     private static let lowTimeWarningFraction: CGFloat = 0.3
 
     @ObservationIgnored private var timer: Timer?
@@ -123,8 +133,7 @@ final class GameStateManager {
     init(
         recipes: [Recipe] = Recipe.all,
         startingLives: Int = 3,
-        inventory: InventoryManager,
-        audio: any SoundPlaying
+        inventory: InventoryManager
     ) {
         precondition(startingLives > 0, "GameStateManager needs at least one life")
         deck = RecipeDeck(recipes)
@@ -132,7 +141,6 @@ final class GameStateManager {
         lives = startingLives
         currentRecipe = deck.randomRecipe()
         self.inventory = inventory
-        self.audio = audio
     }
 
     deinit { timer?.invalidate() }
@@ -155,7 +163,7 @@ final class GameStateManager {
     /// and `start()` kicks the clock off once that beat is done.
     func restart() {
         timer?.invalidate()
-        resetAudioForNewRun()
+        setTimeRunningLow(false)
         tally = RunTally()
         difficulty = Difficulty()
         lives = startingLives
@@ -165,7 +173,7 @@ final class GameStateManager {
         elapsedTime = 0
         hasMultiplier = inventory.getMultiplierCount() > 0
         currentRecipe = deck.randomRecipe()
-        events.record(.runRestarted)
+        record(.runRestarted)
         state = .idle
     }
 
@@ -176,6 +184,7 @@ final class GameStateManager {
 
     func gameOver() {
         timer?.invalidate()
+        setTimeRunningLow(false)
         saveResult()
         state = .gameOver
     }
@@ -196,10 +205,8 @@ final class GameStateManager {
     /// replay the animation or disturb a table that's still fine.
     func discardPlate() {
         guard state == .cooking, !plateContents.isEmpty else { return }
-        // The on-screen Reset button fires this, so it gets the reset sound.
-        audio.play(.reset)
         plateContents = []
-        events.record(.plateDiscarded)
+        record(.plateDiscarded)
     }
 
     /// Serves the finished dish.
@@ -209,10 +216,10 @@ final class GameStateManager {
     /// check here — `bellSide` only decides which edge it is carried to.
     func serveDish() {
         guard state.isWaitingToServe else { return }
-        playServeSounds()
         // Before the next round starts, so the speed-up lands on the very
         // next dish.
         difficulty.recordServedDish()
+        record(.dishServed)
         startNewRound()
     }
 
@@ -224,11 +231,9 @@ final class GameStateManager {
     func failDish() {
         guard state != .gameOver else { return }
         lives -= 1
-        // The dish ran out from under the player — stop its warning and play
-        // the lost-life sting instead.
-        audio.stopClockWarning()
-        audio.play(.loseHeart)
-        events.record(.lifeLost(livesLeft: lives))
+        // The dish that ran out was the one running low.
+        setTimeRunningLow(false)
+        record(.lifeLost(livesLeft: lives))
 
         guard lives > 0 else {
             gameOver()
@@ -279,9 +284,6 @@ final class GameStateManager {
     /// by the current difficulty tier.
     private func beginDishClock() {
         dishCountdown = Countdown(duration: difficulty.dishTime(for: currentRecipe), startingAt: clock.elapsed)
-        // The music speeds up in lock-step with the tier that just squeezed
-        // the clock, so the run audibly gets harder.
-        audio.setMusicRate(difficulty.musicRate)
     }
 
     /// Banks the run's coins and high score the instant the run ends.
@@ -312,9 +314,8 @@ final class GameStateManager {
         let now = CACurrentMediaTime()
         guard !isPaused, state != .gameOver else {
             clock.hold(at: now)
-            // No dish is running down, so a warning left looping would keep
-            // ticking over a frozen clock.
-            audio.stopClockWarning()
+            // No dish is running down while the clock is frozen.
+            setTimeRunningLow(false)
             return
         }
         clock.advance(to: now)
@@ -328,40 +329,32 @@ final class GameStateManager {
         if isTimingDish, dishCountdown.hasRunOut(at: clock.elapsed) { failDish() }
         if isTimingServe, serveCountdown.hasRunOut(at: clock.elapsed) { failDish() }
 
-        updateClockWarning()
+        updateTimeRunningLow()
     }
 
-    // MARK: - Sound
+    // MARK: - Events
 
-    /// Starts or stops the looping low-time warning to match the dish clock:
-    /// only while a dish is being timed and has dropped into its last stretch.
-    /// `> 0` leaves out the expired frame, which `failDish()` handles.
-    /// Both calls are idempotent, so this can run every tick.
-    private func updateClockWarning() {
-        let runningLow = isTimingDish
-            && dishTimeFraction > 0
-            && dishTimeFraction <= Self.lowTimeWarningFraction
-        if runningLow {
-            audio.startClockWarning()
-        } else {
-            audio.stopClockWarning()
-        }
+    private func record(_ event: GameEvent) {
+        events.record(event)
+        onEvent?(event)
     }
 
-    /// A restart wipes the board, so a low-time warning still looping from
-    /// the last run is silenced, and the music drops back to normal speed —
-    /// otherwise it would race through the countdown at last run's tempo.
-    private func resetAudioForNewRun() {
-        audio.stopClockWarning()
-        audio.setMusicRate(1.0)
-        audio.play(.reset)
+    /// Only while a dish is being timed and has dropped into its last
+    /// stretch. `> 0` leaves out the expired frame, which `failDish()`
+    /// handles.
+    private func updateTimeRunningLow() {
+        setTimeRunningLow(
+            isTimingDish
+                && dishTimeFraction > 0
+                && dishTimeFraction <= Self.lowTimeWarningFraction
+        )
     }
 
-    /// The order is handed over, and the reward chime lands a beat later.
-    private func playServeSounds() {
-        audio.play(.putOrder)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [audio] in
-            audio.play(.addPoint)
-        }
+    /// Records an event only when the value actually flips, so calling this
+    /// every tick costs nothing.
+    private func setTimeRunningLow(_ isLow: Bool) {
+        guard isLow != isTimeRunningLow else { return }
+        isTimeRunningLow = isLow
+        record(isLow ? .lowTimeStarted : .lowTimeEnded)
     }
 }

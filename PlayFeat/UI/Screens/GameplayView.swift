@@ -35,7 +35,9 @@ struct GameplayView: View {
         self.sceneManager = sceneManager
         self.handPoseManager = handPoseManager
         self.audio = audio
-        _gameStateManager = State(initialValue: GameStateManager(inventory: inventory, audio: audio))
+        let game = GameStateManager(inventory: inventory)
+        GameAudio.attach(to: game, sounds: audio)
+        _gameStateManager = State(initialValue: game)
     }
 
     @State private var scene = GameScene(size: CGSize(width: 1024, height: 768))
