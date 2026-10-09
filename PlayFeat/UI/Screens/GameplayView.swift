@@ -20,13 +20,14 @@
 import AVFoundation
 import SpriteKit
 import SwiftUI
-import UIKit
 
 struct GameplayView: View {
     @Bindable var sceneManager: SceneManager
-    var handPoseManager: HandPoseManager
-
+    
     @State private var gameStateManager: GameStateManager
+    
+    var handPoseManager: HandPoseManager
+    
     private let audio: AudioManager
 
     init(sceneManager: SceneManager,
@@ -79,6 +80,12 @@ struct GameplayView: View {
         #endif
         return sceneManager.selectedGame?.requiresCalibration ?? false
     }
+    
+    /// The seat check is done (or was never needed), so the playfield belongs
+    /// on screen. Until then only the hand glow is drawn.
+    private var boardIsUp: Bool {
+        !sceneManager.isInTutorial && (hasCalibrated || !needsCalibration)
+    }
 
     var body: some View {
         ZStack {
@@ -101,7 +108,8 @@ struct GameplayView: View {
                 if sceneManager.isInTutorial {
                     TutorialView { sceneManager.finishTutorial() }
                         .onAppear { handPoseManager.start() }
-                } else {
+                }
+                else {
                     if needsCalibration && !hasCalibrated {
                         SeatCalibrationView(handPoseManager: handPoseManager) {
                             hasCalibrated = true
@@ -133,16 +141,13 @@ struct GameplayView: View {
         // above stays live across their swap because it never leaves the tree.
         .onAppear {
             handPoseManager.start()
-            // The game is played hands-free — no taps to keep the system's
-            // auto-lock timer from firing — so without this the screen dims
-            // and locks itself mid-round.
+            
+            // Disables Auto-Lock Screen during Gameplay
             UIApplication.shared.isIdleTimerDisabled = true
         }
         .onDisappear {
             handPoseManager.stop()
             UIApplication.shared.isIdleTimerDisabled = false
-            // Leaving gameplay entirely (quit, or back to the menu) — the music
-            // belongs to this screen, so it goes with it.
             audio.stopMusic()
         }
     }
@@ -158,7 +163,6 @@ struct GameplayView: View {
                     .allowsTransparency, .ignoresSiblingOrder,
                 ]
             )
-            .ignoresSafeArea()
             .background(.clear)
             .onAppear {
                 scene.size = proxy.size
@@ -175,12 +179,6 @@ struct GameplayView: View {
             }
         }
         .ignoresSafeArea()
-    }
-
-    /// The seat check is done (or was never needed), so the playfield belongs
-    /// on screen. Until then only the hand glow is drawn.
-    private var boardIsUp: Bool {
-        !sceneManager.isInTutorial && (hasCalibrated || !needsCalibration)
     }
 
     private var gameBody: some View {
@@ -233,13 +231,8 @@ struct GameplayView: View {
                     CameraPermissionDeniedOverlay()
                 }
 
-                // Hidden quit control. Only live during actual play — the
-                // countdown and game-over screen have their own flow and
-                // shouldn't be interruptible this way.
+                // Hidden quit control. User tap the screen toggle the Stop Button
                 if !isCountingDown && gameStateManager.state != .gameOver {
-                    // Full-screen invisible tap catcher. A tap toggles the Stop
-                    // button; when the button is showing, a tap that lands
-                    // *outside* it falls through to here and dismisses it.
                     Color.clear
                         .contentShape(Rectangle())
                         .ignoresSafeArea()
@@ -250,8 +243,7 @@ struct GameplayView: View {
                         }
 
                     if showStopButton {
-                        // Top-left corner, clear of the score / recipe / hearts
-                        // HUD that runs across the top-center of the screen.
+                        // Bottom Left Button
                         VStack {
                             Spacer()
                             HStack {

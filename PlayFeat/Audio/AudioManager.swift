@@ -251,7 +251,7 @@ extension AudioManager {
                 mode: .default
             )
             
-            try  session.setActive(true)
+            try session.setActive(true)
             
         } catch {
             print("[AudioManager] Failed to configure audio session: \(error)")
