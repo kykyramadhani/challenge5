@@ -91,8 +91,6 @@ struct GameOpening: View {
             .frame(width: w, height: h)
         }
         .ignoresSafeArea()
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             coinCount = GameStorage.coins
             mostDishesServed = GameStorage.highscore
@@ -152,7 +150,7 @@ struct GameOpening: View {
             .contentShape(Rectangle())
             .onTapGesture {
                 audio.play(.uiClick)
-                sceneManager.play(GameOption.all[0])
+                sceneManager.play()
             }
     }
 

@@ -1,21 +1,14 @@
 //
 //  ContentView.swift
-//  VisionChef
+//  PlayFeat
 //
-//  Root view that switches between the main menu and gameplay. SceneManager
-//  owns which screen is showing.
+//  Root view: shows whichever AppScreen SceneManager is on, with onboarding
+//  and the splash layered above it.
 //
-//  Both HandPoseManager *and* the camera preview live here rather than
-//  inside a screen. The seat check and the game each need the camera, and
-//  building either one per screen means tearing the capture pipeline down
-//  and standing it back up mid-flow — a stall right as the countdown is
-//  meant to start.
-//
-//  The seat check no longer has its own navigation destination. GameplayView
-//  runs it as its first phase and then swaps itself into the game, so there is
-//  exactly one "gameplay" destination and nothing gets swapped underneath the
-//  NavigationStack mid-flow. GameStateManager stays inside GameplayView, so
-//  every run starts fresh.
+//  A plain switch rather than a NavigationStack: every screen is full-screen
+//  with no back button, and each exit jumps to a known screen, so there is no
+//  stack to keep. GameStateManager stays inside GameplayView, so every run
+//  starts fresh.
 //
 
 import SwiftUI
@@ -42,33 +35,8 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            // The camera preview lives inside GameplayView — the only screen that
-            // shows it — mounted as that screen's backmost layer so it sits behind
-            // both the seat check and the board. It can't live here behind the
-            // NavigationStack: a transparent top screen reveals the screen *beneath
-            // it in the stack* (the opaque menu / game-opening), not a sibling drawn
-            // behind the whole stack, so a camera here is always occluded. The
-            // capture *session* is still owned by HandPoseManager, so hosting the
-            // preview view downstream doesn't rebuild the pipeline.
-            NavigationStack(path: $sceneManager.path) {
-                GameOpening(sceneManager: sceneManager)
-                    .navigationDestination(for: String.self) { destination in
-                        if destination == "gameplay" {
-                            GameplayView(
-                                sceneManager: sceneManager,
-                                handPoseManager: handPoseManager,
-                                inventory: inventory,
-                                audio: audio
-                            )
-                        } else if destination == "shop" {
-                            ShopView(sceneManager: sceneManager)
-                        }
-                    }
-                    .navigationDestination(for: GameResult.self) { result in
-                        PostGameView(result: result, sceneManager: sceneManager)
-                    }
-            }
-            .tint(.appSecondaryText)
+            currentScreen
+                .tint(.appSecondaryText)
 
             // First-launch onboarding, above the menu but below the splash so
             // the splash still plays first. Dismissing it flips the flag, which
@@ -110,7 +78,7 @@ struct ContentView: View {
             if DebugLaunch.skipToGameplay {
                 hasCompletedOnboarding = true
                 sceneManager.finishTutorial()
-                sceneManager.play(GameOption.all[0])
+                sceneManager.play()
             }
             #endif
 
@@ -122,6 +90,33 @@ struct ContentView: View {
         }
         .onChange(of: language) { _, newValue in
             AppLocalization.apply(newValue)
+        }
+        .animation(.easeInOut(duration: 0.3), value: sceneManager.screen)
+    }
+
+    /// The camera preview lives inside GameplayView, as that screen's
+    /// backmost layer. The capture *session* is owned by HandPoseManager, so
+    /// mounting the preview there doesn't rebuild the pipeline.
+    @ViewBuilder
+    private var currentScreen: some View {
+        switch sceneManager.screen {
+        case .mainMenu:
+            GameOpening(sceneManager: sceneManager)
+                .transition(.opacity)
+        case .shop:
+            ShopView(sceneManager: sceneManager)
+                .transition(.opacity)
+        case .gameplay:
+            GameplayView(
+                sceneManager: sceneManager,
+                handPoseManager: handPoseManager,
+                inventory: inventory,
+                audio: audio
+            )
+            .transition(.opacity)
+        case .postGame(let result):
+            PostGameView(result: result, sceneManager: sceneManager)
+                .transition(.opacity)
         }
     }
 }

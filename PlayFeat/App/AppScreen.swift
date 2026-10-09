@@ -1,17 +1,18 @@
 //
 //  AppScreen.swift
-//  GetCooking
+//  PlayFeat
 //
-//  Created by Owen Limantoro on 13/08/26.
+//  The full-screen destinations ContentView can show. The tutorial and seat
+//  check are not here on purpose: they are phases inside GameplayView, so the
+//  camera stays mounted from the first tutorial page to the end of the run.
 //
 
 import Foundation
 
-enum AppScreen {
+enum AppScreen: Hashable {
     case mainMenu
-    /// The illustrated walkthrough, shown once before the seat check.
-    case tutorial
-    /// Sitting the player at a workable distance before play starts.
-    case calibration
-    case game
+    case shop
+    case gameplay
+    /// The end-of-run paycheck, carrying the finished run's outcome.
+    case postGame(GameResult)
 }

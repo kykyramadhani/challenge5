@@ -1,14 +1,12 @@
 //
 //  GameplayView.swift
-//  GetCooking
+//  PlayFeat
 //
-//  Owns the whole in-game flow: first the seat check (for games that need it),
-//  then the 3-layer AR stack — camera feed, transparent SpriteKit scene, and
-//  SwiftUI HUD.
+//  Owns the whole in-game flow: tutorial, then the seat check, then the
+//  3-layer AR stack — camera feed, transparent SpriteKit scene, and SwiftUI HUD.
 //
-//  The seat check runs here as an internal phase rather than as its own
-//  navigation destination. That keeps a single, stable "gameplay" destination
-//  in the NavigationStack: the view swaps its *own* content from the seat check
+//  The tutorial and seat check run here as internal phases rather than as
+//  their own AppScreens. The view swaps its *own* content from the seat check
 //  to the board once calibration passes, so the camera never re-mounts and the
 //  countdown's `.task` fires exactly once, when the board actually appears.
 //
@@ -72,13 +70,13 @@ struct GameplayView: View {
 
     private var isCountingDown: Bool { countdown >= 0 }
 
-    /// The selected game asks for a seat check and the player hasn't passed it
-    /// yet. Games without calibration skip straight to the board.
+    /// Every run starts with a seat check, except the DEBUG launch shortcut
+    /// that drops straight onto the board.
     private var needsCalibration: Bool {
         #if DEBUG
         if DebugLaunch.skipToGameplay { return false }
         #endif
-        return sceneManager.selectedGame?.requiresCalibration ?? false
+        return true
     }
     
     /// The seat check is done (or was never needed), so the playfield belongs
@@ -124,7 +122,7 @@ struct GameplayView: View {
             // The run-over cover. Sits above the whole stack so it dims the
             // board, the HUD and the hand glow alike. It owns its own timing
             // and calls back when it is done, at which point the results screen
-            // is pushed (which unmounts this view and the cover with it).
+            // is shown (which unmounts this view and the cover with it).
             if showGameOverCover {
                 GameOverOverlay {
                     sceneManager.goToPostGame(gameStateManager.result)
@@ -133,8 +131,6 @@ struct GameplayView: View {
                 .zIndex(200)
             }
         }
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
         // The capture session is started when this screen appears and stopped
         // when the player leaves gameplay entirely. start() is idempotent, so
         // the seat check and board calling it again is harmless; the preview

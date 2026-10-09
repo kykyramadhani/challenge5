@@ -1,82 +1,49 @@
 //
 //  SceneManager.swift
-//  GetCooking
+//  PlayFeat
 //
-//  Owns which screen the app is showing. Gameplay state (score,
-//  timer, recipes) stays in GameStateManager, and the seat check now
-//  lives inside GameplayView — this only handles navigation between
-//  the main menu and the game.
+//  Owns which screen the app is showing. Gameplay state (score, timer,
+//  recipes) stays in GameStateManager, and the tutorial and seat check live
+//  inside GameplayView — this only decides between the full-screen
+//  destinations in AppScreen.
 //
 
 import Foundation
-import SwiftUI
 
 @Observable
 final class SceneManager {
-    var path = NavigationPath()
-    var selectedGame: GameOption?
+    private(set) var screen: AppScreen = .mainMenu
 
-    /// True from the moment the player taps Play until they leave the game.
-    /// ContentView uses it to keep the shared camera mounted across the
-    /// calibration → gameplay handover.
-    var isInGameplayFlow = false
-    var isInTutorial = true
-
-    func startGame(game: GameOption) {
-        guard game.isAvailable else { return }
-        selectedGame = game
-        isInGameplayFlow = false
-        path.append(game)
-    }
-
-    /// Start straight from the opening screen. With a single game there is no
-    /// carousel to pick from, so this both records the game — Play Again on the
-    /// results screen restarts whatever is selected — and drops into the run.
-    func play(_ game: GameOption) {
-        guard game.isAvailable else { return }
-        selectedGame = game
-        goToGameplay()
-    }
+    /// True until the walkthrough has been read or skipped this launch.
+    private(set) var isInTutorial = true
 
     /// Walkthrough read, or skipped.
     func finishTutorial() {
         isInTutorial = false
     }
 
-    /// Push the game screen. Calibration (if the game needs it) runs *inside*
-    /// GameplayView now, so there is a single navigation destination and no
-    /// mid-flow view swapping.
-    func goToGameplay() {
-        isInGameplayFlow = true
-        path.append("gameplay")
+    func play() {
+        screen = .gameplay
     }
 
-    /// Show the end-of-run results as their own screen. Resetting the path
-    /// first drops GameplayView from the stack — tearing down its camera and
-    /// scene — and then pushes PostGame on top of the menu.
+    /// Leaving `.gameplay` removes GameplayView, which tears down its camera
+    /// and scene before the results show.
     func goToPostGame(_ result: GameResult) {
-        isInGameplayFlow = false
-        path = NavigationPath()
-        path.append(result)
+        screen = .postGame(result)
     }
 
-    /// Play Again from the results screen: start a brand-new run of the same
-    /// game. A fresh GameplayView means a fresh GameStateManager, so it runs
-    /// the seat check and countdown again just like the first time.
+    /// Play Again from the results screen. Coming from `.postGame`, this
+    /// builds a brand-new GameplayView — and with it a fresh GameStateManager —
+    /// so the seat check and countdown run again just like the first time.
     func replayGame() {
-        guard selectedGame != nil else { goToMainMenu(); return }
-        path = NavigationPath()
-        goToGameplay()
+        screen = .gameplay
     }
 
     func goToMainMenu() {
-        path = NavigationPath()
-        selectedGame = nil
-        isInGameplayFlow = false
+        screen = .mainMenu
     }
 
     func goToShop() {
-        isInGameplayFlow = false
-        path.append("shop")
+        screen = .shop
     }
 }

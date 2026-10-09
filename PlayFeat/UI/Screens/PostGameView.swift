@@ -51,9 +51,7 @@ struct PostGameView: View {
 
     var body: some View {
         ZStack {
-            if let imageName = sceneManager.selectedGame?.imageName {
-                BackgroundImage(imageName)
-            }
+            BackgroundImage("GetCooking")
 
             VStack(spacing: 80) {
                 VStack(spacing: 32) {
@@ -103,9 +101,6 @@ struct PostGameView: View {
             }
             .onAppear { revealed = true }
         }
-        // Its own screen now — no system back chrome.
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
         .designScaled()
     }
 }
