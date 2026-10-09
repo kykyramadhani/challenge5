@@ -89,8 +89,6 @@ struct ShopView: View {
             .frame(width: w, height: h)
         }
         .ignoresSafeArea()
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             coinCount = GameStorage.coins
             inventoryManager.refresh()

@@ -64,9 +64,12 @@ Splash → Onboarding (first launch only) → Game Opening (main menu)
                      Gameplay again or Game Opening
 ```
 
-- `SceneManager` (App/) owns navigation through a `NavigationStack` path.
-  Tutorial, calibration and countdown are *phases inside* `GameplayView`, not
-  separate destinations. That keeps the camera mounted across the handover.
+- `SceneManager` (App/) holds the current `AppScreen` (`mainMenu`, `shop`,
+  `gameplay`, `postGame(GameResult)`); `ContentView` switches on it. There is
+  no `NavigationStack`: no screen has a back button, and every exit jumps to a
+  known screen. Tutorial, calibration and countdown are *phases inside*
+  `GameplayView`, not separate screens. That keeps the camera mounted across
+  the handover.
 - Each run creates a fresh `GameStateManager`, so Play Again always starts clean.
 - The Shop exists but is "coming soon".
 
@@ -268,6 +271,8 @@ Done:
 - Protocols for gameplay dependencies: `GameScene` and `GameStateManager`
   depend on `HandInputSource` and `SoundPlaying`, not on `HandPoseManager` /
   `AudioManager`. Tests use `ScriptedHandInput` and `SoundRecorder`.
+- Navigation: `NavigationStack` replaced by a `switch` over `AppScreen`;
+  the unused `GameOption` / `GameCard` carousel removed
 
 Next:
 
@@ -279,3 +284,16 @@ Next:
    reacts to game events
 
 `CODE_AUDIT.md` lists known bugs and tech debt found in an earlier audit.
+
+## Planned: multiplayer (two-iPad co-op)
+
+Not implemented yet. Two players, each on their own iPad, cook together in
+**one shared kitchen** (one recipe, one plate, shared lives and score),
+connected through a Game Center real-time match. Each iPad keeps tracking only
+its own player with the existing single-player Vision pipeline; only game
+state and hand cursors cross the network, and the host's `GameStateManager` is
+the source of truth.
+
+The full design, message list, open questions and step order are in
+[`docs/multiplayer-plan.md`](docs/multiplayer-plan.md). Read it before starting
+any multiplayer work, and keep it up to date as decisions are made.

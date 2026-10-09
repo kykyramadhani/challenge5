@@ -111,7 +111,6 @@ struct SeatCalibrationView: View {
             }
         }
         .onAppear { handPoseManager.start() }
-        .navigationBarBackButtonHidden(true)
     }
 
     /// Orange underneath, green drawn over the top of it as the dwell fills —
