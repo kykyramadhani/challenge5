@@ -7,8 +7,8 @@
 //  with the device, and hands every frame to `onFrame` on the video queue.
 //
 //  Knows nothing about hands — that's HandFrameProcessor's job. Shared with
-//  CameraPreviewView (through HandPoseManager) so the preview shows the same
-//  feed Vision reads: iOS won't run two sessions on one camera.
+//  CameraPreviewView so the preview shows the same feed Vision reads: iOS
+//  won't run two sessions on one camera.
 //
 //  Threading: everything here runs on the main actor, except the frame
 //  callback, which AVFoundation calls on `videoQueue`. That one is marked

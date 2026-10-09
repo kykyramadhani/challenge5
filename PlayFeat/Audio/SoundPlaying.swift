@@ -3,7 +3,7 @@
 //  PlayFeat
 //
 //  What gameplay needs from audio. `AudioManager` is the real one; tests pass
-//  a recorder, so game rules can be checked without speakers. Views that need
+//  a recorder, so GameAudio can be checked without speakers. Views that need
 //  music or the volumes keep using `AudioManager` from the environment.
 //
 

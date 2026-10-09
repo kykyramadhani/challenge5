@@ -12,7 +12,5 @@
 		<string>AtkinsonHyperlegible-Regular.ttf</string>
 		<string>AtkinsonHyperlegible-Bold.ttf</string>
 	</array>
-	<key>UILaunchStoryboardName</key>
-	<string>Launch Screen</string>
 </dict>
 </plist>

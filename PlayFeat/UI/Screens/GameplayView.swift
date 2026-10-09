@@ -35,7 +35,9 @@ struct GameplayView: View {
         self.sceneManager = sceneManager
         self.handPoseManager = handPoseManager
         self.audio = audio
-        _gameStateManager = State(initialValue: GameStateManager(inventory: inventory, audio: audio))
+        let game = GameStateManager(inventory: inventory)
+        GameAudio.attach(to: game, sounds: audio)
+        _gameStateManager = State(initialValue: game)
     }
 
     @State private var scene = GameScene(size: CGSize(width: 1024, height: 768))
@@ -91,7 +93,7 @@ struct GameplayView: View {
             // below, so it stays mounted across the seat-check → board swap —
             // no camera re-mount, no re-created capture session (that's owned by
             // HandPoseManager). Both the seat check and the board draw over it.
-            CameraPreviewView(handPoseManager: handPoseManager)
+            CameraPreviewView(camera: handPoseManager.camera)
                 .ignoresSafeArea()
 
             // Mounted here rather than inside `gameBody` so the scene is alive

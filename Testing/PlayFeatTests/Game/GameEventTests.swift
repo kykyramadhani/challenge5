@@ -28,4 +28,11 @@ struct GameEventTests {
     @Test func discardingThePlateLeavesTheBoard() {
         #expect(!GameEvent.plateDiscarded.wipesBoard)
     }
+
+    /// Serving and the low-time warning only change sound and HUD.
+    @Test func servingAndLowTimeLeaveTheBoard() {
+        #expect(!GameEvent.dishServed.wipesBoard)
+        #expect(!GameEvent.lowTimeStarted.wipesBoard)
+        #expect(!GameEvent.lowTimeEnded.wipesBoard)
+    }
 }
