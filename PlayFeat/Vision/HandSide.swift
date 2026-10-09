@@ -7,7 +7,8 @@
 
 import SwiftUI
 
-enum HandSide: String, CaseIterable, Identifiable {
+/// `nonisolated` so the input modes can use it on the camera's video queue.
+nonisolated enum HandSide: String, CaseIterable, Identifiable {
     case left
     case right
 
@@ -28,7 +29,8 @@ enum HandSide: String, CaseIterable, Identifiable {
 
     /// The same label as a resolved string, for the few places that need one
     /// outside a view — the seat check builds its instruction by interpolation.
-    var localizedName: String {
+    /// Main actor: reads the app's current language bundle.
+    @MainActor var localizedName: String {
         switch self {
         case .left: String(localized: "Left Hand", bundle: Bundle.overrideLocalization ?? .main)
         case .right: String(localized: "Right Hand", bundle: Bundle.overrideLocalization ?? .main)

@@ -7,8 +7,8 @@
 //  its own — iOS only allows one AVCaptureSession per camera at a time.
 //
 
-import SwiftUI
 import UIKit
+import SwiftUI
 import AVFoundation
 
 struct CameraPreviewView: UIViewRepresentable {
@@ -18,10 +18,6 @@ struct CameraPreviewView: UIViewRepresentable {
         let view = PreviewView()
         let layer = view.videoPreviewLayer
         layer.session = handPoseManager.captureSession
-
-        
-        // The manager owns this setting because its hand → screen mapping has
-        // to undo exactly the same fitting; see `CameraViewMapping`.
         layer.videoGravity = handPoseManager.previewGravity
 
         if let connection = layer.connection, connection.isVideoMirroringSupported {

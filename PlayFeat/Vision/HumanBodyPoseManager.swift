@@ -13,7 +13,9 @@ import Foundation
 import QuartzCore
 import Vision
 
-final class HumanBodyPoseManager {
+/// `nonisolated`: runs on the camera's video queue inside HandFrameProcessor.
+/// Plain logic, no UI state.
+nonisolated final class HumanBodyPoseManager {
     // MARK: - Types
 
     /// One person's upper body, cut down to what the game needs.
@@ -21,7 +23,7 @@ final class HumanBodyPoseManager {
     /// Shoulders only, plus hips when they happen to be in shot. Legs are
     /// never read: the player is framed from the chest up as often as not, and
     /// a detector that needs legs would lose them every time they stepped in.
-    struct BodyCandidate: Equatable {
+    nonisolated struct BodyCandidate: Equatable {
         /// Nose, or an ear when the head is turned. Used by the seat check —
         /// not drawn, since the skeleton is shoulders and hips.
         let head: CGPoint?
@@ -256,7 +258,7 @@ final class HumanBodyPoseManager {
 // MARK: - Private distance helper
 
 private extension CGPoint {
-    func distance(to other: CGPoint) -> CGFloat {
+    nonisolated func distance(to other: CGPoint) -> CGFloat {
         hypot(x - other.x, y - other.y)
     }
 }

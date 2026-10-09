@@ -8,21 +8,24 @@
 import Foundation
 
 struct GameStorage {
+    static let coinKey = "coins"
+    static let scoreKey = "highscore"
+    
     static var coins: Int {
         get {
-            UserDefaults.standard.integer(forKey: "coins")
+            UserDefaults.standard.integer(forKey: self.coinKey)
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: "coins")
+            UserDefaults.standard.set(newValue, forKey: self.coinKey)
         }
     }
     
     static var highscore: Int {
         get {
-            UserDefaults.standard.integer(forKey: "highscore")
+            UserDefaults.standard.integer(forKey: self.scoreKey)
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: "highscore")
+            UserDefaults.standard.set(newValue, forKey: self.scoreKey)
         }
     }
 

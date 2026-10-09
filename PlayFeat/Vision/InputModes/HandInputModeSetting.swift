@@ -8,7 +8,8 @@
 
 import Foundation
 
-enum HandInputModeSetting {
+/// `nonisolated`: the camera's video queue reads the mode every frame.
+nonisolated enum HandInputModeSetting {
     /// UserDefaults keys, shared with the `@AppStorage` properties that edit
     /// and read them, so the two can never drift apart.
     static let isOneHandKey = "oneHandModeEnabled"

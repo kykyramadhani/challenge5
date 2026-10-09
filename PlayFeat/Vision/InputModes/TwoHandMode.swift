@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct TwoHandMode: HandInputMode {
+nonisolated struct TwoHandMode: HandInputMode {
     let handCount = 2
 
     func playerWrists(of body: HumanBodyPoseManager.BodyCandidate) -> [CGPoint] {

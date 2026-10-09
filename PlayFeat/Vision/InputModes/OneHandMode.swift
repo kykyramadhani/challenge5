@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct OneHandMode: HandInputMode {
+nonisolated struct OneHandMode: HandInputMode {
     /// The hand the player chose in Settings.
     let hand: HandSide
 
