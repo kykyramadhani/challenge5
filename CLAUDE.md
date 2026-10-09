@@ -49,7 +49,7 @@ No third-party dependencies and no SPM packages.
 ### App flow
 
 ```
-Splash → Onboarding (first launch only) → Game Opening (main menu)
+Launch screen → Splash → Onboarding (first launch only) → Game Opening (main menu)
                                               │ Tap to Play
                                               ▼
                      Tutorial (until finished or skipped)
@@ -225,6 +225,14 @@ Summary:
 
 - An asset's lookup name is its **imageset folder name**, and lookups are
   **case-sensitive**. `ArtAssetTests` catches mismatches.
+- Two-part start: iOS shows `Launch Screen.storyboard` (repo root) while the
+  app loads, then `SplashScreenView` plays the animated mascot. The launch
+  screen is only the plain `SplashBackground` color — the splash's first frame —
+  so the handover has no visible seam. Don't add the mascot or text to it: the
+  splash fades them in from nothing, and launch screens can't use Atkinson.
+  It's wired through `UILaunchStoryboardName` in `PlayFeat/Info.plist`, not a
+  build setting, because `project.pbxproj` is gitignored. iOS caches launch
+  screens: delete the app (or reset the simulator) to see a change.
 - `#expect` captures its argument immutably. Move a `mutating` call into a
   `let` before the macro (see `HoverDetectorTests`).
 - Vision runs on a background video queue. Anything it publishes must be sent

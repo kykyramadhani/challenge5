@@ -14,7 +14,6 @@ struct SplashScreenView: View {
     @State private var isVisible = false
     @State private var mascotPhase: JumpPhase = .settle
 
-    private let paleYellowBG = Color(red: 255/255, green: 252/255, blue: 214/255) // #FFFCD6
     private let brandRedOrange = Color(red: 236/255, green: 98/255, blue: 67/255) // #EC6243
     private let purpleAccent = Color(red: 126/255, green: 96/255, blue: 191/255) // #7E60BF
 
@@ -94,7 +93,9 @@ struct SplashScreenView: View {
 
     var body: some View {
         ZStack {
-            paleYellowBG
+            // Same color as Launch Screen.storyboard, so iOS's launch screen
+            // hands over to this view without a visible change.
+            Color.splashBackground
                 .ignoresSafeArea()
 
             VStack(spacing: 28) {
