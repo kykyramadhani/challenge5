@@ -1,6 +1,6 @@
 # PlayFeat
 
-A hand-tracking cooking game made with and for the community at Puspandi
+A hand-tracking cooking game made with and for the community at PUSPADI
 (Pusat Pemberdayaan Penyandang Disabilitas), Bali — Apple Developer Academy
 Challenge 5 & Final Challenge.
 
@@ -8,9 +8,6 @@ The front camera fills the screen and Vision tracks the player's hands and
 upper body. Players pinch floating ingredient bubbles, drag them onto a plate
 to match the recipe, then carry the finished dish to the bell. No touch input
 is needed during play.
-
-The project started as an app and is now a game. The codebase is being
-refactored to match — see **Current development phase**.
 
 ## Platforms
 
@@ -44,9 +41,7 @@ refactored to match — see **Current development phase**.
 
 No third-party dependencies and no SPM packages.
 
-## Game flow
-
-### App flow
+### Game flow
 
 ```
 Launch screen → Splash → Onboarding (first launch only) → Game Opening (main menu)
@@ -201,6 +196,7 @@ Summary:
   //
   //  FileName.swift
   //  PlayFeat
+  //  Created by <Name> on <Current Date>.
   //
   //  One or two lines on what this type is for and why it exists.
   //
@@ -268,45 +264,10 @@ Summary:
 - Claude: create or switch to the right branch **before** editing code, and
   commit or push only when asked.
 
-## Current development phase
-
-Refactoring from an "app" structure to a game structure (one branch or commit
-per step, ⌘U before and after).
-
-Done:
-
-- Folder restructure, tests split by feature
-- `ObservableObject` → `@Observable`
-- Singletons replaced with dependency injection (`AudioManager`,
-  `CameraManager`, `InventoryManager`); `ClickButton` plays the UI click
-- Strategy pattern for input modes (`HandInputMode`: one-hand / two-hand)
-- `GameState` cleanup: flags and tokens folded into states and events;
-  `GameStateManager` split (`PlayClock`, `Difficulty`, `RecipeDeck`, ...)
-- Protocols for gameplay dependencies: `GameScene` and `GameStateManager`
-  depend on `HandInputSource` and `SoundPlaying`, not on `HandPoseManager` /
-  `AudioManager`. Tests use `ScriptedHandInput` and `SoundRecorder`.
-- Navigation: `NavigationStack` replaced by a `switch` over `AppScreen`;
-  the unused `GameOption` / `GameCard` carousel removed
-
-Next:
-
-1. End-to-end gameplay test: a `ScriptedHandInput` hand carries an ingredient
-   onto the plate in a real `GameScene`
-2. Split `HandPoseManager` into camera session, Vision processing and gesture
-   tracking
-3. Move game-event sounds out of `GameStateManager` into a `GameAudio` that
-   reacts to game events
-
+## Reference
 `CODE_AUDIT.md` lists known bugs and tech debt found in an earlier audit.
 
 ## Planned: multiplayer (two-iPad co-op)
-
-Not implemented yet. Two players, each on their own iPad, cook together in
-**one shared kitchen** (one recipe, one plate, shared lives and score),
-connected through a Game Center real-time match. Each iPad keeps tracking only
-its own player with the existing single-player Vision pipeline; only game
-state and hand cursors cross the network, and the host's `GameStateManager` is
-the source of truth.
 
 The full design, message list, open questions and step order are in
 [`docs/multiplayer-plan.md`](docs/multiplayer-plan.md). Read it before starting
