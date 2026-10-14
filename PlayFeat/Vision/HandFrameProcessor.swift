@@ -102,6 +102,23 @@ nonisolated final class HandFrameProcessor: @unchecked Sendable {
         selector.reset()
     }
 
+    // MARK: - Suspension (video queue only)
+
+    /// While true, frames are dropped before Vision sees them. Vision runs on
+    /// the GPU, and iOS refuses GPU work from an app in the background
+    /// (`kIOGPUCommandBufferCallbackErrorBackgroundExecutionNotPermitted`).
+    /// Set on the video queue, in turn with the frames, so no frame queued
+    /// after it can slip through.
+    private(set) var isSuspended = false
+
+    func suspend() {
+        isSuspended = true
+    }
+
+    func resume() {
+        isSuspended = false
+    }
+
     init() {
         handPoseRequest.maximumHandCount = handCandidateLimit
     }

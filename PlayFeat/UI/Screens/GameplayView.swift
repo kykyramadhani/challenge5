@@ -28,6 +28,10 @@ struct GameplayView: View {
     
     private let audio: AudioManager
 
+    /// Forwarded by PlayFeatApp (PhoneSafeSides hosts the app separately, so
+    /// the system value doesn't reach here on its own).
+    @Environment(\.scenePhase) private var scenePhase
+
     init(sceneManager: SceneManager,
          handPoseManager: HandPoseManager,
          inventory: InventoryManager,
@@ -70,6 +74,14 @@ struct GameplayView: View {
     @State private var countdown = 3
 
     private var isCountingDown: Bool { countdown >= 0 }
+
+    /// The app went to the background mid-run. The player may have moved or
+    /// put the iPad down, so coming back plays a fresh 3-2-1 before the clock
+    /// restarts. A brief `.inactive` (Control Center, a banner) resumes at once.
+    @State private var needsGetReadyOnReturn = false
+
+    /// Bumped to run the 3-2-1 that resumes a paused run. 0 means none yet.
+    @State private var resumeCountdownRequest = 0
 
     /// Every run starts with a seat check, except the DEBUG launch shortcut
     /// that drops straight onto the board.
@@ -168,6 +180,10 @@ struct GameplayView: View {
         GeometryReader { proxy in
             SpriteView(
                 scene: scene,
+                // Stops SpriteKit's Metal render loop out of the foreground,
+                // where iOS refuses GPU work. `scene.isPaused` alone only
+                // freezes the game; the view would keep drawing.
+                isPaused: scenePhase != .active,
                 options: [
                     .allowsTransparency, .ignoresSiblingOrder,
                 ]
@@ -293,39 +309,86 @@ struct GameplayView: View {
             // board too, but a countdown there would interrupt play the player
             // hasn't lost yet.
             // The camera is already live, handed over by the seat check.
-            // Bring the music up under the count so play starts already scored;
             // startMusic is a no-op if it's somehow already going.
-
-            // One shot at the top of the beat — the clip already voices 3-2-1.
-            audio.play(.countdown)
-            for step in stride(from: 3, through: 0, by: -1) {
-                countdown = step  // 0 is the "GO!" beat
-                do {
-                    try await Task.sleep(for: .seconds(1))
-                } catch {
-                    return  // view went away mid-count
-                }
-            }
-            countdown = -1
+            guard await playGetReadyCountdown() else { return }
             gameStateManager.start()
             audio.startMusic()
         }
-        .onChange(of: gameStateManager.isPaused) { _, paused in
-            scene.isPaused = paused
-            // Hold the music with the game so a pause is actually quiet.
-            if paused { audio.pauseMusic() }
-            else { audio.resumeMusic() }
+        .task(id: resumeCountdownRequest) {
+            // The app left mid-run and is back. Re-checked at the end: if it
+            // left again during the count, the clock stays frozen.
+            guard resumeCountdownRequest > 0,
+                  await playGetReadyCountdown(),
+                  scenePhase == .active else { return }
+            gameStateManager.resume()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            handleScenePhase(phase)
+        }
+        .onChange(of: gameStateManager.isPaused) { _, _ in
+            syncScenePause()
         }
         .onChange(of: gameStateManager.state) { _, state in
-            scene.isPaused = (state == .gameOver)
-            
+            syncScenePause()
             if state == .gameOver, !isEndingRun {
                 showGameOver()
             }
         }
         .designScaled()
     }
-    
+
+    /// Plays the 3-2-1-GO! beat. False if it was cut short: the view went
+    /// away, or a newer count replaced it.
+    private func playGetReadyCountdown() async -> Bool {
+        // One shot at the top of the beat — the clip already voices 3-2-1.
+        audio.play(.countdown)
+        for step in stride(from: 3, through: 0, by: -1) {
+            countdown = step  // 0 is the "GO!" beat
+            do {
+                try await Task.sleep(for: .seconds(1))
+            } catch {
+                return false
+            }
+        }
+        countdown = -1
+        return true
+    }
+
+    /// The board freezes while the run is paused and once it is over.
+    private func syncScenePause() {
+        scene.isPaused = gameStateManager.isPaused || gameStateManager.state == .gameOver
+    }
+
+    // MARK: - Leaving and returning to the foreground
+
+    /// PlayFeatApp stops hand tracking whenever the app isn't active, so the
+    /// clock stops with it — at `.inactive` too, or a glance at Control Center
+    /// could cost a life the player had no way to save.
+    private func handleScenePhase(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            resumeRun()
+        case .background:
+            gameStateManager.pause()
+            needsGetReadyOnReturn = gameStateManager.isPaused
+        default:
+            gameStateManager.pause()
+        }
+    }
+
+    /// Picks the run back up: at once after a brief interruption, or after a
+    /// fresh 3-2-1 if the player actually left the app. A resume count still
+    /// running is left to finish.
+    private func resumeRun() {
+        guard gameStateManager.isPaused, !isCountingDown else { return }
+        if needsGetReadyOnReturn {
+            needsGetReadyOnReturn = false
+            resumeCountdownRequest += 1
+        } else {
+            gameStateManager.resume()
+        }
+    }
+
     private func showGameOver() {
         isEndingRun = true
         audio.stopMusic()

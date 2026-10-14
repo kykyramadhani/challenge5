@@ -62,6 +62,7 @@ final class HandPoseManager {
         // Runs on the video queue: process there, publish on the main thread.
         let processor = self.processor
         camera.onFrame = { [weak self] pixelBuffer in
+            guard !processor.isSuspended else { return }
             let frame = processor.process(pixelBuffer)
             guard let self else { return }
             DispatchQueue.main.async { self.publish(frame) }
@@ -70,16 +71,46 @@ final class HandPoseManager {
 
     // MARK: - Public control
 
+    /// A screen asked for the camera and hasn't released it. Survives a
+    /// suspension, so `resume()` knows whether to bring the camera back.
+    private var isCameraWanted = false
+
+    /// The app is out of the foreground (see `suspend()`).
+    private var isSuspended = false
+
     /// Requests camera permission (if needed) and starts the camera.
     /// Safe to call multiple times. Call from the main thread (e.g. `.onAppear`).
+    /// While suspended it only records the request; `resume()` acts on it.
     func start() {
+        isCameraWanted = true
+        guard !isSuspended else { return }
         camera.start { [weak self] status in
             self?.authorizationStatus = status
         }
     }
 
     func stop() {
+        isCameraWanted = false
         camera.stop()
+    }
+
+    /// The app is leaving the foreground: stop all GPU work. Call on
+    /// `.inactive`, while the GPU is still allowed, so a frame already being
+    /// processed can finish before the app reaches the background.
+    func suspend() {
+        guard !isSuspended else { return }
+        isSuspended = true
+        camera.performOnVideoQueue { [processor] in processor.suspend() }
+        camera.stop()
+    }
+
+    /// Back in the foreground: restarts the camera, but only if a screen
+    /// still wants it, so returning to the menu doesn't switch it on.
+    func resume() {
+        guard isSuspended else { return }
+        isSuspended = false
+        camera.performOnVideoQueue { [processor] in processor.resume() }
+        if isCameraWanted { start() }
     }
 
     /// Until calibration passes, only someone sitting in `frame` (view space,

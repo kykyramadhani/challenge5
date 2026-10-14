@@ -43,8 +43,11 @@ extension GameScene {
 
         // Hands drive gameplay in two phases: cooking, where they move
         // ingredients, and serving, where they carry the whole plate to the
-        // tray. Everything else parks them.
+        // tray. Everything else parks them, including a paused run: SpriteKit
+        // can un-pause the scene on its own when the app returns, and nothing
+        // may move while the clock is frozen.
         guard let gameStateManager,
+              !gameStateManager.isPaused,
               gameStateManager.state == .cooking
                 || gameStateManager.state.isWaitingToServe else {
             abandonAllDrags()
