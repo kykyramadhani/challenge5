@@ -80,6 +80,18 @@ nonisolated struct PlayerSelector: Sendable {
         anchor = Anchor(body)
     }
 
+    /// Finds the player among `bodies` and moves the lock to where they are
+    /// now, so it keeps up as they shift in their seat. Returns their index,
+    /// or nil when the player isn't there.
+    ///
+    /// Both a command and a query on purpose: following must use the very
+    /// body that was just picked, so the two steps never run apart.
+    mutating func trackPlayer(in bodies: [BodyCandidate], bufferSize: CGSize) -> Int? {
+        let player = playerIndex(in: bodies, bufferSize: bufferSize)
+        if let player { follow(bodies[player]) }
+        return player
+    }
+
     /// Back to picking whoever sits in the calibration frame.
     mutating func reset() {
         zone = nil

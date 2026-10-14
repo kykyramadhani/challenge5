@@ -98,9 +98,8 @@ struct PlayerSelectorTests {
         for step in 1...5 {
             let x = 0.50 + CGFloat(step) * 0.05
             let bodies = [body(at: 0.30), body(at: x)]
-            let player = selector.playerIndex(in: bodies, bufferSize: Self.bufferSize)
+            let player = selector.trackPlayer(in: bodies, bufferSize: Self.bufferSize)
             #expect(player == 1, "player at x \(x)")
-            if let player { selector.follow(bodies[player]) }
         }
 
         #expect((selector.anchor?.chest.x ?? 0) > 0.74)

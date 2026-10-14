@@ -138,7 +138,7 @@ nonisolated final class HandFrameProcessor: @unchecked Sendable {
 
         // Only the player's body, so what is drawn is always exactly who the
         // game is listening to.
-        let player = selectPlayer(in: bodies, bufferSize: bufferSize)
+        let player = selector.trackPlayer(in: bodies, bufferSize: bufferSize)
         playerBody = player.map { bodies[$0] }
 
         let observations = handPoseRequest.results ?? []
@@ -167,17 +167,6 @@ nonisolated final class HandFrameProcessor: @unchecked Sendable {
 
         let hands = identityTracker.update(with: keep.map { classifications[$0] }, at: CACurrentMediaTime())
         return Output(bufferSize: bufferSize, playerBody: playerBody, hands: hands)
-    }
-
-    /// The player's index in `bodies`, moving the lock along with them so it
-    /// keeps up as they shift in their seat.
-    private func selectPlayer(
-        in bodies: [HumanBodyPoseManager.BodyCandidate],
-        bufferSize: CGSize
-    ) -> Int? {
-        let player = selector.playerIndex(in: bodies, bufferSize: bufferSize)
-        if let player { selector.follow(bodies[player]) }
-        return player
     }
 
     /// Vision found nothing usable this frame.
