@@ -68,7 +68,7 @@ final class TrayTimerNode: SKNode {
     ///
     /// A `static func` so the geometry can be checked without a live scene.
     static func wedgePath(radius: CGFloat, fraction: CGFloat) -> CGPath {
-        let sweep = fraction.vc_clamped(to: 0...1)
+        let sweep = fraction.clamped(to: 0...1)
         guard sweep > 0 else { return CGMutablePath() }
 
         let path = CGMutablePath()

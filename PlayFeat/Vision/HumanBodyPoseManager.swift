@@ -248,11 +248,3 @@ nonisolated final class HumanBodyPoseManager {
             .map(\.index)
     }
 }
-
-// MARK: - Private distance helper
-
-private extension CGPoint {
-    nonisolated func distance(to other: CGPoint) -> CGFloat {
-        hypot(x - other.x, y - other.y)
-    }
-}

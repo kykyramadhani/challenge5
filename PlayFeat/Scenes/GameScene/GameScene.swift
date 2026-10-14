@@ -43,13 +43,13 @@ final class GameScene: SKScene {
     var designScale: CGFloat { DesignCanvas.scale(for: size) }
 
     var plateRadius: CGFloat {
-        (shortEdge * 0.17).vc_clamped(to: 70 * designScale...150 * designScale)
+        (shortEdge * 0.17).clamped(to: 70 * designScale...150 * designScale)
     }
     var resetRadius: CGFloat {
-        (shortEdge * 0.09).vc_clamped(to: 38 * designScale...60 * designScale)
+        (shortEdge * 0.09).clamped(to: 38 * designScale...60 * designScale)
     }
     var ingredientRadius: CGFloat {
-        (shortEdge * 0.17).vc_clamped(to: 68 * designScale...100 * designScale)
+        (shortEdge * 0.17).clamped(to: 68 * designScale...100 * designScale)
     }
 
     /// How deep the SwiftUI HUD reaches down from the top of the screen.

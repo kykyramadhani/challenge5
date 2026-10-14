@@ -43,7 +43,7 @@ struct ResetButtonExclusionTests {
 
             let pushed = GameScene.pushedOut(inside, awayFrom: button, keepOut: keepOut)
 
-            #expect(pushed.vc_distance(to: button) >= keepOut - 0.001)
+            #expect(pushed.distance(to: button) >= keepOut - 0.001)
         }
     }
 
@@ -52,7 +52,7 @@ struct ResetButtonExclusionTests {
     @Test func deadCentreStillEscapes() {
         let pushed = GameScene.pushedOut(button, awayFrom: button, keepOut: keepOut)
 
-        #expect(abs(pushed.vc_distance(to: button) - keepOut) < 0.001)
+        #expect(abs(pushed.distance(to: button) - keepOut) < 0.001)
     }
 
     @Test func aZeroZoneExcludesNothing() {

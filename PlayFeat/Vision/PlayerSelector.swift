@@ -46,8 +46,8 @@ nonisolated struct PlayerSelector: Sendable {
             span = body.scale
         }
 
-        func distance(to body: BodyCandidate) -> CGFloat {
-            hypot(body.chest.x - chest.x, body.chest.y - chest.y)
+        func distance(to candidate: BodyCandidate) -> CGFloat {
+            chest.distance(to: candidate.chest)
         }
     }
 

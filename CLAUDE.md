@@ -188,9 +188,11 @@ Summary:
 - **camelCase** for variables, properties, functions and enum cases
   (`dishTimeFraction`, `case waitingToServe`).
 - **UpperCamelCase** for types and protocols (`GameStateManager`, `HandInputSource`).
-- No `snake_case`, no Hungarian notation, no type prefixes. The existing `vc_`
-  helpers (`vc_distance`, `vc_clamped`) predate this rule; rename them when you
-  touch them.
+- No `snake_case`, no Hungarian notation, no type prefixes.
+- Shared point and number maths (`distance(to:)`, `eased(toward:by:)`,
+  `clamped(to:)`) lives in `Shared/Extensions/CGPoint+Distance.swift` and is
+  `nonisolated`, so the Vision pipeline can use it too. Use it instead of
+  writing another `hypot` or `min(max())`.
 - One main type per file, and the file is named after it. Extensions that split
   a type by concern go in a folder named after the type
   (`Scenes/GameScene/Input.swift`).
