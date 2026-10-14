@@ -239,6 +239,19 @@ Summary:
   `let` before the macro (see `HoverDetectorTests`).
 - Vision runs on a background video queue. Anything it publishes must be sent
   to the main thread.
+- **No GPU work outside the foreground.** iOS rejects it
+  (`kIOGPUCommandBufferCallbackErrorBackgroundExecutionNotPermitted`). Vision
+  and SpriteKit both use the GPU, so leaving `.active` is handled in two places:
+  - `PlayFeatApp` (app-wide): `.inactive` → `HandPoseManager.suspend()` drops
+    frames before Vision and stops the camera; `.background` also fades the
+    music out. `.active` resumes both (the camera only if a screen still
+    wants it).
+  - `GameplayView` (per run): pauses the clock and `SpriteView` at `.inactive`
+    too, since hand tracking is already off. A brief `.inactive` resumes at
+    once; returning from `.background` plays a 3-2-1 first. A run killed by
+    iOS while in the background is lost (no mid-run save).
+  - `scenePhase` is forwarded explicitly into `ContentView`, because
+    `PhoneSafeSides` hosts the app in its own hosting controller.
 
 ## Testing
 
