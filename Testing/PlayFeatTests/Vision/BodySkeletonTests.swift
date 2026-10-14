@@ -46,7 +46,8 @@ struct BodySkeletonTests {
     /// The head drives the seat check but is not part of the skeleton, so it
     /// must never turn up in the drawn chains.
     @Test func theHeadIsNotDrawn() {
-        let drawn = Set(body(hips: true).chains.flatMap { $0 })
+        // An array, not a Set: CGPoint is only Hashable from iOS 18.
+        let drawn = body(hips: true).chains.flatMap { $0 }
 
         #expect(!drawn.contains(CGPoint(x: 0.5, y: 0.85)))
     }
