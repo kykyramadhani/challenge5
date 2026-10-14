@@ -1,6 +1,6 @@
 //
 //  HumanBodyPoseManager.swift
-//  GetCooking
+//  PlayFeat
 //
 //  Manages human body pose detection using Vision (VNDetectHumanBodyPoseRequest),
 //  isolates the player's hands from bystanders' (PlayerSelector picks the player), and
