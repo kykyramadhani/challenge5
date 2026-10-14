@@ -46,13 +46,6 @@ struct GameplayView: View {
 
     @State private var scene = GameScene(size: CGSize(width: 1024, height: 768))
 
-    /// The quit control is normally invisible — the board is played with hands,
-    /// not touch, so a stray tap shouldn't do anything. Tapping the screen once
-    /// flips this on to reveal a Stop button; tapping away (or waiting a few
-    /// seconds) hides it again. This keeps a bail-out reachable during play
-    /// without putting a permanent button over the camera feed.
-    @State private var showStopButton = false
-
     /// Flips once the player has passed the seat check. Local to this view, so
     /// navigation state (SceneManager) stays purely about *which screen*, not
     /// *how far into the screen* the player is.
@@ -98,6 +91,12 @@ struct GameplayView: View {
         !sceneManager.isInTutorial && (hasCalibrated || !needsCalibration)
     }
 
+    /// The hidden Stop control is only live during actual play: the countdown
+    /// and the game-over cover have their own flow.
+    private var canStop: Bool {
+        !isCountingDown && gameStateManager.state != .gameOver
+    }
+
     var body: some View {
         ZStack {
             // Backmost layer for the whole screen. It sits *outside* the Group
@@ -113,7 +112,11 @@ struct GameplayView: View {
             // moment they are detected — during calibration and the countdown,
             // not only once play starts. `showsBoard` keeps the plate and bin
             // out of sight until then.
-            sceneLayer
+            GameBoardView(
+                scene: scene,
+                showsBoard: boardIsUp,
+                isRendering: scenePhase == .active
+            )
 
             Group {
                 if sceneManager.isInTutorial {
@@ -136,13 +139,9 @@ struct GameplayView: View {
             }
 
             #if DEBUG
-            ZStack {
-                BodySkeletonView(handPoseManager: handPoseManager)
-                HandSkeletonView(handPoseManager: handPoseManager)
-            }
-            .ignoresSafeArea()
+            DebugSkeletonOverlay(handPoseManager: handPoseManager)
             #endif
-            
+
             // The run-over cover. Sits above the whole stack so it dims the
             // board, the HUD and the hand glow alike. It owns its own timing
             // and calls back when it is done, at which point the results screen
@@ -160,8 +159,9 @@ struct GameplayView: View {
         // the seat check and board calling it again is harmless; the preview
         // above stays live across their swap because it never leaves the tree.
         .onAppear {
+            connectScene()
             handPoseManager.start()
-            
+
             // Disables Auto-Lock Screen during Gameplay
             UIApplication.shared.isIdleTimerDisabled = true
         }
@@ -173,76 +173,19 @@ struct GameplayView: View {
         }
     }
 
-    /// The SpriteKit layer: the board during play, and the hand glow at all
-    /// times. Kept out of `gameBody` so the seat check draws over a live scene
-    /// rather than swapping one in afterwards.
-    private var sceneLayer: some View {
-        GeometryReader { proxy in
-            SpriteView(
-                scene: scene,
-                // Stops SpriteKit's Metal render loop out of the foreground,
-                // where iOS refuses GPU work. `scene.isPaused` alone only
-                // freezes the game; the view would keep drawing.
-                isPaused: scenePhase != .active,
-                options: [
-                    .allowsTransparency, .ignoresSiblingOrder,
-                ]
-            )
-            .background(.clear)
-            .onAppear {
-                scene.size = proxy.size
-                scene.gameStateManager = gameStateManager
-                scene.handInput = handPoseManager
-                scene.showsBoard = boardIsUp
-                scene.audio = audio
-            }
-            .onChange(of: proxy.size) { _, newSize in
-                scene.size = newSize
-            }
-            .onChange(of: boardIsUp) { _, isUp in
-                scene.showsBoard = isUp
-            }
-        }
-        .ignoresSafeArea()
+    /// Hands the scene what it reads every frame. Done here because this
+    /// screen owns all of it; GameBoardView only hosts and sizes the scene.
+    private func connectScene() {
+        scene.gameStateManager = gameStateManager
+        scene.handInput = handPoseManager
+        scene.audio = audio
     }
 
     private var gameBody: some View {
-        GeometryReader { proxy in
+        GeometryReader { _ in
             ZStack {
-                VStack {
-                    HStack(alignment: .center) {
+                GameHUD(gameStateManager: gameStateManager, isCountingDown: isCountingDown)
 
-                        Spacer()
-
-                        PointCard(
-                            dishesServed: gameStateManager.dishesCompleted
-                        )
-
-                        Spacer()
-
-                        // Hidden rather than removed during the countdown: it
-                        // still holds its width, so the score and hearts don't
-                        // jump sideways the moment the first recipe lands.
-                        RecipeCard(
-                            recipe: gameStateManager.currentRecipe,
-                            gameStateManager: gameStateManager
-                        )
-                        .opacity(isCountingDown ? 0 : 1)
-
-                        Spacer()
-
-                        HeartCard(
-                            hearts: gameStateManager.lives,
-                            total: gameStateManager.startingLives
-                        )
-
-                        Spacer()
-                    }
-
-                    Spacer()
-                }
-                .ignoresSafeArea()
-                
                 LoseHeartOverlay(gameStateManager: gameStateManager)
 
                 if isCountingDown {
@@ -256,44 +199,10 @@ struct GameplayView: View {
                     CameraPermissionDeniedOverlay()
                 }
 
-                // Hidden quit control. User tap the screen toggle the Stop Button
-                if !isCountingDown && gameStateManager.state != .gameOver {
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .ignoresSafeArea()
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                showStopButton.toggle()
-                            }
-                        }
-
-                    if showStopButton {
-                        // Bottom Left Button
-                        VStack {
-                            Spacer()
-                            HStack {
-                                ButtonComponent(
-                                    name: "Stop",
-                                    icon: "xmark",
-                                    action: quitGame,
-                                    buttonStyle: .primary
-                                )
-                                .padding(40)
-
-                                Spacer()
-                            }
-                        }
-                        .transition(.opacity)
-                    }
+                if canStop {
+                    StopButtonLayer(onStop: quitGame)
                 }
             }
-        }
-        // Auto-hide the Stop button so a forgotten tap doesn't leave it sitting
-        // over the feed; each fresh reveal restarts the countdown via the id.
-        .task(id: showStopButton) {
-            guard showStopButton else { return }
-            try? await Task.sleep(for: .seconds(5))
-            withAnimation(.easeInOut(duration: 0.2)) { showStopButton = false }
         }
         .onAppear {
             // Idempotent: for a game that skipped calibration this actually
@@ -396,7 +305,6 @@ struct GameplayView: View {
     }
 
     private func quitGame() {
-        showStopButton = false
         gameStateManager.gameOver()
         showGameOver()
     }
