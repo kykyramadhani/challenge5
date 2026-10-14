@@ -37,12 +37,14 @@ struct PlayerBodyMatchTests {
     private func keep(
         hands: [(CGFloat, CGFloat)],
         bodies: [HumanBodyPoseManager.BodyCandidate],
+        player: Int = 0,
         limit: Int = 2,
         mode: any HandInputMode = TwoHandMode()
-    ) -> [Int]? {
+    ) -> [Int] {
         HumanBodyPoseManager.playerHandIndices(
             handWrists: hands.map { CGPoint(x: $0.0, y: $0.1) },
             bodies: bodies,
+            player: player,
             wristTolerance: 0.6,
             limit: limit,
             mode: mode
@@ -56,7 +58,7 @@ struct PlayerBodyMatchTests {
             bodies: [body(wrists: [(0.40, 0.50), (0.60, 0.50)], shoulders: 0.30)]
         )
 
-        #expect(kept.map(Set.init) == Set([0, 1]))
+        #expect(Set(kept) == Set([0, 1]))
     }
 
     /// One-hand mode: only the hand nearest the chosen wrist is kept, even
@@ -114,19 +116,6 @@ struct PlayerBodyMatchTests {
         #expect(kept == [0], "the neighbour's hand belongs to the neighbour")
     }
 
-    /// The player is whoever is nearest, not whoever Vision listed first.
-    @Test func theNearestBodyIsThePlayer() {
-        let kept = keep(
-            hands: [(0.20, 0.50), (0.75, 0.50)],
-            bodies: [
-                body(wrists: [(0.20, 0.50)], shoulders: 0.10),  // far, listed first
-                body(wrists: [(0.75, 0.50)], shoulders: 0.32)   // near
-            ]
-        )
-
-        #expect(kept == [1])
-    }
-
     /// A hand nowhere near any wrist is noise, not a player.
     @Test func aHandOffAnyBodyIsDropped() {
         let kept = keep(
@@ -134,7 +123,7 @@ struct PlayerBodyMatchTests {
             bodies: [body(wrists: [(0.50, 0.50)], shoulders: 0.20)]
         )
 
-        #expect(kept?.isEmpty == true)
+        #expect(kept.isEmpty)
     }
 
     /// Never more hands than the game can play with.
@@ -144,32 +133,23 @@ struct PlayerBodyMatchTests {
             bodies: [body(wrists: [(0.40, 0.50), (0.50, 0.50)], shoulders: 0.40)]
         )
 
-        #expect(kept?.count == 2)
-    }
-
-    /// No shoulders in shot, no hands. A hand only counts as the player's if
-    /// it can be tied to a visible body, so a cropped torso tracks nothing —
-    /// the caller maps this nil straight to an empty list.
-    @Test func noBodyMeansNoHands() {
-        #expect(keep(hands: [(0.5, 0.5)], bodies: []) == nil)
+        #expect(kept.count == 2)
     }
 
     /// The player is in frame with their hands down or out of shot. That
-    /// matches nothing, and is reported as an empty list rather than as "no
-    /// body" — the two are distinct even though the caller now treats them
-    /// the same way.
+    /// matches nothing — not even a bystander's hand that happens to be up.
     @Test func aPlayerWithNoVisibleWristsMatchesNothing() {
         let kept = keep(
             hands: [(0.85, 0.55)],                       // a bystander's hand
             bodies: [body(wrists: [], shoulders: 0.30)]  // player, hands down
         )
 
-        #expect(kept == [], "empty, not nil")
+        #expect(kept.isEmpty)
     }
 
-    /// The case called out explicitly: a bystander whose whole body is visible
-    /// still loses to a nearer player framed from the chest up. Scale is
-    /// shoulder span alone, so extra visible joints buy no advantage.
+    /// A bystander whose whole body is visible keeps their own hand, even
+    /// though the player is framed from the chest up: extra visible joints
+    /// buy no claim on anyone's hands.
     @Test func aFullBodyBystanderStillLosesToTheNearerPlayer() {
         let kept = keep(
             hands: [(0.45, 0.50), (0.85, 0.50)],
@@ -180,16 +160,5 @@ struct PlayerBodyMatchTests {
         )
 
         #expect(kept == [0])
-    }
-
-    /// Only ever one body is treated as the player, whoever else is in shot.
-    @Test func theNearestBodyIsTheOnlyOneChosen() {
-        let bodies = [
-            body(wrists: [], shoulders: 0.12, at: 0.2),
-            body(wrists: [], shoulders: 0.31, at: 0.5),
-            body(wrists: [], shoulders: 0.20, at: 0.8)
-        ]
-
-        #expect(HumanBodyPoseManager.nearestBody(in: bodies) == 1)
     }
 }

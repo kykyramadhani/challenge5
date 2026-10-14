@@ -27,8 +27,8 @@ final class HandPoseManager {
     /// The player's upper body in normalized Vision space, nil when nobody is
     /// tracked.
     ///
-    /// Exactly one body ever appears here: the nearest. Other people in frame
-    /// are never published, however much of them Vision can see.
+    /// Exactly one body ever appears here: the player (see PlayerSelector).
+    /// Other people are never published, however much of them Vision can see.
     private(set) var playerBody: HumanBodyPoseManager.BodyCandidate?
 
     /// Camera authorization state, surfaced so the UI can prompt the user.
@@ -80,6 +80,25 @@ final class HandPoseManager {
 
     func stop() {
         camera.stop()
+    }
+
+    /// Until calibration passes, only someone sitting in `frame` (view space,
+    /// laid out in `viewSize`) can be the player.
+    func setPlayerZone(_ frame: CGRect, in viewSize: CGSize) {
+        let zone = PlayerSelector.Zone(frame: frame, viewSize: viewSize, gravity: camera.previewGravity)
+        camera.performOnVideoQueue { [processor] in processor.setPlayerZone(zone) }
+    }
+
+    /// Locks onto whoever is the player right now — the person who just
+    /// calibrated. Nobody else can take over until `releasePlayer()`.
+    func lockOntoPlayer() {
+        guard let playerBody else { return }
+        camera.performOnVideoQueue { [processor] in processor.lockOntoPlayer(playerBody) }
+    }
+
+    /// Forgets the locked player, so the next calibration picks afresh.
+    func releasePlayer() {
+        camera.performOnVideoQueue { [processor] in processor.releasePlayer() }
     }
 
     /// Writes one frame's result. Only changed values are written, so views
