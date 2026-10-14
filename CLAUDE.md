@@ -227,14 +227,18 @@ Summary:
 
 - An asset's lookup name is its **imageset folder name**, and lookups are
   **case-sensitive**. `ArtAssetTests` catches mismatches.
-- Two-part start: iOS shows `Launch Screen.storyboard` (repo root) while the
-  app loads, then `SplashScreenView` plays the animated mascot. The launch
+- Two-part start: iOS shows `PlayFeat/Resources/Launch Screen.storyboard` while
+  the app loads, then `SplashScreenView` plays the animated mascot. The launch
   screen is only the plain `SplashBackground` color — the splash's first frame —
   so the handover has no visible seam. Don't add the mascot or text to it: the
   splash fades them in from nothing, and launch screens can't use Atkinson.
-  It's wired through `UILaunchStoryboardName` in `PlayFeat/Info.plist`, not a
-  build setting, because `project.pbxproj` is gitignored. iOS caches launch
-  screens: delete the app (or reset the simulator) to see a change.
+- Because `project.pbxproj` is gitignored, anything only the project file knows
+  about never reaches a teammate's clone. So the launch screen is wired through
+  tracked files: the storyboard lives inside the synchronized `PlayFeat/` folder
+  (bundled automatically), and `UILaunchStoryboardName` is in
+  `PlayFeat/Info.plist`. Keep both there even if Xcode's target settings also
+  set them. iOS caches launch screens: delete the app (or reset the simulator)
+  to see a change.
 - `#expect` captures its argument immutably. Move a `mutating` call into a
   `let` before the macro (see `HoverDetectorTests`).
 - Vision runs on a background video queue. Anything it publishes must be sent
