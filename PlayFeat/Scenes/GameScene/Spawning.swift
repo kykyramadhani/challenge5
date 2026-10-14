@@ -173,11 +173,11 @@ extension GameScene {
                 // Distance from Each Other
                 guard
                     occupied.allSatisfy({
-                        $0.vc_distance(to: candidate) > spacing
+                        $0.distance(to: candidate) > spacing
                     }),
                     
                     points.allSatisfy({
-                        $0.vc_distance(to: candidate) > spacing
+                        $0.distance(to: candidate) > spacing
                     })
                 else {
                     print("Hit Each other")

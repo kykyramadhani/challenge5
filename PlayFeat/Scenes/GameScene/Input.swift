@@ -117,12 +117,12 @@ extension GameScene {
                     awayFrom: resetNode.position,
                     keepOut: resetRadius + held.radius
                 )
-                held.position = held.position.vc_eased(
+                held.position = held.position.eased(
                     toward: target,
                     by: Self.easing(base: dragSmoothing, delta: delta)
                 )
 
-                if held.position.vc_distance(to: plateHome) <= plateRadius + held.radius * 0.5 {
+                if held.position.distance(to: plateHome) <= plateRadius + held.radius * 0.5 {
                     commitToPlate(held, gameStateManager: gameStateManager)
                     tracker.held = nil
                     tracker.openSince = nil
@@ -185,7 +185,7 @@ extension GameScene {
         // Pick it up: a fist closing anywhere on the plate takes it.
         if state == .fist, plateHeldBy == nil,
            handPoints.contains(where: {
-               $0.vc_distance(to: plateNode.position) <= plateRadius + grabSlack
+               $0.distance(to: plateNode.position) <= plateRadius + grabSlack
            }) {
             plateHeldBy = handID
             plateOpenSince = nil
@@ -214,7 +214,7 @@ extension GameScene {
             in: size,
             hudHeight: hudExclusion
         )
-        plateNode.position = plateNode.position.vc_eased(
+        plateNode.position = plateNode.position.eased(
             toward: target,
             by: Self.easing(base: dragSmoothing, delta: delta)
         )
@@ -222,7 +222,7 @@ extension GameScene {
         // Reaching the tray *is* serving — there is nothing else to do there,
         // so it fires on arrival rather than asking for a second gesture.
         if let bell = bellNode,
-           plateNode.position.vc_distance(to: bell.position)
+           plateNode.position.distance(to: bell.position)
             <= carriedRadius + bell.size.width / 2 {
             lastServeDirection = gameStateManager.bellSide
             plateHeldBy = nil
@@ -296,7 +296,7 @@ extension GameScene {
         // counting as the opening frame of a dwell.
         let isHovering = hands.contains {
             $0.isOpen && !$0.isHolding
-                && $0.cursor.vc_distance(to: resetNode.position) <= reach
+                && $0.cursor.distance(to: resetNode.position) <= reach
         }
 
         let fired = resetHoverDetector.update(isHovering: isHovering, now: now)
@@ -351,7 +351,7 @@ extension GameScene {
         for node in tableIngredients()
         where !node.isOnPlate && node.heldBy == nil {
             let reach = node.radius + grabSlack
-            guard let nearest = handPoints.map({ $0.vc_distance(to: node.position) }).min(),
+            guard let nearest = handPoints.map({ $0.distance(to: node.position) }).min(),
                   nearest <= reach else { continue }
             if best == nil || nearest < best!.distance {
                 best = (node, nearest)
@@ -439,8 +439,8 @@ extension GameScene {
 
     static func clamped(_ point: CGPoint, radius: CGFloat, in size: CGSize) -> CGPoint {
         CGPoint(
-            x: point.x.vc_clamped(to: radius...max(radius, size.width - radius)),
-            y: point.y.vc_clamped(to: radius...max(radius, size.height - radius))
+            x: point.x.clamped(to: radius...max(radius, size.width - radius)),
+            y: point.y.clamped(to: radius...max(radius, size.height - radius))
         )
     }
 

@@ -1,6 +1,6 @@
 //
 //  CameraPreviewView.swift
-//  VisionChef
+//  PlayFeat
 //
 //  Layer 1 (back): the live front-camera feed the player sees themselves in.
 //  It renders the game's *existing* CameraSession rather than making its own —

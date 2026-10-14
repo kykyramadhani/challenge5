@@ -60,7 +60,7 @@ nonisolated enum HandClassifier {
         palmLength: CGFloat
     ) -> CGFloat? {
         guard palmLength > 0, let thumbTip, let indexTip else { return nil }
-        return distance(thumbTip, indexTip) / palmLength
+        return thumbTip.distance(to: indexTip) / palmLength
     }
 
     
@@ -86,7 +86,7 @@ nonisolated enum HandClassifier {
         // sane value when the middle knuckle briefly drops out.
         let knuckles: [VNHumanHandPoseObservation.JointName] = [.middleMCP, .indexMCP, .ringMCP, .littleMCP]
         let knucklePoints = knuckles.compactMap(point)
-        guard let palmLength = knucklePoints.map({ distance(wrist, $0) }).max(), palmLength > 0 else {
+        guard let palmLength = knucklePoints.map({ wrist.distance(to: $0) }).max(), palmLength > 0 else {
             throw ClassificationError.noReliablePalm
         }
 
@@ -113,11 +113,5 @@ nonisolated enum HandClassifier {
             pinchRatio: pinch,
             skeleton: skeleton
         )
-    }
-
-    /// Local rather than the shared `vc_distance`, which is main-actor by
-    /// default and so can't be called from this `nonisolated` type.
-    private static func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
-        hypot(a.x - b.x, a.y - b.y)
     }
 }

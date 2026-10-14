@@ -90,6 +90,24 @@ struct GameAudioTests {
         #expect(sounds.played == [.putOrder, .addPoint])
     }
 
+    /// Stop tapped right after serving: the chime would land on the
+    /// game-over cover, so it is dropped.
+    @Test func quittingRightAfterServingSkipsTheReward() async throws {
+        let sounds = SoundRecorder()
+        let game = makeGame(recipes: [.chickenGeprek], sounds: sounds)
+        game.start()
+        for ingredient in Recipe.chickenGeprek.ingredients {
+            game.addIngredientToPlate(ingredient)
+        }
+        try await Task.sleep(for: .milliseconds(1200)) // dish reveal beat
+
+        game.serveDish()
+        game.gameOver()
+
+        try await Task.sleep(for: .milliseconds(500)) // reward chime delay
+        #expect(!sounds.played.contains(.addPoint))
+    }
+
     @Test func runningLowStartsAndStopsTheClockWarning() {
         let sounds = SoundRecorder()
         let audio = GameAudio.attach(to: makeGame(), sounds: sounds)

@@ -65,6 +65,12 @@ final class CameraSession: NSObject {
     /// actor before the camera runs and only read on the video queue after.
     nonisolated(unsafe) var onFrame: (@Sendable (CVPixelBuffer) -> Void)?
 
+    /// Runs `work` on the video queue, in turn with the frames. For changing
+    /// state that `onFrame` reads: one queue owns it, so it needs no lock.
+    func performOnVideoQueue(_ work: @escaping @Sendable () -> Void) {
+        videoQueue.async(execute: work)
+    }
+
     /// Current camera permission.
     var authorizationStatus: AVAuthorizationStatus { permission.authorizationStatus }
 

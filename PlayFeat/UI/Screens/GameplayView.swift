@@ -41,7 +41,6 @@ struct GameplayView: View {
     }
 
     @State private var scene = GameScene(size: CGSize(width: 1024, height: 768))
-    @State private var showHandSkeleton = true
 
     /// The quit control is normally invisible — the board is played with hands,
     /// not touch, so a stray tap shouldn't do anything. Tapping the screen once
@@ -112,6 +111,9 @@ struct GameplayView: View {
                 else {
                     if needsCalibration && !hasCalibrated {
                         SeatCalibrationView(handPoseManager: handPoseManager) {
+                            // Whoever calibrated is the player for this run;
+                            // anyone else who walks into shot is ignored.
+                            handPoseManager.lockOntoPlayer()
                             hasCalibrated = true
                         }
                         .designScaled()
@@ -121,6 +123,14 @@ struct GameplayView: View {
                 }
             }
 
+            #if DEBUG
+            ZStack {
+                BodySkeletonView(handPoseManager: handPoseManager)
+                HandSkeletonView(handPoseManager: handPoseManager)
+            }
+            .ignoresSafeArea()
+            #endif
+            
             // The run-over cover. Sits above the whole stack so it dims the
             // board, the HUD and the hand glow alike. It owns its own timing
             // and calls back when it is done, at which point the results screen
@@ -144,6 +154,7 @@ struct GameplayView: View {
             UIApplication.shared.isIdleTimerDisabled = true
         }
         .onDisappear {
+            handPoseManager.releasePlayer()
             handPoseManager.stop()
             UIApplication.shared.isIdleTimerDisabled = false
             audio.stopMusic()

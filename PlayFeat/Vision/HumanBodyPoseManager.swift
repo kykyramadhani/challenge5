@@ -1,9 +1,9 @@
 //
 //  HumanBodyPoseManager.swift
-//  GetCooking
+//  PlayFeat
 //
 //  Manages human body pose detection using Vision (VNDetectHumanBodyPoseRequest),
-//  tracks the nearest player body, isolates player hands from bystanders, and
+//  isolates the player's hands from bystanders' (PlayerSelector picks the player), and
 //  handles seat alignment verification.
 //
 
@@ -58,6 +58,12 @@ nonisolated final class HumanBodyPoseManager {
         /// the wrist tolerance is measured in.
         var scale: CGFloat { leftShoulder.distance(to: rightShoulder) }
 
+        /// Midway between the shoulders: where this person *is*, steadier than
+        /// the head or the hands, which move about during play.
+        var chest: CGPoint {
+            CGPoint(x: (leftShoulder.x + rightShoulder.x) / 2, y: (leftShoulder.y + rightShoulder.y) / 2)
+        }
+
         /// The bones drawn on screen: the shoulder line, and the sides of the
         /// torso down to whichever hips are visible.
         var chains: [[CGPoint]] {
@@ -107,11 +113,11 @@ nonisolated final class HumanBodyPoseManager {
 
     /// Run the body detector on one frame in this many, reusing the last
     /// result in between.
-    var bodyPoseFrameInterval = 3
+    var bodyPoseFrameInterval = 2
 
     /// How far a hand's own wrist may sit from a body's wrist and still count
     /// as that body's, as a multiple of that body's shoulder span.
-    var wristMatchTolerance: CGFloat = 0.6
+    var wristMatchTolerance: CGFloat = 0.3
 
     /// Minimum Vision joint confidence to trust a point.
     var jointConfidenceThreshold: Float = 0.25
@@ -165,11 +171,6 @@ nonisolated final class HumanBodyPoseManager {
         return lastBodies
     }
 
-    /// Resolves the nearest player body from detected candidates.
-    func resolvePlayer(from bodies: [BodyCandidate]) -> BodyCandidate? {
-        Self.nearestBody(in: bodies).map { bodies[$0] }
-    }
-
     // MARK: - Static Body Detection & Matching Utilities
 
     /// Reduces a Vision body observation to the upper body candidate.
@@ -206,24 +207,17 @@ nonisolated final class HumanBodyPoseManager {
         )
     }
 
-    /// The body nearest the camera — the widest shoulders on screen.
-    static func nearestBody(in bodies: [BodyCandidate]) -> Int? {
-        bodies.indices
-            .filter { bodies[$0].scale > 0 }
-            .max { bodies[$0].scale < bodies[$1].scale }
-    }
-
-    /// Picks the hands belonging to the player, using the bodies Vision found
-    /// in the same frame.
+    /// Picks the hands belonging to `bodies[player]`, using everyone else
+    /// Vision found in the same frame to rule out their hands.
     static func playerHandIndices(
         handWrists: [CGPoint],
         bodies: [BodyCandidate],
+        player: Int,
         wristTolerance: CGFloat,
         limit: Int,
         mode: any HandInputMode = TwoHandMode()
-    ) -> [Int]? {
-        guard limit > 0 else { return [] }
-        guard let player = nearestBody(in: bodies) else { return nil }
+    ) -> [Int] {
+        guard limit > 0, bodies.indices.contains(player) else { return [] }
 
         let reach = bodies[player].scale * wristTolerance
 
@@ -252,13 +246,5 @@ nonisolated final class HumanBodyPoseManager {
             .sorted { $0.distance < $1.distance }
             .prefix(limit)
             .map(\.index)
-    }
-}
-
-// MARK: - Private distance helper
-
-private extension CGPoint {
-    nonisolated func distance(to other: CGPoint) -> CGFloat {
-        hypot(x - other.x, y - other.y)
     }
 }

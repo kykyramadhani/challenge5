@@ -172,7 +172,7 @@ nonisolated struct HandIdentityTracker {
             var best: Int?
             var bestDistance = radius
             for (candidate, previous) in previousPositions.enumerated() where !claimed.contains(candidate) {
-                let distance = hypot(position.x - previous.x, position.y - previous.y)
+                let distance = position.distance(to: previous)
                 if distance < bestDistance {
                     bestDistance = distance
                     best = candidate
