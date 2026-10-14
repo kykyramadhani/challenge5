@@ -1,6 +1,6 @@
 //
-//  GameScene+Spawning.swift
-//  GetCooking
+//  Spawning.swift
+//  PlayFeat
 //
 //  Creates ingredient bubbles and places them on the table.
 //
@@ -118,120 +118,94 @@ extension GameScene {
 
     // MARK: - Placement helpers
 
-    /// Generates random non-overlapping positions for ingredient
-    /// bubbles, keeping clear of the plate, trash bin, and HUD.
+    /// Random, non-overlapping positions for `count` bubbles in the spawn
+    /// area, clear of the plate, the Reset button and the HUD.
     ///
     /// `avoiding` holds spots that are already taken but aren't being placed
     /// here — bubbles left floating while the plate is returned to the table.
-    /// They constrain the spacing without being handed back to the caller.
-    func scatterPoints(count: Int, avoiding occupied: [CGPoint] = [])
-        -> [CGPoint]
-    {
+    /// They constrain the placement without being handed back to the caller.
+    func scatterPoints(count: Int, avoiding occupied: [CGPoint] = []) -> [CGPoint] {
         guard size.width > 0, size.height > 0 else {
             return Array(repeating: .zero, count: count)
         }
-
-        let margin = ingredientRadius + 12
-
-        // Reserve room for the idle bob on both bubbles, so two neighbours
-        // floating toward each other still never overlap — the "box" each
-        // bubble is given to move inside.
-        let floatRoom = ingredientRadius * IngredientNode.floatAmplitudeFraction * 2
-        let minDistanceBetweenPoints = ingredientRadius * 2 + floatRoom
-
-        let xRange = margin...max(margin, size.width - margin)
-        let spawnMinY =
-            plateHome.y
-            + plateRadius
-            + ingredientRadius
-            + 30
-
-        let spawnMaxY =
-            size.height
-            - hudExclusion
-            - ingredientRadius
-            - 30
-
-        // A screen short enough that the plate's clearance runs past the
-        // HUD's inverts this, and `a...b` traps on lowerBound > upperBound —
-        // which is exactly what froze the game on a phone in landscape.
-        // Guarded the same way `xRange` above is.
-        let yRange = spawnMinY...max(spawnMinY, spawnMaxY)
-
-        func attempt(spacing: CGFloat) -> [CGPoint]? {
-            var points: [CGPoint] = []
-            var tries = 0
-            
-            // 60 Tries Maximum
-            while points.count < count && tries < count * 60 {
-                tries += 1
-                let candidate = CGPoint(
-                    x: .random(in: xRange),
-                    y: .random(in: yRange)
-                )
-                
-                // Distance from Each Other
-                guard
-                    occupied.allSatisfy({
-                        $0.distance(to: candidate) > spacing
-                    }),
-                    
-                    points.allSatisfy({
-                        $0.distance(to: candidate) > spacing
-                    })
-                else {
-                    print("Hit Each other")
-                    continue
-                }
-                
-                points.append(candidate)
-            }
-            // On Average 30 Tries Total
-            print("Total Tries: \(tries)")
-            
-            return points.count == count ? points : nil
-        }
-        
-        // Generate the Minimum Spacing (Changing it each time to make it more scrambeled looking)
-        for relaxation in [1.0, 0.95, 0.9] as [CGFloat] {
-            if let points = attempt(
-                spacing: minDistanceBetweenPoints * relaxation
-            ) {
-                return points
-            }
-        }
-        
-        return gridPoints(count: count, in: xRange, yRange: yRange)
+        var generator = SystemRandomNumberGenerator()
+        let grid = spawnGrid(avoiding: occupied)
+        // Only when the board can't fit them all apart, e.g. a phone in
+        // landscape: an even grid where neighbours may touch beats no bubbles.
+        return grid.positions(for: count, using: &generator)
+            ?? gridPoints(count: count, in: grid.area)
     }
 
-    /// Deterministic grid fallback when random placement fails.
-    func gridPoints(
-        count: Int,
-        in xRange: ClosedRange<CGFloat>,
-        yRange: ClosedRange<CGFloat>
-    ) -> [CGPoint] {
-        let columns = max(
-            1,
-            Int(
-                (xRange.upperBound - xRange.lowerBound)
-                    / (ingredientRadius * 1.2)
-            ) + 1
+    /// Where bubble centres may go: the gameplay area between the plate and
+    /// the HUD, inset so a bubble at the edge stays fully on screen.
+    var bubbleSpawnArea: CGRect {
+        let edgeGap = ingredientRadius + Self.bubbleScreenGap
+        let minY = plateHome.y + plateRadius + ingredientRadius + Self.bubbleObstacleGap
+        let maxY = size.height - hudExclusion - ingredientRadius - Self.bubbleObstacleGap
+        // On a screen short enough that the plate's clearance runs past the
+        // HUD's, the band collapses to a single line rather than inverting.
+        return CGRect(
+            x: edgeGap,
+            y: minY,
+            width: max(0, size.width - edgeGap * 2),
+            height: max(0, maxY - minY)
         )
-        
+    }
+
+    /// Space kept between a bubble and the screen edge.
+    private static let bubbleScreenGap: CGFloat = 12
+
+    /// Space kept between a bubble and the plate below or the HUD above.
+    private static let bubbleObstacleGap: CGFloat = 30
+
+    /// The board as SpawnGrid sees it: where bubbles may go, how far apart
+    /// they must be, and what they must keep clear of.
+    private func spawnGrid(avoiding occupied: [CGPoint]) -> SpawnGrid {
+        // Room for the idle bob on both bubbles, so two neighbours floating
+        // toward each other still never overlap. It sets the cell size.
+        let floatRoom = ingredientRadius * IngredientNode.floatAmplitudeFraction * 2
+        let spacing = ingredientRadius * 2 + floatRoom
+
+        // How far a bubble reaches from its centre, bob included.
+        let reach = ingredientRadius + floatRoom / 2
+
+        var grid = SpawnGrid(area: bubbleSpawnArea, spacing: spacing)
+        grid.blocked = boardObstacles.map { $0.insetBy(dx: -reach, dy: -reach) }
+            + occupied.map { Self.square(around: $0, halfSide: spacing) }
+        return grid
+    }
+
+    /// What no bubble may sit on: the plate, and the Reset button with its
+    /// label. The band already keeps clear of both on every screen measured;
+    /// checking them as well keeps that true if the layout changes.
+    private var boardObstacles: [CGRect] {
+        let plate = Self.square(around: plateHome, halfSide: plateRadius)
+        let reset = resetNode?.calculateAccumulatedFrame()
+        return [plate] + [reset].compactMap { $0 }
+    }
+
+    private static func square(around center: CGPoint, halfSide: CGFloat) -> CGRect {
+        CGRect(
+            x: center.x - halfSide,
+            y: center.y - halfSide,
+            width: halfSide * 2,
+            height: halfSide * 2
+        )
+    }
+
+    /// Deterministic grid fallback when the bubbles can't all fit apart.
+    func gridPoints(count: Int, in area: CGRect) -> [CGPoint] {
+        let columns = max(1, Int(area.width / (ingredientRadius * 1.2)) + 1)
         let rows = Int(ceil(Double(count) / Double(columns)))
         return (0..<count).map { index in
             let column = index % columns
             let row = index / columns
-            let x =
-                columns == 1
-                ? xRange.lowerBound
-                : xRange.lowerBound + (xRange.upperBound - xRange.lowerBound)
-                    * CGFloat(column) / CGFloat(columns - 1)
-            let y =
-                rows == 1
-                ? yRange.upperBound
-                : yRange.lowerBound + (yRange.upperBound - yRange.lowerBound)
-                    * CGFloat(row) / CGFloat(rows - 1)
+            let x = columns == 1
+                ? area.minX
+                : area.minX + area.width * CGFloat(column) / CGFloat(columns - 1)
+            let y = rows == 1
+                ? area.maxY
+                : area.minY + area.height * CGFloat(row) / CGFloat(rows - 1)
             return CGPoint(x: x, y: y)
         }
     }
