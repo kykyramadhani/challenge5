@@ -55,7 +55,10 @@ final class GameAudio {
 
         case .dishServed:
             sounds.play(.putOrder)
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.rewardChimeDelay) { [sounds] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.rewardChimeDelay) { [weak self] in
+                // A quit in the meantime ends the run; the chime would land
+                // on the game-over cover.
+                guard let self, let game, game.state != .gameOver else { return }
                 sounds.play(.addPoint)
             }
             // The music speeds up in lock-step with the tier that just
