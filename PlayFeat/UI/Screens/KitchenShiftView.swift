@@ -18,7 +18,7 @@ import AVFoundation
 import SpriteKit
 import SwiftUI
 
-struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Panel: View>: View {
+struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Rail: View, Panel: View>: View {
     var sceneManager: SceneManager
     var handPoseManager: HandPoseManager
     let audio: AudioManager
@@ -27,6 +27,8 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Panel: View>: View
     /// Whether the role has a zoomed-in panel open over its worktop.
     let isPanelOpen: Bool
     @ViewBuilder let worktop: (Layout) -> Worktop
+    /// The order tickets along the top.
+    @ViewBuilder let rail: (Layout) -> Rail
     @ViewBuilder let panel: () -> Panel
 
     @State private var showShiftOver = false
@@ -72,7 +74,7 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Panel: View>: View
     @ViewBuilder
     private func kitchen(_ layout: Layout, size: CGSize) -> some View {
         worktop(layout)
-        orderRail(layout)
+        rail(layout)
         ShiftClockCard(elapsedSeconds: shift.elapsedSeconds, lives: shift.lives,
                        startingLives: KitchenShift.startingLives)
             .placed(in: layout.shiftClock, designSize: ShiftClockCard.size)
@@ -87,20 +89,6 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Panel: View>: View
             Color(white: 0.6)
             CameraPreviewView(camera: handPoseManager.camera)
         }
-    }
-
-    private func orderRail(_ layout: Layout) -> some View {
-        ForEach(Array(shift.queue.orders.enumerated()), id: \.element.id) { index, order in
-            let isActive = index == 0
-            OrderTicketView(order: order, isActive: isActive,
-                            isRunningLow: isActive && shift.isActiveOrderRunningLow,
-                            fractionLeft: { shift.activeFractionLeft })
-                .frame(height: OrderTicketView.fullHeight, alignment: .top)
-                .placed(in: layout.ticket(index),
-                        designSize: CGSize(width: OrderTicketView.width, height: OrderTicketView.fullHeight))
-                .transition(.move(edge: .top).combined(with: .opacity))
-        }
-        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: shift.queue.orders.map(\.id))
     }
 
     @ViewBuilder

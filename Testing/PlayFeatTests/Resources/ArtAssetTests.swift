@@ -52,7 +52,7 @@ struct ArtAssetTests {
             "OrderTicket", "HeldBubble", "TrashCan", "PanelScrew", "MushroomCut1", "MushroomCut2",
             "ChopPatternArrow", "WashPatternArrow", TrayArt.trayImage, TrayArt.dirtImage,
             "PortalProcurement", "StoveBurner", "BoilPot", "BoilPotTuber", "BrothPot", "BrothPotSoup",
-            "Fryer", "FryerTentacle",
+            "Fryer", "FryerTentacle", "Dispenser", TrayArt.drinkImage,
         ]
         for name in furniture {
             #expect(UIImage(named: name) != nil, "missing '\(name)'")

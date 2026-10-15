@@ -124,8 +124,8 @@ final class ProcurementGame {
         case .cleanTray:
             cleanTraysReady -= 1
             crew.receiveCleanTray()
-        case .cooked:
-            break  // the Chef's; `accepts` never lets one through here
+        case .cooked, .dish, .drink, .servingTray:
+            break  // other roles'; `accepts` never lets one through here
         }
         settleActiveOrder()
     }
@@ -137,7 +137,7 @@ final class ProcurementGame {
             station = .cutting(ingredient)
         case .kitchenPortal, .frontHousePortal:
             deliver(ingredient, sliced: sliced, to: zone)
-        case .sink, .trash, .boilingPot, .brothPot, .fryer:
+        default:
             break
         }
     }

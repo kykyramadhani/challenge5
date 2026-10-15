@@ -40,20 +40,11 @@ struct OrderTicketView: View {
                     .position(Self.cellCenter(index))
             }
 
-            if isActive { timerBorder }
+            if isActive { TicketClockBorder(ticket: TicketShape(isShort: isShort), fractionLeft: fractionLeft) }
         }
         .frame(width: Self.width, height: height, alignment: .top)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Order"))
-    }
-
-    /// Left, bottom and right only; the top edge stays plain.
-    private var timerBorder: some View {
-        TimelineView(.animation) { _ in
-            TicketTimerBorder(ticket: TicketShape(isShort: isShort))
-                .trim(from: 0, to: fractionLeft())
-                .stroke(.ticketTimerGreen, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-        }
     }
 
     private var dividers: some View {
@@ -116,6 +107,22 @@ private struct DeliveredTick: View {
     }
 }
 
+/// The active ticket's clock: a green border down its sides and along its
+/// bottom, read every frame, shrinking as the order's time runs out. Shared
+/// by every role's tickets.
+struct TicketClockBorder: View {
+    let ticket: TicketShape
+    let fractionLeft: () -> CGFloat
+
+    var body: some View {
+        TimelineView(.animation) { _ in
+            TicketTimerBorder(ticket: ticket)
+                .trim(from: 0, to: fractionLeft())
+                .stroke(.ticketTimerGreen, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+        }
+    }
+}
+
 /// The ticket's outline minus its top edge, as a shape the clock can trim.
 private struct TicketTimerBorder: Shape {
     let ticket: TicketShape
@@ -124,7 +131,7 @@ private struct TicketTimerBorder: Shape {
 }
 
 /// The white ticket washing red and back, for as long as it is on screen.
-private struct RunningLowBlink: View {
+struct RunningLowBlink: View {
     let shape: TicketShape
     @State private var isRed = false
 

@@ -21,6 +21,8 @@ struct ProcurementView: View {
         KitchenShiftView(sceneManager: sceneManager, handPoseManager: handPoseManager, audio: audio,
                          shift: game.shift, scene: scene, isPanelOpen: game.station != .worktop) {
             (layout: ProcurementLayout) in ProcurementWorktop(game: game, layout: layout)
+        } rail: {
+            OrderRail(shift: game.shift, layout: $0)
         } panel: {
             stationPanel
         }

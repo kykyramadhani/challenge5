@@ -60,9 +60,9 @@ final class ChefScene: KitchenScene {
         return targets
     }
 
-    override func dropZone(at point: CGPoint) -> DropZone? { kitchen.dropZone(at: point) }
+    override func dropTargets() -> [(zone: DropZone, rect: CGRect)] { kitchen.dropTargets }
 
-    override func dropPoint(for zone: DropZone) -> CGPoint { kitchen.center(of: zone) }
+    override func dropPoint(for item: CarriedItem, at zone: DropZone) -> CGPoint { kitchen.center(of: zone) }
 
     override func accepts(_ item: CarriedItem, at zone: DropZone) -> Bool {
         game?.accepts(item, at: zone) ?? false

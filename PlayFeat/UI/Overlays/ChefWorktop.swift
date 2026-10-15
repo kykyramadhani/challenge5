@@ -34,32 +34,15 @@ struct ChefWorktop: View {
         .accessibilityHidden(true)
     }
 
-    /// Each bubble flies in from the Procurement portal when it arrives, and
-    /// is hidden while a hand carries it.
+    /// Raw ingredients arrive from the Procurement portal.
     private var floatingBubbles: some View {
-        ForEach(game.bubbles.indices, id: \.self) { slot in
-            if let bubble = game.bubbles[slot] {
-                IngredientBubble(ingredient: bubble.ingredient, bobDelay: Double(slot) * 0.35)
-                    .opacity(game.itemsInHand.contains(.ingredient(bubble.ingredient, cardSlot: slot)) ? 0 : 1)
-                    .id(bubble.id)
-                    .transition(.asymmetric(insertion: arrival(at: slot), removal: .opacity))
-                    .placed(in: layout.bubble(slot), designSize: bubbleSize)
-            }
-        }
-        .animation(.easeOut(duration: 0.8), value: game.bubbles.map { $0?.id })
+        FloatingBubbles(bubbles: game.bubbles,
+                        slotRect: layout.bubble,
+                        sourceRect: { _ in layout.procurementPortal },
+                        isHeld: { slot, bubble in
+                            game.itemsInHand.contains(.ingredient(bubble.ingredient, cardSlot: slot))
+                        })
     }
-
-    /// Starts small at the Procurement portal and floats out to its slot.
-    /// In the bubble's own (unscaled) points, since `placed` scales it after.
-    private func arrival(at slot: Int) -> AnyTransition {
-        let target = layout.bubble(slot)
-        let scale = target.width / IngredientBubble.size
-        let from = CGSize(width: (layout.procurementPortal.midX - target.midX) / scale,
-                          height: (layout.procurementPortal.midY - target.midY) / scale)
-        return .offset(from).combined(with: .scale(scale: 0.3)).combined(with: .opacity)
-    }
-
-    private var bubbleSize: CGSize { CGSize(width: IngredientBubble.size, height: IngredientBubble.size) }
 
     /// The Front House portal faces the other way on this side of the
     /// kitchen, so its art is mirrored.

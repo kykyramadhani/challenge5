@@ -245,9 +245,14 @@ enum DebugLaunch {
         UserDefaults.standard.bool(forKey: "debugGameplay")
     }
 
-    /// The role `-debugGameplay` opens: `-debugRole chef`, else Procurement.
+    /// The role `-debugGameplay` opens: `-debugRole chef` or
+    /// `-debugRole frontHouse`, else Procurement.
     static var role: KitchenRole {
-        UserDefaults.standard.string(forKey: "debugRole") == "chef" ? .chef : .procurement
+        switch UserDefaults.standard.string(forKey: "debugRole") {
+        case "chef": .chef
+        case "frontHouse": .frontHouse
+        default: .procurement
+        }
     }
 
     static var showsTrackingDiagnostics: Bool {

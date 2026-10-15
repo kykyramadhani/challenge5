@@ -96,10 +96,15 @@ class KitchenScene: SKScene {
     /// Everything a hand could pick up right now, with where it sits.
     func carryTargets() -> [(item: CarriedItem, rect: CGRect)] { [] }
 
-    func dropZone(at point: CGPoint) -> DropZone? { nil }
+    /// Every place an item can be let go over, with its area.
+    func dropTargets() -> [(zone: DropZone, rect: CGRect)] { [] }
 
-    /// Where an item let go over `zone` flies to.
-    func dropPoint(for zone: DropZone) -> CGPoint { .zero }
+    /// A pinch started on something that is pressed rather than carried
+    /// (Front House's dispenser). Returns whether it took the pinch.
+    func press(by hand: Hand) -> Bool { false }
+
+    /// Where `item`, let go over `zone`, flies to.
+    func dropPoint(for item: CarriedItem, at zone: DropZone) -> CGPoint { .zero }
 
     func accepts(_ item: CarriedItem, at zone: DropZone) -> Bool { false }
 
@@ -218,7 +223,7 @@ class KitchenScene: SKScene {
             wasPinching[hand.id] = hand.isPinching
 
             guard var grip = grips[hand.id] else {
-                if pinchStarted, let target = grabbable(by: hand) {
+                if pinchStarted, !press(by: hand), let target = grabbable(by: hand) {
                     grab(target.item, from: target.rect.center, by: hand, now: now)
                 }
                 continue
@@ -272,17 +277,21 @@ class KitchenScene: SKScene {
         audio?.play(.bubbleGrab)
     }
 
-    /// Lets go: a place that takes the item gets it, anywhere else it floats
-    /// back where it came from and nothing changes.
+    /// Lets go: the nearest place that takes the item, within reach, gets
+    /// it; anywhere else it floats back where it came from and nothing
+    /// changes.
     private func release(_ grip: Grip) {
-        guard let zone = dropZone(at: grip.position), accepts(grip.item, at: zone) else {
-            if dropZone(at: grip.position) != nil { audio?.play(.wrongIngredient) }
+        let targets = dropTargets()
+        let taking = targets.filter { accepts(grip.item, at: $0.zone) }
+        guard let zone = type(of: layout).nearestTarget(to: grip.position, among: taking, reach: layout.dropReach)
+        else {
+            if targets.contains(where: { $0.rect.contains(grip.position) }) { audio?.play(.wrongIngredient) }
             floatBack(grip)
             return
         }
         drop(grip.item, at: zone)
         audio?.play(.bubblePut)
-        let target = convertPoint(fromView: dropPoint(for: zone))
+        let target = convertPoint(fromView: dropPoint(for: grip.item, at: zone))
         let away = SKAction.group([
             .move(to: target, duration: 0.3),
             .scale(to: 0.1, duration: 0.3),

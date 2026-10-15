@@ -1,18 +1,19 @@
 //
-//  ChefBubblePicker.swift
+//  BubblePicker.swift
 //  PlayFeat
 //
-//  Decides what floats in the Chef's five ingredient bubbles. Each bubble is
-//  one raw ingredient Procurement has sent for one requirement, so a bubble
-//  only ever stands for something an order still needs and nothing is
-//  supplied twice. The active order comes first (up to four bubbles), then
-//  the orders behind it, so the fifth looks ahead. Bubbles still wanted stay
-//  exactly where they are; only empty slots are filled.
+//  Decides what floats in the five bubbles of the Chef (raw ingredients from
+//  Procurement) and Front House (finished dishes from the Chef). Each bubble
+//  stands for one requirement, so a bubble only ever stands for something an
+//  order still needs and nothing is supplied twice. The active order comes
+//  first (up to four bubbles), then the orders behind it, so the fifth looks
+//  ahead. Bubbles still wanted stay exactly where they are; only empty slots
+//  are filled.
 //
 
 import Foundation
 
-enum ChefBubblePicker {
+enum BubblePicker {
     static let slotCount = 5
 
     /// The bubbles after a change: each one still wanted keeps its slot, one

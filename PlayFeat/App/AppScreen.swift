@@ -18,6 +18,8 @@ enum AppScreen: Hashable {
     case procurement
     /// A Chef shift.
     case chef
+    /// A Front House shift.
+    case frontHouse
     case mainMenu
     case shop
     case gameplay

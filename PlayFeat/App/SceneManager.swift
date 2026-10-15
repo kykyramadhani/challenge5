@@ -26,13 +26,11 @@ final class SceneManager {
         screen = .roleSelect
     }
 
-    /// Procurement and the Chef are playable; Front House isn't yet, and
-    /// RoleSelectView keeps it from getting here.
     func play(_ role: KitchenRole) {
         switch role {
         case .procurement: screen = .procurement
         case .chef: screen = .chef
-        case .frontHouse: break
+        case .frontHouse: screen = .frontHouse
         }
     }
 

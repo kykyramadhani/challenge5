@@ -80,6 +80,9 @@ struct ContentView: View {
         case .chef:
             ChefView(sceneManager: sceneManager, handPoseManager: handPoseManager, audio: audio)
                 .transition(.opacity)
+        case .frontHouse:
+            FrontHouseView(sceneManager: sceneManager, handPoseManager: handPoseManager, audio: audio)
+                .transition(.opacity)
         case .mainMenu:
             GameOpening(sceneManager: sceneManager)
                 .transition(.opacity)

@@ -132,6 +132,7 @@
       }
     },
     "Coming Soon!" : {
+      "extractionState" : "stale",
       "localizations" : {
         "id" : {
           "stringUnit" : {
@@ -181,16 +182,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "PELAYANAN"
-          }
-        }
-      }
-    },
-    "Front-House isn't open yet. It's being run by the crew for now." : {
-      "localizations" : {
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pelayanan belum dibuka. Untuk sementara dijalankan oleh kru."
           }
         }
       }
@@ -321,6 +312,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Menu Utama"
+          }
+        }
+      }
+    },
+    "MAKE A PINCH AND FOLLOW THE PATTERN" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CUBIT DAN IKUTI POLANYA"
           }
         }
       }
@@ -801,6 +802,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "TOTAL"
+          }
+        }
+      }
+    },
+    "Tray" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nampan"
           }
         }
       }

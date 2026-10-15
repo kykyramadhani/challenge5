@@ -21,6 +21,8 @@ struct ChefView: View {
         KitchenShiftView(sceneManager: sceneManager, handPoseManager: handPoseManager, audio: audio,
                          shift: game.shift, scene: scene, isPanelOpen: game.station == .stirring) {
             (layout: ChefLayout) in ChefWorktop(game: game, layout: layout)
+        } rail: {
+            OrderRail(shift: game.shift, layout: $0)
         } panel: {
             SoupPanel(progress: game.stirProgress)
         }

@@ -1,0 +1,41 @@
+//
+//  TrayTicketView.swift
+//  PlayFeat
+//
+//  Front House's order ticket (Figma 684:4679): the order drawn as the tray
+//  it has to become, with the drink at its corner when one is wanted. The
+//  active one carries the green clock border and blinks red in its last ten
+//  seconds, like every role's tickets.
+//
+
+import SwiftUI
+
+struct TrayTicketView: View {
+    let order: KitchenOrder
+    let isActive: Bool
+    let isRunningLow: Bool
+    var fractionLeft: () -> CGFloat = { 1 }
+
+    static let size = CGSize(width: 333, height: 265)
+    private let shape = TicketShape(isShort: true)
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            shape.fill(.white)
+            if isRunningLow { RunningLowBlink(shape: shape) }
+            ServingTrayView(tray: ServingTray(completing: order), width: 249.7)
+                .offset(x: 51.8, y: 16.9)
+            if isActive { TicketClockBorder(ticket: shape, fractionLeft: fractionLeft) }
+        }
+        .frame(width: Self.size.width, height: Self.size.height, alignment: .topLeading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Order"))
+    }
+}
+
+#Preview {
+    TrayTicketView(order: KitchenOrder(id: 0, items: [.starJelly, .coralLettuce, .tentacle], needsDrink: true),
+                   isActive: true, isRunningLow: false, fractionLeft: { 0.7 })
+        .padding()
+        .background(.gray)
+}

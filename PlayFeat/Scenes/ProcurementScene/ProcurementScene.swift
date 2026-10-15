@@ -74,9 +74,9 @@ final class ProcurementScene: KitchenScene {
         return nil
     }
 
-    override func dropZone(at point: CGPoint) -> DropZone? { worktop.dropZone(at: point) }
+    override func dropTargets() -> [(zone: DropZone, rect: CGRect)] { worktop.dropTargets }
 
-    override func dropPoint(for zone: DropZone) -> CGPoint { worktop.center(of: zone) }
+    override func dropPoint(for item: CarriedItem, at zone: DropZone) -> CGPoint { worktop.center(of: zone) }
 
     override func accepts(_ item: CarriedItem, at zone: DropZone) -> Bool {
         game?.accepts(item, at: zone) ?? false

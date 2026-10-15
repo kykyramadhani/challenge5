@@ -37,20 +37,18 @@ struct ProcurementLayout: KitchenLayout {
 
     // MARK: - Drops
 
-    /// The drop target under `point`. Checked smallest-first, so the board
-    /// wins over the table it sits on.
-    func dropZone(at point: CGPoint) -> DropZone? {
-        let zones: [(DropZone, CGRect)] = [
+    /// Every drop target and its area; the whole table counts as the board.
+    var dropTargets: [(zone: DropZone, rect: CGRect)] {
+        [
             (.trash, trashCan),
             (.cuttingBoard, table),
             (.sink, sink),
             (.kitchenPortal, kitchenPortal),
             (.frontHousePortal, frontHousePortal),
         ]
-        return zones.first { $0.1.contains(point) }?.0
     }
 
-    /// Where a dropped item flies to. The Chef's stations aren't on this
+    /// Where a dropped item flies to. Other roles' places aren't on this
     /// worktop, so they never come up here.
     func center(of zone: DropZone) -> CGPoint {
         switch zone {
@@ -59,7 +57,7 @@ struct ProcurementLayout: KitchenLayout {
         case .sink: sink.center
         case .kitchenPortal: kitchenPortal.center
         case .frontHousePortal: frontHousePortal.center
-        case .boilingPot, .brothPot, .fryer: table.center
+        default: table.center
         }
     }
 }

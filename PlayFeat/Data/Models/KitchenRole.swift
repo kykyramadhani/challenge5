@@ -3,7 +3,7 @@
 //  PlayFeat
 //
 //  The three jobs in the space kitchen. The player takes one; the other two
-//  are stand-ins. Procurement and the Chef are playable so far.
+//  are stand-ins.
 //
 
 import SwiftUI
@@ -28,6 +28,4 @@ enum KitchenRole: CaseIterable, Identifiable {
         case .frontHouse: "arrange the food in tray and serve the beverages"
         }
     }
-
-    var isPlayable: Bool { self != .frontHouse }
 }

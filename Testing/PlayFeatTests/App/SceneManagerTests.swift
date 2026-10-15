@@ -39,14 +39,13 @@ struct SceneManagerTests {
         #expect(manager.screen == .chef)
     }
 
-    /// Front House isn't playable yet, so asking for it goes nowhere.
-    @Test func frontHouseStaysOnRoleSelection() {
+    @Test func choosingFrontHouseOpensTheFrontHouseShift() {
         let manager = SceneManager()
         manager.goToRoleSelect()
 
         manager.play(.frontHouse)
 
-        #expect(manager.screen == .roleSelect)
+        #expect(manager.screen == .frontHouse)
     }
 
     @Test func playingOpensTheGameplayScreen() {

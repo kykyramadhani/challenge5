@@ -84,6 +84,24 @@ final class KitchenShift {
         queue.markActiveRequirementDelivered(at: index)
     }
 
+    /// The customer has their tray and starts eating, off the clock; the
+    /// next order becomes active straight away.
+    func serveActiveOrder() {
+        queue.serveActive(at: now)
+        updateRunningLow()
+    }
+
+    func finishEating(orderID: KitchenOrder.ID) {
+        queue.finishEating(orderID: orderID)
+    }
+
+    /// A served order's dirty tray is back: it counts as served, leaves the
+    /// rail, and a new order is dealt at the end.
+    func completeServedOrder() {
+        ordersServed += 1
+        queue.clearFinishedOrder()
+    }
+
     /// Whether the active order is done and can leave the rail. Every
     /// requirement has to be delivered either way; with all three roles it
     /// also has to have been served, which only Front House knows

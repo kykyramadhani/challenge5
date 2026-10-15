@@ -55,6 +55,16 @@ nonisolated struct KitchenCrew {
         cleanTrays += 1
     }
 
+    /// Front House set a clean tray down to assemble an order on.
+    mutating func takeCleanTray() {
+        cleanTrays = max(0, cleanTrays - 1)
+    }
+
+    /// Front House sent a dirty tray back through the Procurement portal.
+    mutating func receiveDirtyTray() {
+        dirtyTrays += 1
+    }
+
     /// Procurement put a dirty tray in the sink.
     mutating func takeDirtyTray() {
         dirtyTrays = max(0, dirtyTrays - 1)

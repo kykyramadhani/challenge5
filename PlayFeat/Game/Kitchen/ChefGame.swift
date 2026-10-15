@@ -32,13 +32,6 @@ final class ChefGame {
         case stirring
     }
 
-    /// One raw ingredient floating in a bubble. The id is fresh for every
-    /// arrival, so a replacement animates in even when it's the same kind.
-    struct Bubble: Equatable, Identifiable {
-        let id: Int
-        let ingredient: KitchenIngredient
-    }
-
     static let boilTime: TimeInterval = 8
     static let fryTime: TimeInterval = 6
     static let circlesNeeded = 3.0
@@ -50,14 +43,13 @@ final class ChefGame {
 
     let shift: KitchenShift
     private(set) var station: Station = .kitchen
-    private(set) var bubbles: [Bubble?] = Array(repeating: nil, count: ChefBubblePicker.slotCount)
+    private(set) var rack = BubbleRack()
     private(set) var pots: [DropZone: CookingPot] = [.boilingPot: .empty, .brothPot: .empty, .fryer: .empty]
     /// 0...1 through stirring the soup.
     private(set) var stirProgress = 0.0
     /// What hands are carrying, so the worktop doesn't also draw it in place.
     private(set) var itemsInHand: [CarriedItem] = []
 
-    @ObservationIgnored private var nextBubbleID = 0
     @ObservationIgnored private var stationFinishedAt: TimeInterval?
 
     init(mode: KitchenMode,
@@ -89,12 +81,12 @@ final class ChefGame {
         guard station == .kitchen, !isOver else { return false }
         switch item {
         case let .ingredient(ingredient, slot):
-            guard bubbles.indices.contains(slot), bubbles[slot]?.ingredient == ingredient else { return false }
+            guard rack.holds(ingredient, in: slot) else { return false }
             return zone == .trash || canStartCooking(ingredient, in: zone)
         case let .cooked(ingredient):
             guard isReady(ingredient) else { return false }
             return zone == .trash || (zone == .frontHousePortal && delivery(of: ingredient) != nil)
-        case .sliced, .dirtyTray, .cleanTray:
+        default:
             return false
         }
     }
@@ -106,12 +98,12 @@ final class ChefGame {
         putBack(item)
         switch item {
         case let .ingredient(ingredient, slot):
-            bubbles[slot] = nil
+            rack.empty(slot)
             if zone != .trash { startCooking(ingredient, in: zone) }
         case let .cooked(ingredient):
             takeOut(ingredient)
             if zone == .frontHousePortal { deliver(ingredient) }
-        case .sliced, .dirtyTray, .cleanTray:
+        default:
             break
         }
         refreshBubbles()
@@ -252,17 +244,9 @@ final class ChefGame {
         return (active + later).removingOneOfEach(pots.values.compactMap(\.ingredient))
     }
 
-    /// Clears bubbles nobody needs any more and sends new ones in for empty
-    /// slots. Bubbles still wanted keep their slot and their identity.
-    private func refreshBubbles() {
-        let refilled = ChefBubblePicker.refill(bubbles.map { $0?.ingredient }, wanted: wantedIngredients)
-        for slot in bubbles.indices where bubbles[slot]?.ingredient != refilled[slot] {
-            bubbles[slot] = refilled[slot].map(makeBubble)
-        }
-    }
+    var bubbles: [FloatingBubble?] { rack.slots }
 
-    private func makeBubble(_ ingredient: KitchenIngredient) -> Bubble {
-        defer { nextBubbleID += 1 }
-        return Bubble(id: nextBubbleID, ingredient: ingredient)
+    private func refreshBubbles() {
+        rack.refill(wanted: wantedIngredients)
     }
 }

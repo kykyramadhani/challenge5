@@ -52,6 +52,31 @@ extension KitchenLayout {
     /// stroke that drifts past the work's edge still counts.
     var workArea: CGRect { panel.insetBy(dx: 55 * scale, dy: 55 * scale) }
 
+    // MARK: - Drops
+
+    /// How far outside a drop target a release still counts: hands wobble as
+    /// the fingers open, so "near" is good enough.
+    var dropReach: CGFloat { 110 * scale }
+
+    /// The target an item let go at `point` lands in: of `targets` (only the
+    /// ones that would take it), the nearest whose area, grown by `reach`, the
+    /// point is in. A point inside several picks the closest edge-to-point.
+    static func nearestTarget(to point: CGPoint, among targets: [(zone: DropZone, rect: CGRect)],
+                              reach: CGFloat) -> DropZone? {
+        targets
+            .map { (zone: $0.zone, distance: distance(from: point, to: $0.rect)) }
+            .filter { $0.distance <= reach }
+            .min { $0.distance < $1.distance }?
+            .zone
+    }
+
+    /// 0 inside the rect, else the straight-line gap to its nearest edge.
+    private static func distance(from point: CGPoint, to rect: CGRect) -> CGFloat {
+        let dx = max(rect.minX - point.x, 0, point.x - rect.maxX)
+        let dy = max(rect.minY - point.y, 0, point.y - rect.maxY)
+        return hypot(dx, dy)
+    }
+
     // MARK: - Mapping
 
     /// A Figma rect placed on this screen.

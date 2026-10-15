@@ -2,33 +2,49 @@
 //  KitchenOrder.swift
 //  PlayFeat
 //
-//  One customer order: the ingredients that have to reach the kitchen,
-//  through the right portal, before it can be served — and which of them
-//  already have. Duplicates are allowed: an order for two coral soups lists
-//  coral lettuce twice, and each is delivered separately.
+//  One customer order: the dishes that make up its tray — one per tray
+//  compartment — and maybe a drink; which of them have reached their
+//  destination; and where the customer is with it (waiting, eating, done).
 //
 
 import Foundation
 
 nonisolated struct KitchenOrder: Identifiable, Equatable {
+    /// Where the customer is with the order. Only a waiting order is on the
+    /// clock; once served it can't run out of time.
+    enum Stage: Equatable {
+        case waiting
+        /// Served: the tray is on the green table and the customer is eating.
+        case eating
+        /// Finished eating: a dirty tray waits to go back to Procurement.
+        case finishedEating
+    }
+
     let id: Int
     let items: [KitchenIngredient]
+    let needsDrink: Bool
+    private(set) var stage = Stage.waiting
     /// Indices into `items` that have reached their destination: for
     /// Procurement, through the right portal; for the Chef, cooked and
     /// through the Front House portal.
     private(set) var delivered: Set<Int> = []
 
-    init(id: Int, items: [KitchenIngredient]) {
+    init(id: Int, items: [KitchenIngredient], needsDrink: Bool = false) {
         self.id = id
         self.items = items
+        self.needsDrink = needsDrink
     }
 
-    /// A full ticket has four items, a short one two — the two sizes the
-    /// order tickets are drawn in.
+    /// A full tray has four dishes, a short one two — the two sizes the order
+    /// tickets are drawn in. One dish per compartment, listed top-left,
+    /// top-right, bottom-left, bottom-right, as on the tray.
     static func random(id: Int) -> KitchenOrder {
         let count = Bool.random() ? 4 : 2
-        let items = (0..<count).compactMap { _ in KitchenIngredient.allCases.randomElement() }
-        return KitchenOrder(id: id, items: items)
+        let compartments = TrayCompartment.allCases.shuffled().prefix(count)
+        let items = TrayCompartment.allCases.filter(compartments.contains).compactMap { compartment in
+            KitchenIngredient.allCases.filter { $0.trayCompartment == compartment }.randomElement()
+        }
+        return KitchenOrder(id: id, items: items, needsDrink: Bool.random())
     }
 
     /// A random order with at least one dish the Chef cooks, so a Chef shift
@@ -57,5 +73,15 @@ nonisolated struct KitchenOrder: Identifiable, Equatable {
     mutating func markDelivered(at index: Int) {
         guard items.indices.contains(index) else { return }
         delivered.insert(index)
+    }
+
+    mutating func serve() {
+        guard stage == .waiting else { return }
+        stage = .eating
+    }
+
+    mutating func finishEating() {
+        guard stage == .eating else { return }
+        stage = .finishedEating
     }
 }

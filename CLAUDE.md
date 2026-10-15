@@ -76,9 +76,9 @@ Launch screen → Splash → Onboarding (first launch only) → Game Opening (ma
 ### Kitchen roles (v2 playtest)
 
 The app now opens on `TitleScreenView` → `RoleSelectView` → `ProcurementView`
-or `ChefView` (`AppScreen.title` / `.roleSelect` / `.procurement` / `.chef`).
-Front House isn't playable yet. The old main menu and sandwich game above are
-still in the code but no longer reached from launch.
+`ChefView` or `FrontHouseView` (`AppScreen.title` / `.roleSelect` /
+`.procurement` / `.chef` / `.frontHouse`). The old main menu and sandwich game
+above are still in the code but no longer reached from launch.
 
 Shared by every role:
 
@@ -97,7 +97,12 @@ Shared by every role:
   up and where it can go. `KitchenLayout` maps Figma rects (1376×1034) to the
   screen; SwiftUI draws from each role's layout and the scene hit-tests the
   same rects. On the simulator a finger stands in for a hand
-  (`-debugGameplay YES`, plus `-debugRole chef` for the Chef).
+  (`-debugGameplay YES`, plus `-debugRole chef` or `-debugRole frontHouse`).
+- `KitchenOrder.random` deals one dish per tray compartment (`TrayCompartment`:
+  vegetable, dessert, soup, main — top-left to bottom-right) and maybe a drink, so every role's order
+  fits Front House's tray. Its `stage` (waiting → eating → finishedEating) is
+  the customer's side; the active order is the leftmost waiting one, and only
+  it is on the clock.
 - Routing follows `Preparation`: mushroom is chopped by Procurement, then
   sent to Front House; coral lettuce (`.soup`), bubble tuber (`.boil`) and
   tentacle (`.fry`) go raw to the Chef, who cooks them and sends them to Front
@@ -133,6 +138,24 @@ Chef (`ChefGame`, `ChefScene`):
   until carried through the Front House portal (`ChefGame.delivery(of:)`).
 - Playtest stand-in for Procurement: mushroom and star jelly requirements are
   ticked off as soon as their order becomes active.
+
+Front House (`FrontHouseGame`, `FrontHouseScene`):
+
+- 5 floating finished dishes (`BubbleRack`), arriving from the Chef portal
+  (left) or the Procurement portal (right); clean trays on the stand, counted
+  by the shared `KitchenCrew.cleanTrays`.
+- A clean tray set on the counter becomes the `ServingTray`; each dish only
+  fits its own compartment, and only if the active order wants it. A drink is
+  poured at the dispenser (`DispenserPanel`, `LeverGesture`: pinch, pull left
+  to open, push right to close once full).
+- The complete tray carried onto the active ticket serves it: the order keeps
+  its place on the rail, `.eating` for `eatTime` (3 s, tray on the green
+  table), then `.finishedEating` (dirty tray there). The next waiting order
+  is active at once (`OrderQueue.activeIndex`). Nothing new is dealt until
+  the dirty tray goes through the Procurement portal; then the order is
+  complete, the rail slides left and a new order arrives at the end, in both
+  modes. At most `tableSeats` (2) trays on the table. The playtest stand-in
+  washes returned trays and sends them back clean after `washTime`.
 
 ### One round
 

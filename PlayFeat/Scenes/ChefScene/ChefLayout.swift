@@ -68,14 +68,12 @@ struct ChefLayout: KitchenLayout {
 
     // MARK: - Drops
 
-    /// The drop target under `point`: a station is its pot and its hob.
-    func dropZone(at point: CGPoint) -> DropZone? {
-        if trashCan.contains(point) { return .trash }
-        if frontHousePortal.contains(point) { return .frontHousePortal }
-        return ChefGame.stations.first { station in
-            let area = stove(station).map { $0.union(pot(station)) } ?? pot(station)
-            return area.contains(point)
+    /// Every drop target and its area: a station is its pot and its hob.
+    var dropTargets: [(zone: DropZone, rect: CGRect)] {
+        let stations = ChefGame.stations.map { station in
+            (zone: station, rect: stove(station).map { $0.union(pot(station)) } ?? pot(station))
         }
+        return [(.trash, trashCan), (.frontHousePortal, frontHousePortal)] + stations
     }
 
     /// Where a dropped item flies to.
@@ -84,7 +82,7 @@ struct ChefLayout: KitchenLayout {
         case .trash: trashCan.center
         case .frontHousePortal: frontHousePortal.center
         case .boilingPot, .brothPot, .fryer: pot(zone).center
-        case .cuttingBoard, .sink, .kitchenPortal: counter.center
+        default: counter.center
         }
     }
 }

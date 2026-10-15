@@ -34,6 +34,17 @@ nonisolated enum KitchenIngredient: String, CaseIterable, Codable {
         preparation.isChefWork ? .kitchenPortal : .frontHousePortal
     }
 
+    /// Where it goes on Front House's tray once it's prepared. Boiled tuber
+    /// shares the main box with fried tentacle (the "carbs" box in Figma).
+    var trayCompartment: TrayCompartment {
+        switch self {
+        case .starJelly: .dessert
+        case .glowingMushroom: .vegetable
+        case .coralLettuce: .soup
+        case .tentacle, .bubbleTuber: .main
+        }
+    }
+
     /// Whether it leaves Procurement sliced (chopped on the board first)
     /// rather than as it came out of its crate.
     var isDeliveredSliced: Bool { preparation == .chop }
