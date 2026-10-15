@@ -100,6 +100,14 @@ struct LocalizationTests {
             "Speed Bonus", "Dishes Served", "Play Again", "Shop", "Main Menu",
             // Main menu
             "Most Dishes Served",
+            // Role selection
+            "CHOOSE YOUR ROLE", "PROCUREMENT", "CHEF", "FRONT-HOUSE", "PLAY ROLE",
+            "pass the ingredients to chef and front-house",
+            "process the ingredients based on the menu",
+            "arrange the food in tray and serve the beverages",
+            "Coming Soon!",
+            // Procurement workstations
+            "MOVE YOUR HAND BASED ON THE PATTERN",
         ]
 
         defer { AppLocalization.apply(.english) }

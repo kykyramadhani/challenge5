@@ -221,6 +221,9 @@ struct DesignCanvasDebugBadge: View {
 ///                                 8s, to exercise a mid-game rotation
 ///     -debugGameplay YES          skip onboarding, tutorial and seat check
 ///                                 and open straight onto the board
+///     -debugTracking YES          overlay each hand's tracked side, whether
+///                                 it is seen or predicted, and every chop
+///                                 decision with its reason
 ///     -debugLandscape YES         turn a phone to landscape at launch, for
 ///                                 checking the real Dynamic Island insets
 ///                                 (which -debugScreenSize can't fake)
@@ -240,6 +243,15 @@ enum DebugLaunch {
 
     static var skipToGameplay: Bool {
         UserDefaults.standard.bool(forKey: "debugGameplay")
+    }
+
+    /// The role `-debugGameplay` opens: `-debugRole chef`, else Procurement.
+    static var role: KitchenRole {
+        UserDefaults.standard.string(forKey: "debugRole") == "chef" ? .chef : .procurement
+    }
+
+    static var showsTrackingDiagnostics: Bool {
+        UserDefaults.standard.bool(forKey: "debugTracking")
     }
 
     static func applyLandscapeIfRequested() {

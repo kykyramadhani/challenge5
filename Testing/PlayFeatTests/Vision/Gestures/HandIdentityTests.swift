@@ -8,6 +8,7 @@
 import Testing
 import Foundation
 import CoreGraphics
+import Vision
 @testable import PlayFeat
 
 struct HandIdentityTests {
@@ -71,5 +72,35 @@ struct HandIdentityTests {
             radius: radius
         )
         #expect(assignments == [nil, nil])
+    }
+}
+
+/// Where a hand's left/right evidence comes from, before the tracker weighs it.
+struct HandSideEvidenceTests {
+    /// The buffer is mirrored before Vision sees it, so Vision's chirality is
+    /// the player's opposite hand — the same correction the body's wrists get.
+    @Test func visionChiralityIsMirroredToThePlayersHand() {
+        #expect(HandClassifier.playerSide(fromVisionChirality: .left) == .right)
+        #expect(HandClassifier.playerSide(fromVisionChirality: .right) == .left)
+        #expect(HandClassifier.playerSide(fromVisionChirality: .unknown) == nil)
+    }
+
+    private let body = HumanBodyPoseManager.BodyCandidate(
+        head: nil,
+        leftShoulder: CGPoint(x: 0.4, y: 0.6), rightShoulder: CGPoint(x: 0.6, y: 0.6),
+        leftHip: nil, rightHip: nil,
+        leftWrist: CGPoint(x: 0.3, y: 0.4), rightWrist: CGPoint(x: 0.7, y: 0.4)
+    )
+
+    @Test func aHandOnABodyWristTakesThatSide() {
+        let side = HumanBodyPoseManager.side(ofHandWrist: CGPoint(x: 0.31, y: 0.41), on: body, tolerance: 0.6)
+        #expect(side == .left)
+    }
+
+    /// Between the two wrists (crossed or overlapping hands) is a coin toss,
+    /// so it casts no vote rather than a wrong one.
+    @Test func aHandBetweenBothWristsHasNoSide() {
+        let side = HumanBodyPoseManager.side(ofHandWrist: CGPoint(x: 0.5, y: 0.4), on: body, tolerance: 0.6)
+        #expect(side == nil)
     }
 }

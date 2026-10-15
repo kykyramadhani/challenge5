@@ -19,12 +19,6 @@ struct ContentView: View {
     @Environment(AudioManager.self) private var audio
     
     @State private var sceneManager = SceneManager()
-    @State private var showSplashScreen = true
-
-    /// False until the player has been through onboarding once. Backed by
-    /// UserDefaults, so it survives launches but resets on a fresh install —
-    /// exactly "show it only the first time the game is installed".
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @AppStorage(GameStorage.coinKey) private var coin: Int = 0
     @AppStorage(GameStorage.scoreKey) private var highscore: Int = 0
 
@@ -35,28 +29,10 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
+            // The space-kitchen title screen is the launch screen now; the
+            // old splash and Smoove onboarding are no longer shown.
             currentScreen
                 .tint(.appSecondaryText)
-
-            // First-launch onboarding, above the menu but below the splash so
-            // the splash still plays first. Dismissing it flips the flag, which
-            // removes it for good.
-            if !hasCompletedOnboarding {
-                OnboardingView {
-                    withAnimation(.easeInOut(duration: 0.4)) {
-                        hasCompletedOnboarding = true
-                    }
-                }
-                .transition(.opacity)
-                .zIndex(50)
-            }
-
-            if showSplashScreen {
-                SplashScreenView()
-                    .transition(.opacity.combined(with: .scale(scale: 1.02)))
-                    .zIndex(100)
-            }
-
         }
         // Inside the language handling below, so the prompt follows the
         // in-game language like every other piece of text.
@@ -76,17 +52,9 @@ struct ContentView: View {
             #if DEBUG
             DebugLaunch.applyLandscapeIfRequested()
             if DebugLaunch.skipToGameplay {
-                hasCompletedOnboarding = true
-                sceneManager.finishTutorial()
-                sceneManager.play()
+                sceneManager.play(DebugLaunch.role)
             }
             #endif
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                withAnimation(.easeInOut(duration: 0.5)) {
-                    showSplashScreen = false
-                }
-            }
         }
         .onChange(of: language) { _, newValue in
             AppLocalization.apply(newValue)
@@ -100,6 +68,18 @@ struct ContentView: View {
     @ViewBuilder
     private var currentScreen: some View {
         switch sceneManager.screen {
+        case .title:
+            TitleScreenView { sceneManager.goToRoleSelect() }
+                .transition(.opacity)
+        case .roleSelect:
+            RoleSelectView { sceneManager.play($0) }
+                .transition(.opacity)
+        case .procurement:
+            ProcurementView(sceneManager: sceneManager, handPoseManager: handPoseManager, audio: audio)
+                .transition(.opacity)
+        case .chef:
+            ChefView(sceneManager: sceneManager, handPoseManager: handPoseManager, audio: audio)
+                .transition(.opacity)
         case .mainMenu:
             GameOpening(sceneManager: sceneManager)
                 .transition(.opacity)

@@ -128,20 +128,57 @@ nonisolated final class HandFrameProcessor: @unchecked Sendable {
         }
 
         let mode = HandInputModeSetting.stored()
+        let now = CACurrentMediaTime()
+        let limit = min(maximumHandCount, mode.handCount)
 
         // No body, no hands. A hand is only the player's if it can be tied to
         // a visible shoulder, so a torso out of frame means nothing is tracked
         // — the same rule the seat check enforces before the game even starts.
-        let keep = HumanBodyPoseManager.playerHandIndices(
+        let bodyMatched = HumanBodyPoseManager.playerHandIndices(
             handWrists: classifications.map(\.wrist),
             bodies: bodies,
             wristTolerance: wristMatchTolerance,
-            limit: min(maximumHandCount, mode.handCount),
+            limit: limit,
             mode: mode
         ) ?? []
+        let keep = playerHands(bodyMatched: bodyMatched, from: classifications, limit: limit, now: now)
 
-        let hands = identityTracker.update(with: keep.map { classifications[$0] }, at: CACurrentMediaTime())
+        let readings = keep.map { index in
+            HandIdentityTracker.Reading(
+                classification: classifications[index],
+                bodySide: runsBodyPose ? bodySide(of: classifications[index]) : nil
+            )
+        }
+        let hands = identityTracker.update(with: readings, at: now)
         return Output(bufferSize: bufferSize, playerBody: playerBody, hands: hands)
+    }
+
+    /// The body-matched hands, topped up with any hand that is clearly the
+    /// continuation of one already being followed.
+    ///
+    /// The body detector runs one frame in three, so its wrists trail a fast
+    /// hand by up to a tenth of a second — far enough, mid-chop, for the
+    /// player's own hand to fall outside the wrist tolerance and be thrown
+    /// away. That was most of "tracking drops when I move quickly". Still
+    /// requires a player body, so nobody else's hand is picked up.
+    private func playerHands(
+        bodyMatched: [Int],
+        from classifications: [HandClassifier.Classification],
+        limit: Int,
+        now: TimeInterval
+    ) -> [Int] {
+        guard playerBody != nil else { return [] }
+        let continuing = classifications.indices.filter { index in
+            !bodyMatched.contains(index)
+                && identityTracker.continuesTrackedHand(at: classifications[index].location, now: now)
+        }
+        return Array((bodyMatched + continuing).prefix(limit))
+    }
+
+    /// Which of the player's wrists this hand is on, per this frame's body.
+    private func bodySide(of hand: HandClassifier.Classification) -> HandSide? {
+        guard let playerBody else { return nil }
+        return HumanBodyPoseManager.side(ofHandWrist: hand.wrist, on: playerBody, tolerance: wristMatchTolerance)
     }
 
     /// Vision found nothing usable this frame.

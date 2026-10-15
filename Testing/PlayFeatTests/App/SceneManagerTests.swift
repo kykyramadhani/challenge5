@@ -13,11 +13,40 @@ struct SceneManagerTests {
 
     private let result = GameResult(dishesByType: ["salad": 2], speedBonus: 5)
 
-    @Test func theAppOpensOnTheMainMenuWithTheTutorialStillToRead() {
+    @Test func theAppOpensOnTheTitleWithTheTutorialStillToRead() {
         let manager = SceneManager()
 
-        #expect(manager.screen == .mainMenu)
+        #expect(manager.screen == .title)
         #expect(manager.isInTutorial)
+    }
+
+    @Test func theTitleLeadsToRoleSelectionAndProcurementStartsAShift() {
+        let manager = SceneManager()
+
+        manager.goToRoleSelect()
+        #expect(manager.screen == .roleSelect)
+
+        manager.play(.procurement)
+        #expect(manager.screen == .procurement)
+    }
+
+    @Test func choosingChefOpensTheChefShift() {
+        let manager = SceneManager()
+        manager.goToRoleSelect()
+
+        manager.play(.chef)
+
+        #expect(manager.screen == .chef)
+    }
+
+    /// Front House isn't playable yet, so asking for it goes nowhere.
+    @Test func frontHouseStaysOnRoleSelection() {
+        let manager = SceneManager()
+        manager.goToRoleSelect()
+
+        manager.play(.frontHouse)
+
+        #expect(manager.screen == .roleSelect)
     }
 
     @Test func playingOpensTheGameplayScreen() {

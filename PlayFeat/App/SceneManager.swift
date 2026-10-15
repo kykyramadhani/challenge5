@@ -12,7 +12,7 @@ import Foundation
 
 @Observable
 final class SceneManager {
-    private(set) var screen: AppScreen = .mainMenu
+    private(set) var screen: AppScreen = .title
 
     /// True until the walkthrough has been read or skipped this launch.
     private(set) var isInTutorial = true
@@ -20,6 +20,20 @@ final class SceneManager {
     /// Walkthrough read, or skipped.
     func finishTutorial() {
         isInTutorial = false
+    }
+
+    func goToRoleSelect() {
+        screen = .roleSelect
+    }
+
+    /// Procurement and the Chef are playable; Front House isn't yet, and
+    /// RoleSelectView keeps it from getting here.
+    func play(_ role: KitchenRole) {
+        switch role {
+        case .procurement: screen = .procurement
+        case .chef: screen = .chef
+        case .frontHouse: break
+        }
     }
 
     func play() {
