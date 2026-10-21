@@ -83,7 +83,10 @@ Shared by every role:
   ships now) completes it the moment every requirement is delivered;
   `.multiplayer` keeps it active until Front House serves it — syncing that
   across the three roles' iPads is still to do (see the multiplayer plan).
-- `KitchenShiftView` (UI/Screens/): camera, 3-2-1 (`ShiftCountdown`: the
+- `KitchenShiftView` (UI/Screens/): camera, then `ShiftPhase`: the seat
+  check (`SeatCalibrationView`, every shift — whoever passes is locked in as
+  the player with `lockOntoPlayer()`, released when the shift ends; skipped on
+  the simulator and with `-debugGameplay`), then 3-2-1 (`ShiftCountdown`: the
   clock waits for the count to end *and* `HandPoseManager.isReceivingFrames`,
   holding on 1 if needed), order rail, shift clock, a zoomed-in panel, the
   SpriteKit layer, game over.

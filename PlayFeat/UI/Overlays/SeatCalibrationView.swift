@@ -1,17 +1,16 @@
 //
 //  SeatCalibrationView.swift
-//  GetCooking
+//  PlayFeat
 //
-//  The screen between the main menu and the game: the player sits back far
+//  The seat check before a run or a kitchen shift: the player sits back far
 //  enough that their upper body — shoulders down to hips — fits the frame.
+//  Whoever passes it is the player the hand pipeline follows from then on.
 //
 //  The border is the whole feedback loop. Orange while the pose is wrong;
 //  once it is right, a green border draws itself over the orange one, and the
 //  game starts when it closes the loop.
 //
 
-import AVFoundation
-import Combine
 import QuartzCore
 import SwiftUI
 
@@ -20,6 +19,10 @@ struct SeatCalibrationView: View {
 
     /// Called once the player has held the pose for the full dwell.
     var onCalibrated: () -> Void
+
+    /// The way out for a player the camera can't find, or who can't get into
+    /// the pose: without it the check is a dead end.
+    var onBack: () -> Void
 
     /// Set from the Settings sheet. In one-hand mode only the chosen hand has
     /// to be raised — the pose is otherwise impossible to hold  with one arm
@@ -39,7 +42,7 @@ struct SeatCalibrationView: View {
 
     /// The body publishes at camera rate, but a player sitting perfectly still
     /// stops publishing, so the dwell is driven by its own clock instead.
-    private let tick = Timer.publish(every: 1 / 30, on: .main, in: .common).autoconnect()
+    private static let tickInterval: Duration = .milliseconds(33)
 
     // MARK: - Layout
 
@@ -72,8 +75,9 @@ struct SeatCalibrationView: View {
     }
 
     var body: some View {
-        // The camera itself is mounted by ContentView and stays put across the
-        // handover to the game; this screen only draws over it.
+        // The camera feed belongs to the screen hosting this check, and stays
+        // put across the handover to play; this only draws over it. So does
+        // the camera-permission card, shown once by the host.
         ZStack {
             GeometryReader { proxy in
                 let frame = Self.targetFrame(in: proxy.size)
@@ -95,26 +99,32 @@ struct SeatCalibrationView: View {
                 .onChange(of: proxy.size, initial: true) { _, size in
                     handPoseManager.setPlayerZone(Self.targetFrame(in: size), in: size)
                 }
-                .onReceive(tick) { _ in
-                    // Recomputed here rather than captured from the body, so
-                    // the dwell always reads the player's current position even
-                    // in frames where nothing republished.
-                    let aligned = isAligned(in: proxy.size, frame: frame)
-                    let finished = detector.update(isHovering: aligned, now: CACurrentMediaTime())
-
-                    progress = detector.progress
-                    if finished { onCalibrated() }
-                }
+                .task(id: proxy.size) { await runDwell(in: proxy.size) }
             }
             .allowsHitTesting(false)
 
-            if handPoseManager.authorizationStatus == .denied
-                || handPoseManager.authorizationStatus == .restricted
-            {
-                CameraPermissionDeniedOverlay()
-            }
+            BackButton(action: onBack)
         }
         .onAppear { handPoseManager.start() }
+    }
+
+    /// Fills the border while the player holds the pose, and reports the pass
+    /// once. Restarts if the screen is resized, since the frame moves with it.
+    private func runDwell(in size: CGSize) async {
+        let frame = Self.targetFrame(in: size)
+        while !Task.isCancelled {
+            // Read every tick rather than captured from the body, so the dwell
+            // always sees the player's current position, even in frames where
+            // nothing republished.
+            let aligned = isAligned(in: size, frame: frame)
+            let finished = detector.update(isHovering: aligned, now: CACurrentMediaTime())
+            progress = detector.progress
+            if finished {
+                onCalibrated()
+                return
+            }
+            try? await Task.sleep(for: Self.tickInterval)
+        }
     }
 
     /// Orange underneath, green drawn over the top of it as the dwell fills —
@@ -128,7 +138,7 @@ struct SeatCalibrationView: View {
                 .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
 
             RoundedRectangle(cornerRadius: Self.cornerRadius)
-                .stroke(Color.accentColor, lineWidth: Self.borderWidth)
+                .stroke(.appAccent, lineWidth: Self.borderWidth)
 
             RoundedRectangle(cornerRadius: Self.cornerRadius)
                 .trim(from: 0, to: progress)
