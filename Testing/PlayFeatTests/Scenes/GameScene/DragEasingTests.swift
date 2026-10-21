@@ -66,10 +66,10 @@ struct DragEasingTests {
         let from = CGPoint(x: 0, y: 0)
         let to = CGPoint(x: 100, y: 50)
 
-        let half = from.vc_eased(toward: to, by: 0.5)
+        let half = from.eased(toward: to, by: 0.5)
         #expect(half == CGPoint(x: 50, y: 25))
 
-        #expect(from.vc_eased(toward: to, by: 0) == from)
-        #expect(from.vc_eased(toward: to, by: 1) == to)
+        #expect(from.eased(toward: to, by: 0) == from)
+        #expect(from.eased(toward: to, by: 1) == to)
     }
 }

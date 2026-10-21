@@ -56,7 +56,8 @@ struct SeatCalibrationView: View {
     private static let cornerRadius: CGFloat = 40
     private static let borderWidth: CGFloat = 12
 
-    /// Where the player has to put themselves.
+    /// Where the player has to put themselves. Also handed to the pose
+    /// pipeline: until calibration passes, nobody outside it is the player.
     static func targetFrame(in size: CGSize) -> CGRect {
         let box = CGSize(
             width: size.width * frameShare.width,
@@ -91,6 +92,9 @@ struct SeatCalibrationView: View {
                         .frame(maxHeight: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onChange(of: proxy.size, initial: true) { _, size in
+                    handPoseManager.setPlayerZone(Self.targetFrame(in: size), in: size)
+                }
                 .onReceive(tick) { _ in
                     // Recomputed here rather than captured from the body, so
                     // the dwell always reads the player's current position even

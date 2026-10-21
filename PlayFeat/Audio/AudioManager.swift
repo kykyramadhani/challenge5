@@ -76,6 +76,14 @@ final class AudioManager: NSObject {
     /// track is a no-op rather than a restart from the top.
     @ObservationIgnored private var currentMusicName: String?
 
+    /// The music was faded out by `fadeOutMusic()` and is waiting for
+    /// `fadeInMusic()`. Cleared by a fade-in that lands before the fade-out
+    /// finishes, so a late pause can't silence music that was meant to return.
+    @ObservationIgnored private var isMusicFadedOut = false
+
+    /// How long the music takes to fade out on leaving the app, and back in.
+    private static let backgroundFadeDuration: TimeInterval = 0.6
+
     // MARK: - Init
 
     override init() {
@@ -206,13 +214,28 @@ final class AudioManager: NSObject {
         player.rate = min(max(rate, 0.5), 2.0)
     }
 
-    /// Pauses the music in place (e.g. the Pause button) — resume with `resumeMusic()`.
-    func pauseMusic() { musicPlayer?.pause() }
+    /// Fades the music down and pauses it in place, e.g. when the app goes to
+    /// the background. `fadeInMusic()` picks it up where it left off.
+    func fadeOutMusic() {
+        guard let player = musicPlayer, player.isPlaying else { return }
+        isMusicFadedOut = true
+        player.setVolume(0, fadeDuration: Self.backgroundFadeDuration)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.backgroundFadeDuration) { [weak self] in
+            guard let self, isMusicFadedOut, musicPlayer === player else { return }
+            player.pause()
+        }
+    }
 
-    /// Resumes music paused with `pauseMusic()`.
-    func resumeMusic() {
-        guard isEnabled else { return }
-        musicPlayer?.play()
+    /// Fades music paused by `fadeOutMusic()` back up to the player's volume.
+    /// Does nothing if the music wasn't faded out.
+    func fadeInMusic() {
+        guard isMusicFadedOut else { return }
+        isMusicFadedOut = false
+        guard isEnabled, let player = musicPlayer else { return }
+        // Already playing if we're back before the fade-out finished, or if
+        // iOS suspended the app before the pause ran — play() is a no-op then.
+        player.play()
+        player.setVolume(musicVolume, fadeDuration: Self.backgroundFadeDuration)
     }
 
     /// Stops every sound immediately (e.g. on returning to the main menu).

@@ -28,6 +28,10 @@ struct GameplayView: View {
     
     private let audio: AudioManager
 
+    /// Forwarded by PlayFeatApp (PhoneSafeSides hosts the app separately, so
+    /// the system value doesn't reach here on its own).
+    @Environment(\.scenePhase) private var scenePhase
+
     init(sceneManager: SceneManager,
          handPoseManager: HandPoseManager,
          inventory: InventoryManager,
@@ -41,14 +45,6 @@ struct GameplayView: View {
     }
 
     @State private var scene = GameScene(size: CGSize(width: 1024, height: 768))
-    @State private var showHandSkeleton = true
-
-    /// The quit control is normally invisible — the board is played with hands,
-    /// not touch, so a stray tap shouldn't do anything. Tapping the screen once
-    /// flips this on to reveal a Stop button; tapping away (or waiting a few
-    /// seconds) hides it again. This keeps a bail-out reachable during play
-    /// without putting a permanent button over the camera feed.
-    @State private var showStopButton = false
 
     /// Flips once the player has passed the seat check. Local to this view, so
     /// navigation state (SceneManager) stays purely about *which screen*, not
@@ -72,6 +68,14 @@ struct GameplayView: View {
 
     private var isCountingDown: Bool { countdown >= 0 }
 
+    /// The app went to the background mid-run. The player may have moved or
+    /// put the iPad down, so coming back plays a fresh 3-2-1 before the clock
+    /// restarts. A brief `.inactive` (Control Center, a banner) resumes at once.
+    @State private var needsGetReadyOnReturn = false
+
+    /// Bumped to run the 3-2-1 that resumes a paused run. 0 means none yet.
+    @State private var resumeCountdownRequest = 0
+
     /// Every run starts with a seat check, except the DEBUG launch shortcut
     /// that drops straight onto the board.
     private var needsCalibration: Bool {
@@ -85,6 +89,12 @@ struct GameplayView: View {
     /// on screen. Until then only the hand glow is drawn.
     private var boardIsUp: Bool {
         !sceneManager.isInTutorial && (hasCalibrated || !needsCalibration)
+    }
+
+    /// The hidden Stop control is only live during actual play: the countdown
+    /// and the game-over cover have their own flow.
+    private var canStop: Bool {
+        !isCountingDown && gameStateManager.state != .gameOver
     }
 
     var body: some View {
@@ -102,7 +112,11 @@ struct GameplayView: View {
             // moment they are detected — during calibration and the countdown,
             // not only once play starts. `showsBoard` keeps the plate and bin
             // out of sight until then.
-            sceneLayer
+            GameBoardView(
+                scene: scene,
+                showsBoard: boardIsUp,
+                isRendering: scenePhase == .active
+            )
 
             Group {
                 if sceneManager.isInTutorial {
@@ -112,6 +126,9 @@ struct GameplayView: View {
                 else {
                     if needsCalibration && !hasCalibrated {
                         SeatCalibrationView(handPoseManager: handPoseManager) {
+                            // Whoever calibrated is the player for this run;
+                            // anyone else who walks into shot is ignored.
+                            handPoseManager.lockOntoPlayer()
                             hasCalibrated = true
                         }
                         .designScaled()
@@ -120,6 +137,10 @@ struct GameplayView: View {
                     }
                 }
             }
+
+            #if DEBUG
+            DebugSkeletonOverlay(handPoseManager: handPoseManager)
+            #endif
 
             // The run-over cover. Sits above the whole stack so it dims the
             // board, the HUD and the hand glow alike. It owns its own timing
@@ -138,84 +159,33 @@ struct GameplayView: View {
         // the seat check and board calling it again is harmless; the preview
         // above stays live across their swap because it never leaves the tree.
         .onAppear {
+            connectScene()
             handPoseManager.start()
-            
+
             // Disables Auto-Lock Screen during Gameplay
             UIApplication.shared.isIdleTimerDisabled = true
         }
         .onDisappear {
+            handPoseManager.releasePlayer()
             handPoseManager.stop()
             UIApplication.shared.isIdleTimerDisabled = false
             audio.stopMusic()
         }
     }
 
-    /// The SpriteKit layer: the board during play, and the hand glow at all
-    /// times. Kept out of `gameBody` so the seat check draws over a live scene
-    /// rather than swapping one in afterwards.
-    private var sceneLayer: some View {
-        GeometryReader { proxy in
-            SpriteView(
-                scene: scene,
-                options: [
-                    .allowsTransparency, .ignoresSiblingOrder,
-                ]
-            )
-            .background(.clear)
-            .onAppear {
-                scene.size = proxy.size
-                scene.gameStateManager = gameStateManager
-                scene.handInput = handPoseManager
-                scene.showsBoard = boardIsUp
-                scene.audio = audio
-            }
-            .onChange(of: proxy.size) { _, newSize in
-                scene.size = newSize
-            }
-            .onChange(of: boardIsUp) { _, isUp in
-                scene.showsBoard = isUp
-            }
-        }
-        .ignoresSafeArea()
+    /// Hands the scene what it reads every frame. Done here because this
+    /// screen owns all of it; GameBoardView only hosts and sizes the scene.
+    private func connectScene() {
+        scene.gameStateManager = gameStateManager
+        scene.handInput = handPoseManager
+        scene.audio = audio
     }
 
     private var gameBody: some View {
-        GeometryReader { proxy in
+        GeometryReader { _ in
             ZStack {
-                VStack {
-                    HStack(alignment: .center) {
+                GameHUD(gameStateManager: gameStateManager, isCountingDown: isCountingDown)
 
-                        Spacer()
-
-                        PointCard(
-                            dishesServed: gameStateManager.dishesCompleted
-                        )
-
-                        Spacer()
-
-                        // Hidden rather than removed during the countdown: it
-                        // still holds its width, so the score and hearts don't
-                        // jump sideways the moment the first recipe lands.
-                        RecipeCard(
-                            recipe: gameStateManager.currentRecipe,
-                            gameStateManager: gameStateManager
-                        )
-                        .opacity(isCountingDown ? 0 : 1)
-
-                        Spacer()
-
-                        HeartCard(
-                            hearts: gameStateManager.lives,
-                            total: gameStateManager.startingLives
-                        )
-
-                        Spacer()
-                    }
-
-                    Spacer()
-                }
-                .ignoresSafeArea()
-                
                 LoseHeartOverlay(gameStateManager: gameStateManager)
 
                 if isCountingDown {
@@ -229,44 +199,10 @@ struct GameplayView: View {
                     CameraPermissionDeniedOverlay()
                 }
 
-                // Hidden quit control. User tap the screen toggle the Stop Button
-                if !isCountingDown && gameStateManager.state != .gameOver {
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .ignoresSafeArea()
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                showStopButton.toggle()
-                            }
-                        }
-
-                    if showStopButton {
-                        // Bottom Left Button
-                        VStack {
-                            Spacer()
-                            HStack {
-                                ButtonComponent(
-                                    name: "Stop",
-                                    icon: "xmark",
-                                    action: quitGame,
-                                    buttonStyle: .primary
-                                )
-                                .padding(40)
-
-                                Spacer()
-                            }
-                        }
-                        .transition(.opacity)
-                    }
+                if canStop {
+                    StopButtonLayer(onStop: quitGame)
                 }
             }
-        }
-        // Auto-hide the Stop button so a forgotten tap doesn't leave it sitting
-        // over the feed; each fresh reveal restarts the countdown via the id.
-        .task(id: showStopButton) {
-            guard showStopButton else { return }
-            try? await Task.sleep(for: .seconds(5))
-            withAnimation(.easeInOut(duration: 0.2)) { showStopButton = false }
         }
         .onAppear {
             // Idempotent: for a game that skipped calibration this actually
@@ -282,39 +218,86 @@ struct GameplayView: View {
             // board too, but a countdown there would interrupt play the player
             // hasn't lost yet.
             // The camera is already live, handed over by the seat check.
-            // Bring the music up under the count so play starts already scored;
             // startMusic is a no-op if it's somehow already going.
-
-            // One shot at the top of the beat — the clip already voices 3-2-1.
-            audio.play(.countdown)
-            for step in stride(from: 3, through: 0, by: -1) {
-                countdown = step  // 0 is the "GO!" beat
-                do {
-                    try await Task.sleep(for: .seconds(1))
-                } catch {
-                    return  // view went away mid-count
-                }
-            }
-            countdown = -1
+            guard await playGetReadyCountdown() else { return }
             gameStateManager.start()
             audio.startMusic()
         }
-        .onChange(of: gameStateManager.isPaused) { _, paused in
-            scene.isPaused = paused
-            // Hold the music with the game so a pause is actually quiet.
-            if paused { audio.pauseMusic() }
-            else { audio.resumeMusic() }
+        .task(id: resumeCountdownRequest) {
+            // The app left mid-run and is back. Re-checked at the end: if it
+            // left again during the count, the clock stays frozen.
+            guard resumeCountdownRequest > 0,
+                  await playGetReadyCountdown(),
+                  scenePhase == .active else { return }
+            gameStateManager.resume()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            handleScenePhase(phase)
+        }
+        .onChange(of: gameStateManager.isPaused) { _, _ in
+            syncScenePause()
         }
         .onChange(of: gameStateManager.state) { _, state in
-            scene.isPaused = (state == .gameOver)
-            
+            syncScenePause()
             if state == .gameOver, !isEndingRun {
                 showGameOver()
             }
         }
         .designScaled()
     }
-    
+
+    /// Plays the 3-2-1-GO! beat. False if it was cut short: the view went
+    /// away, or a newer count replaced it.
+    private func playGetReadyCountdown() async -> Bool {
+        // One shot at the top of the beat — the clip already voices 3-2-1.
+        audio.play(.countdown)
+        for step in stride(from: 3, through: 0, by: -1) {
+            countdown = step  // 0 is the "GO!" beat
+            do {
+                try await Task.sleep(for: .seconds(1))
+            } catch {
+                return false
+            }
+        }
+        countdown = -1
+        return true
+    }
+
+    /// The board freezes while the run is paused and once it is over.
+    private func syncScenePause() {
+        scene.isPaused = gameStateManager.isPaused || gameStateManager.state == .gameOver
+    }
+
+    // MARK: - Leaving and returning to the foreground
+
+    /// PlayFeatApp stops hand tracking whenever the app isn't active, so the
+    /// clock stops with it — at `.inactive` too, or a glance at Control Center
+    /// could cost a life the player had no way to save.
+    private func handleScenePhase(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            resumeRun()
+        case .background:
+            gameStateManager.pause()
+            needsGetReadyOnReturn = gameStateManager.isPaused
+        default:
+            gameStateManager.pause()
+        }
+    }
+
+    /// Picks the run back up: at once after a brief interruption, or after a
+    /// fresh 3-2-1 if the player actually left the app. A resume count still
+    /// running is left to finish.
+    private func resumeRun() {
+        guard gameStateManager.isPaused, !isCountingDown else { return }
+        if needsGetReadyOnReturn {
+            needsGetReadyOnReturn = false
+            resumeCountdownRequest += 1
+        } else {
+            gameStateManager.resume()
+        }
+    }
+
     private func showGameOver() {
         isEndingRun = true
         audio.stopMusic()
@@ -322,7 +305,6 @@ struct GameplayView: View {
     }
 
     private func quitGame() {
-        showStopButton = false
         gameStateManager.gameOver()
         showGameOver()
     }

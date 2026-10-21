@@ -29,9 +29,10 @@ final class GameStateManager {
     /// with each one — and only then, never for a life lost mid-run.
     var runNumber: Int { 1 + events.count(of: .runRestarted) }
 
-    /// When true the clocks and the scene are frozen (Pause button). Kept
-    /// apart from `state` on purpose: a run can be paused in any phase, and
-    /// resuming has to land back in exactly the phase it left.
+    /// When true the clocks and the scene are frozen, e.g. while the app is
+    /// out of the foreground and hand tracking is off. Kept apart from
+    /// `state` on purpose: a run can be paused in any phase, and resuming has
+    /// to land back in exactly the phase it left.
     private(set) var isPaused = false
 
     /// The current dish is in the last stretch of its clock. Changes a few
@@ -177,9 +178,16 @@ final class GameStateManager {
         state = .idle
     }
 
-    func togglePause() {
-        guard state != .gameOver else { return }
-        isPaused.toggle()
+    /// Freezes the clocks. Ignored before the run starts and after it ends,
+    /// when no clock is running to freeze; calling it twice is harmless.
+    func pause() {
+        guard state != .idle, state != .gameOver else { return }
+        isPaused = true
+    }
+
+    /// Starts the clocks again from exactly where `pause()` left them.
+    func resume() {
+        isPaused = false
     }
 
     func gameOver() {

@@ -29,7 +29,7 @@ nonisolated struct BubbleRack {
                 defer { nextID += 1 }
                 return FloatingBubble(id: nextID, ingredient: ingredient)
             }
-        }
+        } 
     }
 
     /// The bubble in `slot` was used up.
