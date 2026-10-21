@@ -46,8 +46,7 @@ struct PanelProgressBar: View {
             .fill(.kitchenTrack)
             .overlay(alignment: .leading) {
                 Capsule()
-                    .fill(RadialGradient(colors: [.progressGreenCore, .progressGreenMid, .progressGreenEdge],
-                                         center: .center, startRadius: 0, endRadius: segmentWidth / 2))
+                    .fill(.progressGreen)
                     .frame(width: segmentWidth * filled)
                     .opacity(filled > 0 ? 1 : 0)
             }

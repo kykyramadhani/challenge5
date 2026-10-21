@@ -2,9 +2,9 @@
 //  ServingTrayView.swift
 //  PlayFeat
 //
-//  A food tray with its dishes in their compartments and, when there is one,
-//  the drink at its bottom-left corner — the tray being assembled, the one
-//  on the table, and an order's ticket.
+//  A food tray with its dishes in their compartments and, once served, the
+//  drink at its bottom-left corner — faded while it's still owed — the tray
+//  being assembled, the one on the table, and an order's ticket.
 //
 
 import SwiftUI
@@ -12,6 +12,8 @@ import SwiftUI
 struct ServingTrayView: View {
     let tray: ServingTray
     let width: CGFloat
+    /// The order wants a drink it hasn't had yet: its glass is drawn faded.
+    var isDrinkOwed = false
 
     private var size: CGSize { CGSize(width: width, height: width / TrayArt.aspectRatio) }
 
@@ -25,16 +27,18 @@ struct ServingTrayView: View {
                             .transition(.scale.combined(with: .opacity))
                     }
                 }
-                if tray.hasDrink {
+                if tray.hasDrink || isDrinkOwed {
                     Image(TrayArt.drinkImage)
                         .resizable()
                         .frame(width: size.width * TrayArt.drinkSize.width,
                                height: size.height * TrayArt.drinkSize.height)
                         .position(point(at: TrayArt.drinkCenter))
+                        .opacity(tray.hasDrink ? 1 : 0.35)
                         .transition(.scale.combined(with: .opacity))
                 }
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.7), value: tray)
+            .animation(.easeOut(duration: 0.3), value: isDrinkOwed)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text("Tray"))
     }

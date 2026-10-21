@@ -4,8 +4,10 @@
 //
 //  Front House's order ticket (Figma 684:4679): the order drawn as the tray
 //  it has to become, with the drink at its corner when one is wanted. The
-//  active one carries the green clock border and blinks red in its last ten
-//  seconds, like every role's tickets.
+//  tray and the drink are served separately: a served tray gets a green
+//  tick, the glass is faded until it's been poured. The active one carries
+//  the green clock border and blinks red in its last ten seconds, like every
+//  role's tickets.
 //
 
 import SwiftUI
@@ -23,7 +25,11 @@ struct TrayTicketView: View {
         ZStack(alignment: .topLeading) {
             shape.fill(.white)
             if isRunningLow { RunningLowBlink(shape: shape) }
-            ServingTrayView(tray: ServingTray(completing: order), width: 249.7)
+            ServingTrayView(tray: ServingTray(completing: order), width: 249.7, isDrinkOwed: order.isDrinkOwed)
+                .overlay {
+                    if order.isTrayServed { DeliveredTick().transition(.scale.combined(with: .opacity)) }
+                }
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: order.isTrayServed)
                 .offset(x: 51.8, y: 16.9)
             if isActive { TicketClockBorder(ticket: shape, fractionLeft: fractionLeft) }
         }

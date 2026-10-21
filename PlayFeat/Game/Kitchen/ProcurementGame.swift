@@ -41,8 +41,18 @@ final class ProcurementGame {
     private(set) var chops = 0
     /// 0...1 through scrubbing the tray in the sink.
     private(set) var washProgress = 0.0
-    /// Washed trays waiting in the bubble for the Front House portal.
-    private(set) var cleanTraysReady = 0
+    /// Trays washed so far. Each one floats off to Front House by itself;
+    /// the count is only there for the worktop to animate it.
+    private(set) var traysWashed = 0
+    /// Dirty trays a hand has taken out of the bubble, so it isn't also
+    /// drawn there.
+    private(set) var dirtyTraysInHand = 0
+    /// Cards and sliced ingredients the player let go of away from any
+    /// target, where they were left (fractions of the screen). They still
+    /// count as the card or the board's until they're used.
+    private(set) var bubbleSpots: [CarriedItem: CGPoint] = [:]
+    /// What hands are carrying, so the worktop doesn't also draw it in place.
+    private(set) var itemsInHand: [CarriedItem] = []
 
     @ObservationIgnored private var stationFinishedAt: TimeInterval?
 
@@ -99,10 +109,27 @@ final class ProcurementGame {
             return slicedOnBoard == ingredient && delivery(of: ingredient, sliced: true, to: portal) != nil
         case (.dirtyTray, .sink):
             return crew.dirtyTrays > 0
-        case (.cleanTray, .frontHousePortal):
-            return cleanTraysReady > 0
         default:
             return false
+        }
+    }
+
+    func pickUp(_ item: CarriedItem) {
+        if item == .dirtyTray { dirtyTraysInHand += 1 }
+        itemsInHand.append(item)
+    }
+
+    /// A carried item went back where it came from, or was used.
+    func putBack(_ item: CarriedItem) {
+        if item == .dirtyTray { dirtyTraysInHand = max(0, dirtyTraysInHand - 1) }
+        if let index = itemsInHand.firstIndex(of: item) { itemsInHand.remove(at: index) }
+    }
+
+    /// A card or sliced ingredient let go away from any target stays there.
+    func place(_ item: CarriedItem, at spot: CGPoint) {
+        switch item {
+        case .ingredient, .sliced: bubbleSpots[item] = spot
+        default: break
         }
     }
 
@@ -110,6 +137,8 @@ final class ProcurementGame {
     /// a tray can't be handed over twice.
     func drop(_ item: CarriedItem, at zone: DropZone) {
         guard accepts(item, at: zone) else { return }
+        putBack(item)
+        bubbleSpots[item] = nil
         switch item {
         case let .ingredient(ingredient, slot):
             use(ingredient, sliced: false, at: zone)
@@ -121,10 +150,7 @@ final class ProcurementGame {
             crew.takeDirtyTray()
             washProgress = 0
             station = .washing
-        case .cleanTray:
-            cleanTraysReady -= 1
-            crew.receiveCleanTray()
-        case .cooked, .dish, .drink, .servingTray:
+        case .cleanTray, .cooked, .dish, .drink, .servingTray:
             break  // other roles'; `accepts` never lets one through here
         }
         settleActiveOrder()
@@ -180,7 +206,8 @@ final class ProcurementGame {
         guard station == .washing, washProgress < 1, circles > 0 else { return }
         washProgress = min(1, washProgress + circles / Self.circlesNeeded)
         guard washProgress >= 1 else { return }
-        cleanTraysReady += 1
+        traysWashed += 1
+        crew.receiveCleanTray()
         stationFinishedAt = now
     }
 

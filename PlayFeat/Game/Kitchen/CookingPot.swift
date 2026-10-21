@@ -15,7 +15,7 @@ nonisolated enum CookingPot: Equatable {
     case cooking(KitchenIngredient, startedAt: TimeInterval)
     /// Waiting to be stirred into soup in the zoomed-in broth pot.
     case stirring(KitchenIngredient)
-    /// Done: a cooked bubble over the pot, ready for Front House.
+    /// Done: the cooked dish waits in the pot until a hand takes it out.
     case ready(KitchenIngredient)
 
     /// Whatever is in the pot, raw or cooked.

@@ -31,4 +31,11 @@ struct BubblePickerTests {
                                                wanted: [.coralLettuce, .coralLettuce])
         #expect(refilled == [.coralLettuce, .coralLettuce, nil])
     }
+
+    /// Never more than `limit` floating, however much is wanted.
+    @Test func neverMoreThanTheLimit() {
+        let refilled = BubblePicker.refill([.tentacle, nil, nil, nil, nil],
+                                           wanted: [.tentacle, .coralLettuce, .bubbleTuber, .starJelly], limit: 3)
+        #expect(refilled == [.tentacle, .coralLettuce, .bubbleTuber, nil, nil])
+    }
 }

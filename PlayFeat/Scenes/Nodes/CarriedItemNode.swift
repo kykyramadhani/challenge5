@@ -15,7 +15,9 @@ final class CarriedItemNode: SKNode {
 
         let bubble = SKSpriteNode(imageNamed: "HeldBubble")
         bubble.size = CGSize(width: diameter, height: diameter)
-        bubble.zPosition = 1
+        // The scene ignores sibling order, so every layer gets its own z:
+        // art 0, what's on it 1, the glass bubble over all of it.
+        bubble.zPosition = 2
         addChild(bubble)
 
         let art = SKSpriteNode(imageNamed: item.imageName)
@@ -25,6 +27,7 @@ final class CarriedItemNode: SKNode {
         if item == .dirtyTray {
             let dirt = SKSpriteNode(imageNamed: TrayArt.dirtImage)
             dirt.size = TrayArt.dirtSize(onTray: art.size)
+            dirt.zPosition = 1
             art.addChild(dirt)
         }
         if case let .servingTray(tray) = item {
@@ -46,11 +49,6 @@ final class CarriedItemNode: SKNode {
         for (compartment, ingredient) in tray.dishes {
             place(ingredient.preparedImageName, at: TrayArt.center(of: compartment),
                   size: CGSize(width: dish, height: dish))
-        }
-        if tray.hasDrink {
-            place(TrayArt.drinkImage, at: TrayArt.drinkCenter,
-                  size: CGSize(width: art.size.width * TrayArt.drinkSize.width,
-                               height: art.size.height * TrayArt.drinkSize.height))
         }
     }
 

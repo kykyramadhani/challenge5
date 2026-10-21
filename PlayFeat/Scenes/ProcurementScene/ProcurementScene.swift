@@ -53,25 +53,17 @@ final class ProcurementScene: KitchenScene {
     override func carryTargets() -> [(item: CarriedItem, rect: CGRect)] {
         guard let game else { return [] }
         var targets: [(item: CarriedItem, rect: CGRect)] = game.cards.indices.map { slot in
-            (.ingredient(game.cards[slot], cardSlot: slot), worktop.card(slot))
+            let item = CarriedItem.ingredient(game.cards[slot], cardSlot: slot)
+            return (item, worktop.bubble(at: game.bubbleSpots[item], otherwise: worktop.card(slot)))
         }
         if let sliced = game.slicedOnBoard {
-            targets.append((.sliced(sliced), worktop.cuttingBoard))
+            let item = CarriedItem.sliced(sliced)
+            targets.append((item, worktop.bubble(at: game.bubbleSpots[item], otherwise: worktop.cuttingBoard)))
         }
-        if let tray = availableTray(game: game) {
-            targets.append((tray, worktop.trayBubble))
+        if game.crew.dirtyTrays > heldItems.filter({ $0 == .dirtyTray }).count {
+            targets.append((.dirtyTray, worktop.trayBubble))
         }
         return targets
-    }
-
-    /// The tray a hand can take from the bubble: a clean one first, since
-    /// that is the one Front House is waiting for.
-    private func availableTray(game: ProcurementGame) -> CarriedItem? {
-        let heldClean = heldItems.filter { $0 == .cleanTray }.count
-        let heldDirty = heldItems.filter { $0 == .dirtyTray }.count
-        if game.cleanTraysReady > heldClean { return .cleanTray }
-        if game.crew.dirtyTrays > heldDirty { return .dirtyTray }
-        return nil
     }
 
     override func dropTargets() -> [(zone: DropZone, rect: CGRect)] { worktop.dropTargets }
@@ -85,6 +77,18 @@ final class ProcurementScene: KitchenScene {
     override func drop(_ item: CarriedItem, at zone: DropZone) {
         game?.drop(item, at: zone)
     }
+
+    /// Anywhere but on the trays.
+    override func place(_ item: CarriedItem, at spot: CGPoint) -> Bool {
+        let point = CGPoint(x: spot.x * size.width, y: spot.y * size.height)
+        guard let game, !worktop.trayBubble.contains(point) else { return false }
+        game.place(item, at: spot)
+        return game.bubbleSpots[item] != nil
+    }
+
+    override func didPickUp(_ item: CarriedItem) { game?.pickUp(item) }
+
+    override func didPutBack(_ item: CarriedItem) { game?.putBack(item) }
 
     override var touchIsPinching: Bool { game?.station == .worktop }
 

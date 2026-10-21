@@ -96,7 +96,8 @@ private struct TicketCell: View {
     }
 }
 
-private struct DeliveredTick: View {
+/// The green tick over something already delivered or served.
+struct DeliveredTick: View {
     var body: some View {
         Image(systemName: "checkmark")
             .font(.system(size: 22, weight: .black))

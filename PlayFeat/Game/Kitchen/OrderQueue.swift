@@ -64,9 +64,21 @@ struct OrderQueue {
         countdown = Countdown(duration: Self.timeLimit, startingAt: time)
     }
 
+    mutating func restartClock(at time: TimeInterval) {
+        countdown = Countdown(duration: Self.timeLimit, startingAt: time)
+    }
+
     mutating func finishEating(orderID: KitchenOrder.ID) {
         guard let index = orders.firstIndex(where: { $0.id == orderID }) else { return }
         orders[index].finishEating()
+    }
+
+    mutating func serveActiveTray() {
+        orders[activeIndex].serveTray()
+    }
+
+    mutating func serveActiveDrink() {
+        orders[activeIndex].serveDrink()
     }
 
     /// The oldest finished order's tray is back: it leaves, the rest slide

@@ -24,6 +24,10 @@ nonisolated struct KitchenOrder: Identifiable, Equatable {
     let items: [KitchenIngredient]
     let needsDrink: Bool
     private(set) var stage = Stage.waiting
+    /// Front House: the tray and the drink are served separately, in either
+    /// order. Only with both is the order served (`serve()`).
+    private(set) var isTrayServed = false
+    private(set) var isDrinkServed = false
     /// Indices into `items` that have reached their destination: for
     /// Procurement, through the right portal; for the Chef, cooked and
     /// through the Front House portal.
@@ -55,6 +59,12 @@ nonisolated struct KitchenOrder: Identifiable, Equatable {
         return order
     }
 
+    /// Wants a drink that hasn't reached the customer yet.
+    var isDrinkOwed: Bool { needsDrink && !isDrinkServed }
+
+    /// Its tray is on the table and its drink, if any, has been poured.
+    var isReadyToServe: Bool { isTrayServed && !isDrinkOwed }
+
     var isFullyDelivered: Bool { delivered.count == items.count }
 
     func isDelivered(at index: Int) -> Bool { delivered.contains(index) }
@@ -78,6 +88,15 @@ nonisolated struct KitchenOrder: Identifiable, Equatable {
     mutating func serve() {
         guard stage == .waiting else { return }
         stage = .eating
+    }
+
+    mutating func serveTray() {
+        isTrayServed = true
+    }
+
+    mutating func serveDrink() {
+        guard needsDrink else { return }
+        isDrinkServed = true
     }
 
     mutating func finishEating() {

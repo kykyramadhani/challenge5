@@ -3,8 +3,9 @@
 //  PlayFeat
 //
 //  The food tray Front House assembles an order on: one finished dish per
-//  compartment, and a drink beside it when the order asks for one. Also how
-//  an order looks once it's all there, which the order tickets draw.
+//  compartment. Also how an order looks once it's all there, which the order
+//  tickets and the table draw — with its drink beside it once that's served,
+//  which happens on its own, not on the tray.
 //
 
 import Foundation
@@ -27,10 +28,11 @@ nonisolated struct ServingTray: Equatable, Hashable {
 
     init() {}
 
-    /// The tray as it leaves the kitchen when everything on `order` is on it.
+    /// The tray as it leaves the kitchen when everything on `order` is on
+    /// it, with the drink beside it once that's been served.
     init(completing order: KitchenOrder) {
         for item in order.items { dishes[item.trayCompartment] = item }
-        hasDrink = order.needsDrink
+        hasDrink = order.isDrinkServed
     }
 
     /// Whether a finished `dish` can go into `compartment` for `order`: its
@@ -39,20 +41,13 @@ nonisolated struct ServingTray: Equatable, Hashable {
         dish.trayCompartment == compartment && dishes[compartment] == nil && order.items.contains(dish)
     }
 
-    func canAddDrink(for order: KitchenOrder) -> Bool {
-        order.needsDrink && !hasDrink
-    }
-
-    /// Everything the order asks for is on the tray, and nothing else.
+    /// Every dish the order asks for is on the tray, and nothing else. The
+    /// drink is served separately.
     func isComplete(for order: KitchenOrder) -> Bool {
-        self == ServingTray(completing: order)
+        dishes == ServingTray(completing: order).dishes
     }
 
     mutating func place(_ dish: KitchenIngredient, in compartment: TrayCompartment) {
         dishes[compartment] = dish
-    }
-
-    mutating func addDrink() {
-        hasDrink = true
     }
 }

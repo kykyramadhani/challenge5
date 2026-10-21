@@ -24,15 +24,20 @@ enum BubblePicker {
     ///   - slots: what is floating now, one entry per slot.
     ///   - wanted: every raw ingredient the Chef still needs, most urgent
     ///     first — the active order's, then the next orders'.
-    static func refill(_ slots: [KitchenIngredient?], wanted: [KitchenIngredient]) -> [KitchenIngredient?] {
+    ///   - limit: how many bubbles may float at once; nothing new arrives
+    ///     beyond it.
+    static func refill(_ slots: [KitchenIngredient?], wanted: [KitchenIngredient],
+                       limit: Int = slotCount) -> [KitchenIngredient?] {
         var unclaimed = wanted
         var refilled = slots.map { bubble -> KitchenIngredient? in
             guard let bubble, let index = unclaimed.firstIndex(of: bubble) else { return nil }
             unclaimed.remove(at: index)
             return bubble
         }
-        for slot in refilled.indices where refilled[slot] == nil && !unclaimed.isEmpty {
+        var floating = refilled.compactMap { $0 }.count
+        for slot in refilled.indices where refilled[slot] == nil && !unclaimed.isEmpty && floating < limit {
             refilled[slot] = unclaimed.removeFirst()
+            floating += 1
         }
         return refilled
     }

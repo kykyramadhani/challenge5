@@ -11,8 +11,9 @@
 //    in the fryer and fries by itself.
 //  - Coral lettuce goes in the broth pot, which opens the zoomed-in pot: it
 //    becomes soup only once it has been stirred with pinched, circling hands.
-//  - A finished dish floats over its pot until it is carried through the
-//    Front House portal, which ticks its requirement off the active order.
+//  - A finished dish stays in its pot until a hand takes it out; carried
+//    through the Front House portal it ticks its requirement off the active
+//    order.
 //
 //  In the playtest the player is the only Chef and nobody plays Procurement:
 //  mushrooms and star jelly, which never pass through the Chef, are ticked
@@ -47,6 +48,9 @@ final class ChefGame {
     private(set) var pots: [DropZone: CookingPot] = [.boilingPot: .empty, .brothPot: .empty, .fryer: .empty]
     /// 0...1 through stirring the soup.
     private(set) var stirProgress = 0.0
+    /// Bubbles the player let go of away from any station, where they were
+    /// left (fractions of the screen). The rest float in their own slot.
+    private(set) var bubbleSpots: [CarriedItem: CGPoint] = [:]
     /// What hands are carrying, so the worktop doesn't also draw it in place.
     private(set) var itemsInHand: [CarriedItem] = []
 
@@ -96,6 +100,7 @@ final class ChefGame {
     func drop(_ item: CarriedItem, at zone: DropZone) {
         guard accepts(item, at: zone) else { return }
         putBack(item)
+        bubbleSpots[item] = nil
         switch item {
         case let .ingredient(ingredient, slot):
             rack.empty(slot)
@@ -108,6 +113,17 @@ final class ChefGame {
         }
         refreshBubbles()
         settleActiveOrder()
+    }
+
+    /// A raw or cooked bubble let go away from any station stays there.
+    // ponytail: a cooked dish left outside still holds its pot until it's
+    // delivered or trashed, so it can't be doubled; free the pot early if a
+    // station ever bottlenecks.
+    func place(_ item: CarriedItem, at spot: CGPoint) {
+        switch item {
+        case .ingredient, .cooked: bubbleSpots[item] = spot
+        default: break
+        }
     }
 
     func pickUp(_ item: CarriedItem) {
@@ -183,7 +199,7 @@ final class ChefGame {
         pots[zone] = .empty
     }
 
-    /// Cooked dishes waiting over their pots, for the "ding" when one lands.
+    /// Cooked dishes waiting in their pots, for the "ding" when one is done.
     var readyDishCount: Int { pots.values.filter { $0.readyIngredient != nil }.count }
 
     // MARK: - Delivery
@@ -246,7 +262,10 @@ final class ChefGame {
 
     var bubbles: [FloatingBubble?] { rack.slots }
 
+    /// Five bubbles at most on screen: raw ones, plus one for each pot in
+    /// use, since what's in it ends up as a bubble.
     private func refreshBubbles() {
-        rack.refill(wanted: wantedIngredients)
+        let potsInUse = pots.values.filter { !$0.isEmpty }.count
+        rack.refill(wanted: wantedIngredients, limit: BubblePicker.slotCount - potsInUse)
     }
 }
