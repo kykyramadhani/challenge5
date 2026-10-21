@@ -180,7 +180,7 @@ class KitchenScene: SKScene {
 
     private func makeGlow(for id: Int) -> HandGlowNode {
         // Sized as GameScene sizes its glow, so the hands look the same in both.
-        let radius = (shortEdge * 0.17).vc_clamped(to: 68 * layout.scale...100 * layout.scale)
+        let radius = (shortEdge * 0.17).clamped(to: 68 * layout.scale...100 * layout.scale)
         let glow = HandGlowNode(radius: radius,
                                 openColor: HandGlowNode.kitchenOpenColor,
                                 grabColor: HandGlowNode.kitchenGrabColor)
@@ -268,7 +268,7 @@ class KitchenScene: SKScene {
             return hand.reach.contains(where: zone.contains)
         }
         return reachable.min {
-            hand.viewPoint.vc_distance(to: $0.rect.center) < hand.viewPoint.vc_distance(to: $1.rect.center)
+            hand.viewPoint.distance(to: $0.rect.center) < hand.viewPoint.distance(to: $1.rect.center)
         }
     }
 
@@ -351,7 +351,7 @@ class KitchenScene: SKScene {
     private func carried(_ point: CGPoint, toward cursor: CGPoint, delta: TimeInterval) -> CGPoint {
         let radius = layout.heldBubbleDiameter / 2
         let target = GameScene.clamped(cursor, radius: radius, in: size)
-        return point.vc_eased(toward: target, by: GameScene.easing(base: dragSmoothing, delta: delta))
+        return point.eased(toward: target, by: GameScene.easing(base: dragSmoothing, delta: delta))
     }
 
     // MARK: - Motions in a zoomed-in panel
@@ -382,7 +382,7 @@ class KitchenScene: SKScene {
             strokeLength: shortEdge * 0.06
         )
         // Tracking that comes back somewhere else is a jump, not a stroke.
-        if let last = lastPoints[hand.id], last.vc_distance(to: hand.scenePoint) > shortEdge * 0.2 {
+        if let last = lastPoints[hand.id], last.distance(to: hand.scenePoint) > shortEdge * 0.2 {
             recognizer.reset()
         }
         let units = recognizer.feed(hand.scenePoint, dt: delta)

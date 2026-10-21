@@ -205,7 +205,7 @@ nonisolated struct HandIdentityTracker {
     ) -> [Int?] {
         let costs = newPositions.map { new in
             previousPositions.map { previous -> CGFloat? in
-                let distance = Self.distance(new, previous)
+                let distance = previous.distance(to: new)
                 return distance < radius ? distance : nil
             }
         }

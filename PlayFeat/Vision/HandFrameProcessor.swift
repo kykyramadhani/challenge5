@@ -5,7 +5,7 @@
 //  Everything done to one camera frame, in order:
 //
 //    1. Vision: hand pose (every frame) + body pose (every Nth frame)
-//    2. Body: who the player is (the nearest person)
+//    2. Body: who the player is (PlayerSelector: the seat frame, then the lock)
 //    3. HandClassifier: palm, wrist and pinch gap for each hand Vision saw
 //    4. Body filter: keep only the player's hands, for the current input mode
 //    5. HandIdentityTracker: stable IDs, smoothing, pinch state, coasting
@@ -28,7 +28,7 @@ nonisolated final class HandFrameProcessor: @unchecked Sendable {
     struct Output {
         /// Size of the frame Vision read, after rotation.
         let bufferSize: CGSize
-        /// The player's body (nearest person), nil when nobody is tracked.
+        /// The player's body (see PlayerSelector), nil when nobody is tracked.
         let playerBody: HumanBodyPoseManager.BodyCandidate?
         /// The player's hands, with stable IDs, including coasting ones.
         let hands: [HandData]
@@ -81,6 +81,44 @@ nonisolated final class HandFrameProcessor: @unchecked Sendable {
     /// Vision fails.
     private var playerBody: HumanBodyPoseManager.BodyCandidate?
 
+    /// Who the player is. Changed only through the methods below, which
+    /// HandPoseManager calls on the video queue like everything else here.
+    private var selector = PlayerSelector()
+
+    // MARK: - Player selection (video queue only)
+
+    /// Until the lock, only someone in `zone` can be the player.
+    func setPlayerZone(_ zone: PlayerSelector.Zone) {
+        selector.zone = zone
+    }
+
+    /// From now on only `body`'s owner is the player, followed as they move.
+    func lockOntoPlayer(_ body: HumanBodyPoseManager.BodyCandidate) {
+        selector.lock(onto: body)
+    }
+
+    /// Forgets the locked player and the zone, ready for the next calibration.
+    func releasePlayer() {
+        selector.reset()
+    }
+
+    // MARK: - Suspension (video queue only)
+
+    /// While true, frames are dropped before Vision sees them. Vision runs on
+    /// the GPU, and iOS refuses GPU work from an app in the background
+    /// (`kIOGPUCommandBufferCallbackErrorBackgroundExecutionNotPermitted`).
+    /// Set on the video queue, in turn with the frames, so no frame queued
+    /// after it can slip through.
+    private(set) var isSuspended = false
+
+    func suspend() {
+        isSuspended = true
+    }
+
+    func resume() {
+        isSuspended = false
+    }
+
     init() {
         handPoseRequest.maximumHandCount = handCandidateLimit
     }
@@ -115,9 +153,10 @@ nonisolated final class HandFrameProcessor: @unchecked Sendable {
         }
         let bodies = tracksSinglePlayer ? bodyPoseManager.lastBodies : []
 
-        // Only the nearest body, so what is drawn is always exactly who the
+        // Only the player's body, so what is drawn is always exactly who the
         // game is listening to.
-        playerBody = bodyPoseManager.resolvePlayer(from: bodies)
+        let player = selector.trackPlayer(in: bodies, bufferSize: bufferSize)
+        playerBody = player.map { bodies[$0] }
 
         let observations = handPoseRequest.results ?? []
         let classifications = observations.compactMap {
@@ -134,13 +173,16 @@ nonisolated final class HandFrameProcessor: @unchecked Sendable {
         // No body, no hands. A hand is only the player's if it can be tied to
         // a visible shoulder, so a torso out of frame means nothing is tracked
         // — the same rule the seat check enforces before the game even starts.
-        let bodyMatched = HumanBodyPoseManager.playerHandIndices(
-            handWrists: classifications.map(\.wrist),
-            bodies: bodies,
-            wristTolerance: wristMatchTolerance,
-            limit: limit,
-            mode: mode
-        ) ?? []
+        let bodyMatched = player.map { player in
+            HumanBodyPoseManager.playerHandIndices(
+                handWrists: classifications.map(\.wrist),
+                bodies: bodies,
+                player: player,
+                wristTolerance: wristMatchTolerance,
+                limit: min(maximumHandCount, mode.handCount),
+                mode: mode
+            )
+        } ?? []
         let keep = playerHands(bodyMatched: bodyMatched, from: classifications, limit: limit, now: now)
 
         let readings = keep.map { index in

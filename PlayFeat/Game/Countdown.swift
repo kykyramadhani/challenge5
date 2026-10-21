@@ -23,7 +23,7 @@ struct Countdown {
     /// How much is left, 1 down to 0.
     func fractionLeft(at time: TimeInterval) -> CGFloat {
         guard duration > 0 else { return 0 }
-        return CGFloat((deadline - time) / duration).vc_clamped(to: 0...1)
+        return CGFloat((deadline - time) / duration).clamped(to: 0...1)
     }
 
     func hasRunOut(at time: TimeInterval) -> Bool {

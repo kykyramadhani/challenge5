@@ -8,10 +8,11 @@
 //  hand glow and whatever the hands carry — above the panels, so the player
 //  can always see where their hands are.
 //
-//  A shift opens on a 3-2-1 over the live camera: the camera starts as the
-//  view appears, and the shift (and its order clocks) only starts once the
-//  count is over and the camera is delivering frames. The camera session
-//  belongs to HandPoseManager and is only started and stopped here.
+//  A shift opens on the seat check over the live camera, which picks the
+//  player and locks the hand pipeline onto them, then a 3-2-1: the shift (and
+//  its order clocks) only starts once the count is over and the camera is
+//  delivering frames. The camera session belongs to HandPoseManager and is
+//  only started and stopped here.
 //
 
 import AVFoundation
@@ -32,8 +33,9 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Rail: View, Panel:
     @ViewBuilder let panel: () -> Panel
 
     @State private var showShiftOver = false
-    /// The number on the countdown screen; nil once play has begun.
-    @State private var countdownNumber: Int? = ShiftCountdown.firstNumber
+    @State private var phase = ShiftPhase.opening(withSeatCheck: Self.hasSeatCheck)
+    /// The number on the countdown screen.
+    @State private var countdownNumber = ShiftCountdown.firstNumber
     @State private var isWaitingForCamera = false
 
     var body: some View {
@@ -41,11 +43,14 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Rail: View, Panel:
             let layout = Layout(size: proxy.size)
             ZStack {
                 cameraLayer
-                if let countdownNumber {
+                switch phase {
+                case .seatCheck:
+                    seatCheck
+                case .countdown:
                     ShiftCountdownOverlay(number: isCameraBlocked ? nil : countdownNumber,
                                           isCameraLive: handPoseManager.isReceivingFrames,
                                           isWaitingForCamera: isWaitingForCamera)
-                } else {
+                case .playing:
                     kitchen(layout, size: proxy.size)
                 }
                 cameraPermissionNotice
@@ -54,7 +59,9 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Rail: View, Panel:
         }
         .ignoresSafeArea()
         .onAppear(perform: startCamera)
-        .task { await countDownThenPlay() }
+        .task(id: phase) {
+            if phase == .countdown { await countDownThenPlay() }
+        }
         .onDisappear(perform: endShift)
         .onChange(of: shift.lives) { old, new in if new < old { audio.play(.loseHeart) } }
         .onChange(of: shift.ordersServed) { audio.play(.putOrder) }
@@ -70,6 +77,19 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Rail: View, Panel:
     }
 
     // MARK: - Layers
+
+    /// Laid out at the real screen size, not the design canvas, so its frame
+    /// lines up with the player's body on the full-screen camera feed.
+    private var seatCheck: some View {
+        SeatCalibrationView(handPoseManager: handPoseManager) {
+            // Whoever passed the check is the player for this shift; anyone
+            // else who walks into shot is ignored until it ends.
+            handPoseManager.lockOntoPlayer()
+            phase = phase.next
+        } onBack: {
+            sceneManager.goToRoleSelect()
+        }
+    }
 
     @ViewBuilder
     private func kitchen(_ layout: Layout, size: CGSize) -> some View {
@@ -140,6 +160,19 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Rail: View, Panel:
 
     // MARK: - Camera readiness
 
+    /// Only with a real camera to check against. The simulator has none (a
+    /// finger stands in for a hand), and the DEBUG shortcut drops straight
+    /// into play.
+    private static var hasSeatCheck: Bool {
+        #if targetEnvironment(simulator)
+        false
+        #elseif DEBUG
+        !DebugLaunch.skipToGameplay
+        #else
+        true
+        #endif
+    }
+
     /// Camera access was refused. Never true on the simulator, which doesn't
     /// use the camera, so isn't asked for it.
     private var isCameraBlocked: Bool {
@@ -185,13 +218,14 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Rail: View, Panel:
                 return
             }
         }
-        countdownNumber = nil
         shift.start()
         audio.startMusic()
+        phase = phase.next
     }
 
     private func endShift() {
         shift.stop()
+        handPoseManager.releasePlayer()
         handPoseManager.stop()
         audio.stopClockWarning()
         audio.stopMusic()

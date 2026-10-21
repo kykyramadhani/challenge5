@@ -1,17 +1,16 @@
 //
 //  SeatCalibrationView.swift
-//  GetCooking
+//  PlayFeat
 //
-//  The screen between the main menu and the game: the player sits back far
+//  The seat check before a run or a kitchen shift: the player sits back far
 //  enough that their upper body — shoulders down to hips — fits the frame.
+//  Whoever passes it is the player the hand pipeline follows from then on.
 //
 //  The border is the whole feedback loop. Orange while the pose is wrong;
 //  once it is right, a green border draws itself over the orange one, and the
 //  game starts when it closes the loop.
 //
 
-import AVFoundation
-import Combine
 import QuartzCore
 import SwiftUI
 
@@ -20,6 +19,10 @@ struct SeatCalibrationView: View {
 
     /// Called once the player has held the pose for the full dwell.
     var onCalibrated: () -> Void
+
+    /// The way out for a player the camera can't find, or who can't get into
+    /// the pose: without it the check is a dead end.
+    var onBack: () -> Void
 
     /// Set from the Settings sheet. In one-hand mode only the chosen hand has
     /// to be raised — the pose is otherwise impossible to hold  with one arm
@@ -39,99 +42,126 @@ struct SeatCalibrationView: View {
 
     /// The body publishes at camera rate, but a player sitting perfectly still
     /// stops publishing, so the dwell is driven by its own clock instead.
-    private let tick = Timer.publish(every: 1 / 30, on: .main, in: .common).autoconnect()
+    private static let tickInterval: Duration = .milliseconds(33)
 
     // MARK: - Layout
+    private static let screenSize = DesignCanvas.size
 
-    /// Target box, as a fraction of the screen.
-    private static let frameShare = CGSize(width: 0.54, height: 0.42)
+    /// The target box in that frame. It hangs off the bottom edge, so its
+    /// bottom border sits just below the screen and the player's body reads
+    /// as rising into it from below.
+    private static let calibrationBox = CGRect(x: 138, y: 278, width: 1100, height: 786)
 
-    /// Smallest share of the box's width the player's shoulders may span.
-    /// This is the "don't sit right at the back of the room" check.
-    private static let minimumShoulderShare: CGFloat = 0.25
+    /// The instruction sits this far above the box's top edge (to its centre).
+    private static let instructionLift: CGFloat = 61
+
+    /// Smallest share of the *screen's* width the player's shoulders may
+    /// span: the "don't sit right at the back of the room" check. Tied to the
+    /// screen, not the box, so making the box bigger doesn't make players sit
+    /// closer. (It was a quarter of a box 54% of the screen wide.)
+    private static let minimumShoulderShare: CGFloat = 0.135
 
     /// Guide silhouette width, as a share of the box.
-    private static let guideShare: CGFloat = 0.53
+    private static let guideShare: CGFloat = 0.63
 
     private static let cornerRadius: CGFloat = 40
     private static let borderWidth: CGFloat = 12
+    private static let instructionSize: CGFloat = 44
 
-    /// Where the player has to put themselves.
+    /// Where the player has to put themselves: the Figma box, scaled with the
+    /// design canvas, centred, and hung off the bottom of the screen. Also
+    /// handed to the pose pipeline: until calibration passes, nobody outside
+    /// it is the player.
     static func targetFrame(in size: CGSize) -> CGRect {
-        let box = CGSize(
-            width: size.width * frameShare.width,
-            height: size.height * frameShare.height
-        )
+        let scale = DesignCanvas.scale(for: size)
+        let width = calibrationBox.width * scale
+        let distanceFromBottom = (screenSize.height - calibrationBox.minY) * scale
         return CGRect(
-            x: (size.width - box.width) / 2,
-            y: (size.height - box.height) / 2,
-            width: box.width,
-            height: box.height
+            x: (size.width - width) / 2,
+            y: size.height - distanceFromBottom,
+            width: width,
+            height: calibrationBox.height * scale
         )
     }
 
+    /// The fewest points the player's shoulders may span on a screen this size.
+    static func minimumShoulderSpan(in size: CGSize) -> CGFloat {
+        size.width * minimumShoulderShare
+    }
+
     var body: some View {
-        // The camera itself is mounted by ContentView and stays put across the
-        // handover to the game; this screen only draws over it.
+        // The camera feed belongs to the screen hosting this check, and stays
+        // put across the handover to play; this only draws over it. So does
+        // the camera-permission card, shown once by the host.
         ZStack {
             GeometryReader { proxy in
                 let frame = Self.targetFrame(in: proxy.size)
+                let scale = DesignCanvas.scale(for: proxy.size)
 
-                VStack(spacing: 0) {
+                ZStack {
                     Text(instructionText)
-                        .font(.atkinson(size: 44, weight: .black))
+                        .font(.atkinson(size: Self.instructionSize * scale, weight: .black))
                         .foregroundStyle(.white)
-                        .outlined(width: 4)
-                        .frame(maxHeight: .infinity, alignment: .center)
+                        .outlined(width: 4 * scale)
+                        .position(x: frame.midX, y: frame.minY - Self.instructionLift * scale)
 
-                    border
+                    border(scale: scale)
                         .frame(width: frame.width, height: frame.height)
-
-                    Spacer(minLength: 0)
-                        .frame(maxHeight: .infinity)
+                        .position(x: frame.midX, y: frame.midY)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onReceive(tick) { _ in
-                    // Recomputed here rather than captured from the body, so
-                    // the dwell always reads the player's current position even
-                    // in frames where nothing republished.
-                    let aligned = isAligned(in: proxy.size, frame: frame)
-                    let finished = detector.update(isHovering: aligned, now: CACurrentMediaTime())
-
-                    progress = detector.progress
-                    if finished { onCalibrated() }
+                .onChange(of: proxy.size, initial: true) { _, size in
+                    handPoseManager.setPlayerZone(Self.targetFrame(in: size), in: size)
                 }
+                .task(id: proxy.size) { await runDwell(in: proxy.size) }
             }
             .allowsHitTesting(false)
 
-            if handPoseManager.authorizationStatus == .denied
-                || handPoseManager.authorizationStatus == .restricted
-            {
-                CameraPermissionDeniedOverlay()
-            }
+            BackButton(action: onBack)
         }
         .onAppear { handPoseManager.start() }
+    }
+
+    /// Fills the border while the player holds the pose, and reports the pass
+    /// once. Restarts if the screen is resized, since the frame moves with it.
+    private func runDwell(in size: CGSize) async {
+        let frame = Self.targetFrame(in: size)
+        while !Task.isCancelled {
+            // Read every tick rather than captured from the body, so the dwell
+            // always sees the player's current position, even in frames where
+            // nothing republished.
+            let aligned = isAligned(in: size, frame: frame)
+            let finished = detector.update(isHovering: aligned, now: CACurrentMediaTime())
+            progress = detector.progress
+            if finished {
+                onCalibrated()
+                return
+            }
+            try? await Task.sleep(for: Self.tickInterval)
+        }
     }
 
     /// Orange underneath, green drawn over the top of it as the dwell fills —
     /// so the progress reads as the frame turning good, rather than as a
     /// separate gauge the player has to interpret.
-    private var border: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: Self.cornerRadius)
+    private func border(scale: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius * scale)
+        let edge = SeatFrameEdge(cornerRadius: Self.cornerRadius * scale)
+        let lineWidth = Self.borderWidth * scale
+        return ZStack {
+            shape
                 .fill(.white.opacity(0.15))
                 .overlay(alignment: .bottom) { guide }
-                .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
+                .clipShape(shape)
 
-            RoundedRectangle(cornerRadius: Self.cornerRadius)
-                .stroke(Color.accentColor, lineWidth: Self.borderWidth)
-
-            RoundedRectangle(cornerRadius: Self.cornerRadius)
+            // An open edge rather than a closed rectangle: the box's bottom
+            // hangs off the screen, and a closed shape would spend part of the
+            // fill tracing it out of sight. The fill runs in one stroke, up
+            // the left side, across the top and down the right.
+            edge
+                .stroke(.appTertiary, lineWidth: lineWidth)
+            edge
                 .trim(from: 0, to: progress)
-                .stroke(
-                    .appPrimary,
-                    style: StrokeStyle(lineWidth: Self.borderWidth, lineCap: .round)
-                )
+                .stroke(.appPrimary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
         }
     }
 
@@ -169,8 +199,32 @@ struct SeatCalibrationView: View {
         guard let body = handPoseManager.playerBody(in: size) else { return false }
         return body.isAligned(
             in: frame,
-            minimumShoulderSpan: frame.width * Self.minimumShoulderShare,
+            minimumShoulderSpan: Self.minimumShoulderSpan(in: size),
             mode: inputMode
         )
+    }
+}
+
+/// The seat frame's visible edge, in one stroke: up the left side from the
+/// bottom, round both top corners, and down the right side. Open at the
+/// bottom, because that edge is off the screen.
+private struct SeatFrameEdge: Shape {
+    let cornerRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addArc(
+            tangent1End: CGPoint(x: rect.minX, y: rect.minY),
+            tangent2End: CGPoint(x: rect.maxX, y: rect.minY),
+            radius: cornerRadius
+        )
+        path.addArc(
+            tangent1End: CGPoint(x: rect.maxX, y: rect.minY),
+            tangent2End: CGPoint(x: rect.maxX, y: rect.maxY),
+            radius: cornerRadius
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        return path
     }
 }

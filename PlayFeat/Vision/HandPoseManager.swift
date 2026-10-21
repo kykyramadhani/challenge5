@@ -27,8 +27,8 @@ final class HandPoseManager {
     /// The player's upper body in normalized Vision space, nil when nobody is
     /// tracked.
     ///
-    /// Exactly one body ever appears here: the nearest. Other people in frame
-    /// are never published, however much of them Vision can see.
+    /// Exactly one body ever appears here: the player (see PlayerSelector).
+    /// Other people are never published, however much of them Vision can see.
     private(set) var playerBody: HumanBodyPoseManager.BodyCandidate?
 
     /// Camera authorization state, surfaced so the UI can prompt the user.
@@ -66,6 +66,7 @@ final class HandPoseManager {
         // Runs on the video queue: process there, publish on the main thread.
         let processor = self.processor
         camera.onFrame = { [weak self] pixelBuffer in
+            guard !processor.isSuspended else { return }
             let frame = processor.process(pixelBuffer)
             guard let self else { return }
             DispatchQueue.main.async { self.publish(frame) }
@@ -74,17 +75,66 @@ final class HandPoseManager {
 
     // MARK: - Public control
 
+    /// A screen asked for the camera and hasn't released it. Survives a
+    /// suspension, so `resume()` knows whether to bring the camera back.
+    private var isCameraWanted = false
+
+    /// The app is out of the foreground (see `suspend()`).
+    private var isSuspended = false
+
     /// Requests camera permission (if needed) and starts the camera.
     /// Safe to call multiple times. Call from the main thread (e.g. `.onAppear`).
+    /// While suspended it only records the request; `resume()` acts on it.
     func start() {
+        isCameraWanted = true
+        guard !isSuspended else { return }
         camera.start { [weak self] status in
             self?.authorizationStatus = status
         }
     }
 
     func stop() {
+        isCameraWanted = false
         camera.stop()
         bufferSize = .zero
+    }
+
+    /// The app is leaving the foreground: stop all GPU work. Call on
+    /// `.inactive`, while the GPU is still allowed, so a frame already being
+    /// processed can finish before the app reaches the background.
+    func suspend() {
+        guard !isSuspended else { return }
+        isSuspended = true
+        camera.performOnVideoQueue { [processor] in processor.suspend() }
+        camera.stop()
+    }
+
+    /// Back in the foreground: restarts the camera, but only if a screen
+    /// still wants it, so returning to the menu doesn't switch it on.
+    func resume() {
+        guard isSuspended else { return }
+        isSuspended = false
+        camera.performOnVideoQueue { [processor] in processor.resume() }
+        if isCameraWanted { start() }
+    }
+
+    /// Until calibration passes, only someone sitting in `frame` (view space,
+    /// laid out in `viewSize`) can be the player.
+    func setPlayerZone(_ frame: CGRect, in viewSize: CGSize) {
+        let zone = PlayerSelector.Zone(frame: frame, viewSize: viewSize, gravity: camera.previewGravity)
+        camera.performOnVideoQueue { [processor] in processor.setPlayerZone(zone) }
+    }
+
+    /// Locks onto whoever is the player right now — the person who just
+    /// calibrated. Nobody else can take over until `releasePlayer()`.
+    func lockOntoPlayer() {
+        guard let playerBody else { return }
+        camera.performOnVideoQueue { [processor] in processor.lockOntoPlayer(playerBody) }
+    }
+
+    /// Forgets the locked player, so the next calibration picks afresh.
+    func releasePlayer() {
+        camera.performOnVideoQueue { [processor] in processor.releasePlayer() }
     }
 
     /// Writes one frame's result. Only changed values are written, so views

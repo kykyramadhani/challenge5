@@ -1,6 +1,6 @@
 # PlayFeat
 
-A hand-tracking cooking game made with and for the community at Puspandi
+A hand-tracking cooking game made with and for the community at PUSPADI
 (Pusat Pemberdayaan Penyandang Disabilitas), Bali — Apple Developer Academy
 Challenge 5 & Final Challenge.
 
@@ -8,9 +8,6 @@ The front camera fills the screen and Vision tracks the player's hands and
 upper body. Players pinch floating ingredient bubbles, drag them onto a plate
 to match the recipe, then carry the finished dish to the bell. No touch input
 is needed during play.
-
-The project started as an app and is now a game. The codebase is being
-refactored to match — see **Current development phase**.
 
 ## Platforms
 
@@ -44,9 +41,7 @@ refactored to match — see **Current development phase**.
 
 No third-party dependencies and no SPM packages.
 
-## Game flow
-
-### App flow
+### Game flow
 
 ```
 Launch screen → Splash → Onboarding (first launch only) → Game Opening (main menu)
@@ -88,7 +83,10 @@ Shared by every role:
   ships now) completes it the moment every requirement is delivered;
   `.multiplayer` keeps it active until Front House serves it — syncing that
   across the three roles' iPads is still to do (see the multiplayer plan).
-- `KitchenShiftView` (UI/Screens/): camera, 3-2-1 (`ShiftCountdown`: the
+- `KitchenShiftView` (UI/Screens/): camera, then `ShiftPhase`: the seat
+  check (`SeatCalibrationView`, every shift — whoever passes is locked in as
+  the player with `lockOntoPlayer()`, released when the shift ends; skipped on
+  the simulator and with `-debugGameplay`), then 3-2-1 (`ShiftCountdown`: the
   clock waits for the count to end *and* `HandPoseManager.isReceivingFrames`,
   holding on 1 if needed), order rail, shift clock, a zoomed-in panel, the
   SpriteKit layer, game over.
@@ -285,9 +283,11 @@ Summary:
 - **camelCase** for variables, properties, functions and enum cases
   (`dishTimeFraction`, `case waitingToServe`).
 - **UpperCamelCase** for types and protocols (`GameStateManager`, `HandInputSource`).
-- No `snake_case`, no Hungarian notation, no type prefixes. The existing `vc_`
-  helpers (`vc_distance`, `vc_clamped`) predate this rule; rename them when you
-  touch them.
+- No `snake_case`, no Hungarian notation, no type prefixes.
+- Shared point and number maths (`distance(to:)`, `eased(toward:by:)`,
+  `clamped(to:)`) lives in `Shared/Extensions/CGPoint+Distance.swift` and is
+  `nonisolated`, so the Vision pipeline can use it too. Use it instead of
+  writing another `hypot` or `min(max())`.
 - One main type per file, and the file is named after it. Extensions that split
   a type by concern go in a folder named after the type
   (`Scenes/GameScene/Input.swift`).
@@ -296,6 +296,7 @@ Summary:
   //
   //  FileName.swift
   //  PlayFeat
+  //  Created by <Name> on <Current Date>.
   //
   //  One or two lines on what this type is for and why it exists.
   //
@@ -322,18 +323,35 @@ Summary:
 
 - An asset's lookup name is its **imageset folder name**, and lookups are
   **case-sensitive**. `ArtAssetTests` catches mismatches.
-- Two-part start: iOS shows `Launch Screen.storyboard` (repo root) while the
-  app loads, then `SplashScreenView` plays the animated mascot. The launch
+- Two-part start: iOS shows `PlayFeat/Resources/Launch Screen.storyboard` while
+  the app loads, then `SplashScreenView` plays the animated mascot. The launch
   screen is only the plain `SplashBackground` color — the splash's first frame —
   so the handover has no visible seam. Don't add the mascot or text to it: the
   splash fades them in from nothing, and launch screens can't use Atkinson.
-  It's wired through `UILaunchStoryboardName` in `PlayFeat/Info.plist`, not a
-  build setting, because `project.pbxproj` is gitignored. iOS caches launch
-  screens: delete the app (or reset the simulator) to see a change.
+- Because `project.pbxproj` is gitignored, anything only the project file knows
+  about never reaches a teammate's clone. So the launch screen is wired through
+  tracked files: the storyboard lives inside the synchronized `PlayFeat/` folder
+  (bundled automatically), and `UILaunchStoryboardName` is in
+  `PlayFeat/Info.plist`. Keep both there even if Xcode's target settings also
+  set them. iOS caches launch screens: delete the app (or reset the simulator)
+  to see a change.
 - `#expect` captures its argument immutably. Move a `mutating` call into a
   `let` before the macro (see `HoverDetectorTests`).
 - Vision runs on a background video queue. Anything it publishes must be sent
   to the main thread.
+- **No GPU work outside the foreground.** iOS rejects it
+  (`kIOGPUCommandBufferCallbackErrorBackgroundExecutionNotPermitted`). Vision
+  and SpriteKit both use the GPU, so leaving `.active` is handled in two places:
+  - `PlayFeatApp` (app-wide): `.inactive` → `HandPoseManager.suspend()` drops
+    frames before Vision and stops the camera; `.background` also fades the
+    music out. `.active` resumes both (the camera only if a screen still
+    wants it).
+  - `GameplayView` (per run): pauses the clock and `SpriteView` at `.inactive`
+    too, since hand tracking is already off. A brief `.inactive` resumes at
+    once; returning from `.background` plays a 3-2-1 first. A run killed by
+    iOS while in the background is lost (no mid-run save).
+  - `scenePhase` is forwarded explicitly into `ContentView`, because
+    `PhoneSafeSides` hosts the app in its own hosting controller.
 
 ## Testing
 
@@ -359,45 +377,10 @@ Summary:
 - Claude: create or switch to the right branch **before** editing code, and
   commit or push only when asked.
 
-## Current development phase
-
-Refactoring from an "app" structure to a game structure (one branch or commit
-per step, ⌘U before and after).
-
-Done:
-
-- Folder restructure, tests split by feature
-- `ObservableObject` → `@Observable`
-- Singletons replaced with dependency injection (`AudioManager`,
-  `CameraManager`, `InventoryManager`); `ClickButton` plays the UI click
-- Strategy pattern for input modes (`HandInputMode`: one-hand / two-hand)
-- `GameState` cleanup: flags and tokens folded into states and events;
-  `GameStateManager` split (`PlayClock`, `Difficulty`, `RecipeDeck`, ...)
-- Protocols for gameplay dependencies: `GameScene` and `GameStateManager`
-  depend on `HandInputSource` and `SoundPlaying`, not on `HandPoseManager` /
-  `AudioManager`. Tests use `ScriptedHandInput` and `SoundRecorder`.
-- Navigation: `NavigationStack` replaced by a `switch` over `AppScreen`;
-  the unused `GameOption` / `GameCard` carousel removed
-
-Next:
-
-1. End-to-end gameplay test: a `ScriptedHandInput` hand carries an ingredient
-   onto the plate in a real `GameScene`
-2. Split `HandPoseManager` into camera session, Vision processing and gesture
-   tracking
-3. Move game-event sounds out of `GameStateManager` into a `GameAudio` that
-   reacts to game events
-
+## Reference
 `CODE_AUDIT.md` lists known bugs and tech debt found in an earlier audit.
 
 ## Planned: multiplayer (two-iPad co-op)
-
-Not implemented yet. Two players, each on their own iPad, cook together in
-**one shared kitchen** (one recipe, one plate, shared lives and score),
-connected through a Game Center real-time match. Each iPad keeps tracking only
-its own player with the existing single-player Vision pipeline; only game
-state and hand cursors cross the network, and the host's `GameStateManager` is
-the source of truth.
 
 The full design, message list, open questions and step order are in
 [`docs/multiplayer-plan.md`](docs/multiplayer-plan.md). Read it before starting
