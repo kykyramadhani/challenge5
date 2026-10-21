@@ -123,7 +123,7 @@ private struct HostedContent<Content: View>: UIViewControllerRepresentable {
 
 enum DesignCanvas {
     /// The page size the art and every hardcoded point value assume.
-    static let size = TutorialView.pageSize
+    static let size = CGSize(width: 1376, height: 1034)
 
     /// The width `available` would have if it were the canvas's shape.
     ///
@@ -221,6 +221,9 @@ struct DesignCanvasDebugBadge: View {
 ///                                 8s, to exercise a mid-game rotation
 ///     -debugGameplay YES          skip onboarding, tutorial and seat check
 ///                                 and open straight onto the board
+///     -debugTracking YES          overlay each hand's tracked side, whether
+///                                 it is seen or predicted, and every chop
+///                                 decision with its reason
 ///     -debugLandscape YES         turn a phone to landscape at launch, for
 ///                                 checking the real Dynamic Island insets
 ///                                 (which -debugScreenSize can't fake)
@@ -240,6 +243,20 @@ enum DebugLaunch {
 
     static var skipToGameplay: Bool {
         UserDefaults.standard.bool(forKey: "debugGameplay")
+    }
+
+    /// The role `-debugGameplay` opens: `-debugRole chef` or
+    /// `-debugRole frontHouse`, else Procurement.
+    static var role: KitchenRole {
+        switch UserDefaults.standard.string(forKey: "debugRole") {
+        case "chef": .chef
+        case "frontHouse": .frontHouse
+        default: .procurement
+        }
+    }
+
+    static var showsTrackingDiagnostics: Bool {
+        UserDefaults.standard.bool(forKey: "debugTracking")
     }
 
     static func applyLandscapeIfRequested() {

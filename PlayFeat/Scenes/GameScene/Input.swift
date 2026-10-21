@@ -38,6 +38,8 @@ extension GameScene {
         for hand in hands {
             let cursor = convertPoint(fromView: handInput.cursor(for: hand, in: viewSize))
             updateCursorNode(for: hand.id, at: cursor, isFist: hand.isClosedFist)
+            // Fades through a tracking gap instead of blinking out.
+            cursorNodes[hand.id]?.alpha = max(0.35, hand.trackingConfidence)
         }
         retireVanishedGlows(stillLive: liveIDs)
 
@@ -68,6 +70,15 @@ extension GameScene {
             let state: HandState = hand.isClosedFist ? .fist : hand.isOpenHand ? .open : .unknown
             var tracker = trackers[hand.id] ?? HandTracker()
             tracker.lastSeen = now
+
+            // Coasting on a predicted position through a tracking gap: keep
+            // the hand (and whatever it holds) alive, but let it do nothing —
+            // no grab, release, plate drop, serve or bin dwell — until Vision
+            // actually sees it again.
+            guard !hand.isPredicted else {
+                trackers[hand.id] = tracker
+                continue
+            }
 
             var handPoints = handInput.jointPoints(for: hand, in: viewSize)
                 .map(convertPoint(fromView:))

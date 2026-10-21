@@ -1,8 +1,10 @@
 //
-//  SwiftUIView.swift
-//  GetCooking
+//  HandData.swift
+//  PlayFeat
 //
-//  Created by Owen Limantoro on 12/08/26.
+//  One tracked hand as published to the UI and the scenes: where it is, whether
+//  it is pinching, which of the player's hands it is, and how sure the tracker
+//  is that it is really there right now.
 //
 
 import SwiftUI
@@ -23,7 +25,20 @@ nonisolated struct HandData: Identifiable, Equatable {
     var isClosedFist: Bool
     /// One chain of joints per finger (thumb → little), normalized Vision space.
     var skeleton: [[CGPoint]]
+    /// The player's own left or right hand, or nil while the tracker isn't
+    /// sure. Anatomical, so it doesn't depend on the preview being mirrored.
+    var side: HandSide? = nil
+    /// Vision didn't see this hand this frame: it is coasting through a short
+    /// gap, at a position estimated from its recent movement. Fine to draw;
+    /// never a reason to act.
+    var isPredicted = false
+    /// 1 while the hand is seen, falling toward 0 as a gap goes on.
+    var trackingConfidence: CGFloat = 1
 
     /// Every detected joint of this hand as a flat list.
     var recognizedJoints: [CGPoint] { skeleton.flatMap { $0 } }
+
+    /// Seen this frame and known to be the left or right hand — what any
+    /// two-handed gesture needs before it may count.
+    var isReliablyIdentified: Bool { !isPredicted && side != nil }
 }

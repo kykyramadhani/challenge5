@@ -105,9 +105,12 @@ nonisolated struct PlayerSelector: Sendable {
         if let anchor {
             return Self.index(in: bodies, nearest: anchor, tolerance: followTolerance)
         }
-        return bodies.firstIndex { body in
-            body.scale > 0 && (zone?.contains(body, bufferSize: bufferSize) ?? true)
-        }
+        // Before the lock: the nearest person (widest shoulders) in the frame.
+        // Vision lists bodies in no particular order, so "the first one" could
+        // be a helper leaning in rather than the person in the seat.
+        return bodies.indices
+            .filter { bodies[$0].scale > 0 && (zone?.contains(bodies[$0], bufferSize: bufferSize) ?? true) }
+            .max { bodies[$0].scale < bodies[$1].scale }
     }
 
     /// The body closest to `anchor`, if any is close enough to be the same

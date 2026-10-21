@@ -207,8 +207,26 @@ nonisolated final class HumanBodyPoseManager {
         )
     }
 
-    /// Picks the hands belonging to `bodies[player]`, using everyone else
-    /// Vision found in the same frame to rule out their hands.
+    /// Which of `body`'s wrists a hand's own wrist sits on, or nil when it is
+    /// near neither, or not clearly nearer one than the other (crossed or
+    /// overlapping hands) — a wrong side is worse than no side.
+    static func side(
+        ofHandWrist hand: CGPoint,
+        on body: BodyCandidate,
+        tolerance: CGFloat
+    ) -> HandSide? {
+        let reach = body.scale * tolerance
+        let toLeft = body.leftWrist.map { $0.distance(to: hand) } ?? .greatestFiniteMagnitude
+        let toRight = body.rightWrist.map { $0.distance(to: hand) } ?? .greatestFiniteMagnitude
+        let nearest = min(toLeft, toRight)
+        guard nearest <= reach else { return nil }
+        // The other wrist must be clearly further, or the vote is a coin toss.
+        guard max(toLeft, toRight) >= nearest * 1.5 else { return nil }
+        return toLeft < toRight ? .left : .right
+    }
+
+    /// Picks the hands belonging to the player, using the bodies Vision found
+    /// in the same frame.
     static func playerHandIndices(
         handWrists: [CGPoint],
         bodies: [BodyCandidate],

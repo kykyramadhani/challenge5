@@ -42,6 +42,10 @@ final class HandPoseManager {
 
     var isHandVisible: Bool { !hands.isEmpty }
 
+    /// The camera has delivered a frame since it was last started, so the
+    /// preview is live and hands can be tracked.
+    var isReceivingFrames: Bool { bufferSize != .zero }
+
     // MARK: - Camera and pipeline
 
     /// The camera. Tuning (zoom, Center Stage, capture width) lives on it.
@@ -92,6 +96,7 @@ final class HandPoseManager {
     func stop() {
         isCameraWanted = false
         camera.stop()
+        bufferSize = .zero
     }
 
     /// The app is leaving the foreground: stop all GPU work. Call on

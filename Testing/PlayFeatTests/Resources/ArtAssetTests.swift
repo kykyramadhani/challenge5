@@ -36,6 +36,29 @@ struct ArtAssetTests {
         #expect(TrimmedArt.image(named: GameArt.plate) != nil)
     }
 
+    /// The Procurement kitchen's art, all exported from Figma by name. A
+    /// missing one leaves an empty crate, ticket cell or bubble on screen.
+    @Test func theProcurementKitchenArtExists() {
+        for ingredient in KitchenIngredient.allCases {
+            #expect(UIImage(named: ingredient.rawImageName) != nil, "missing '\(ingredient.rawImageName)'")
+            #expect(UIImage(named: ingredient.preparedImageName) != nil, "missing '\(ingredient.preparedImageName)'")
+            if let icon = ingredient.preparation.iconName {
+                #expect(UIImage(named: icon) != nil, "missing '\(icon)'")
+            }
+        }
+        let furniture = [
+            "SpaceBackground", "PlayFeatLogo", "RoleAlienChef", "PlayRoleButton", "KitchenSink",
+            "PortalFrontHouse", "PortalKitchen", "TimerBackground", "Heart", "PrepTable", "CuttingBoard",
+            "OrderTicket", "HeldBubble", "TrashCan", "PanelScrew", "MushroomCut1", "MushroomCut2",
+            "ChopPatternArrow", "WashPatternArrow", TrayArt.trayImage, TrayArt.dirtImage,
+            "PortalProcurement", "StoveBurner", "BoilPot", "BoilPotTuber", "BrothPot", "BrothPotSoup",
+            "Fryer", "FryerTentacle", "Dispenser", TrayArt.drinkImage,
+        ]
+        for name in furniture {
+            #expect(UIImage(named: name) != nil, "missing '\(name)'")
+        }
+    }
+
     /// The serving station's two pieces. `BellNode` builds them by name, and a
     /// missing one leaves the player carrying the plate at empty space with no
     /// other symptom.

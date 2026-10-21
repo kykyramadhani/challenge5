@@ -31,6 +31,9 @@ nonisolated enum HandClassifier {
         /// grab has to be seen to count.
         let pinchRatio: CGFloat?
         let skeleton: [[CGPoint]]
+        /// Which of the player's hands Vision thinks this is, already corrected
+        /// for the mirrored buffer. One noisy vote — see `HandIdentityTracker`.
+        var side: HandSide? = nil
     }
 
     enum ClassificationError: Error {
@@ -111,7 +114,21 @@ nonisolated enum HandClassifier {
             wrist: wrist,
             palmLength: palmLength,
             pinchRatio: pinch,
-            skeleton: skeleton
+            skeleton: skeleton,
+            side: playerSide(fromVisionChirality: observation.chirality)
         )
+    }
+
+    /// Vision's chirality, as the player's own hand.
+    ///
+    /// Swapped for the same reason `HumanBodyPoseManager` swaps the body's
+    /// wrists: the capture connection mirrors the buffer before Vision sees
+    /// it, so a left hand looks like a right one.
+    static func playerSide(fromVisionChirality chirality: VNChirality) -> HandSide? {
+        switch chirality {
+        case .left: .right
+        case .right: .left
+        default: nil
+        }
     }
 }

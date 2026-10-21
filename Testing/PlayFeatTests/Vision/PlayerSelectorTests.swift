@@ -62,6 +62,26 @@ struct PlayerSelectorTests {
         #expect(selector.playerIndex(in: bodies, bufferSize: Self.bufferSize) == 1)
     }
 
+    /// A helper leaning into the frame beside the player: both are inside,
+    /// and the one in the seat (nearer, so wider shoulders) is the player,
+    /// whichever order Vision lists them in.
+    @Test func beforeTheLockTheNearestBodyInTheFrameWins() {
+        let helper = body(at: 0.45, span: 0.15)
+        let player = body(at: 0.55, span: 0.30)
+        let selector = selector(zoneAroundX: 0.5)
+
+        #expect(selector.playerIndex(in: [helper, player], bufferSize: Self.bufferSize) == 1)
+        #expect(selector.playerIndex(in: [player, helper], bufferSize: Self.bufferSize) == 0)
+    }
+
+    /// Before any frame is set (the kitchen before its seat check), the
+    /// nearest person in view is the player.
+    @Test func withoutAFrameTheNearestBodyIsThePlayer() {
+        let bodies = [body(at: 0.2, span: 0.15), body(at: 0.7, span: 0.30)]
+
+        #expect(PlayerSelector().playerIndex(in: bodies, bufferSize: Self.bufferSize) == 1)
+    }
+
     @Test func beforeTheLockNobodyInTheFrameMeansNoPlayer() {
         let selector = selector(zoneAroundX: 0.8)
 

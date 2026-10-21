@@ -68,6 +68,93 @@ Launch screen → Splash → Onboarding (first launch only) → Game Opening (ma
 - Each run creates a fresh `GameStateManager`, so Play Again always starts clean.
 - The Shop exists but is "coming soon".
 
+### Kitchen roles (v2 playtest)
+
+The app now opens on `TitleScreenView` → `RoleSelectView` → `ProcurementView`
+`ChefView` or `FrontHouseView` (`AppScreen.title` / `.roleSelect` /
+`.procurement` / `.chef` / `.frontHouse`). The old main menu and sandwich game
+above are still in the code but no longer reached from launch.
+
+Shared by every role:
+
+- `KitchenShift` (Game/Kitchen/): `OrderQueue` (4 orders, leftmost active,
+  60 s each), the play clock, lives, served count. Each role's game owns one.
+  When the active order is done depends on `KitchenMode`: `.playtest` (what
+  ships now) completes it the moment every requirement is delivered;
+  `.multiplayer` keeps it active until Front House serves it — syncing that
+  across the three roles' iPads is still to do (see the multiplayer plan).
+- `KitchenShiftView` (UI/Screens/): camera, then `ShiftPhase`: the seat
+  check (`SeatCalibrationView`, every shift — whoever passes is locked in as
+  the player with `lockOntoPlayer()`, released when the shift ends; skipped on
+  the simulator and with `-debugGameplay`), then 3-2-1 (`ShiftCountdown`: the
+  clock waits for the count to end *and* `HandPoseManager.isReceivingFrames`,
+  holding on 1 if needed), order rail, shift clock, a zoomed-in panel, the
+  SpriteKit layer, game over.
+- `KitchenScene` (Scenes/KitchenScene/): hand glow and GameScene's
+  grab/carry/release rules; each role subclasses it to say what can be picked
+  up and where it can go. `KitchenLayout` maps Figma rects (1376×1034) to the
+  screen; SwiftUI draws from each role's layout and the scene hit-tests the
+  same rects. On the simulator a finger stands in for a hand
+  (`-debugGameplay YES`, plus `-debugRole chef` or `-debugRole frontHouse`).
+- `KitchenOrder.random` deals one dish per tray compartment (`TrayCompartment`:
+  vegetable, dessert, soup, main — top-left to bottom-right) and maybe a drink, so every role's order
+  fits Front House's tray. Its `stage` (waiting → eating → finishedEating) is
+  the customer's side; the active order is the leftmost waiting one, and only
+  it is on the clock.
+- Routing follows `Preparation`: mushroom is chopped by Procurement, then
+  sent to Front House; coral lettuce (`.soup`), bubble tuber (`.boil`) and
+  tentacle (`.fry`) go raw to the Chef, who cooks them and sends them to Front
+  House; star jelly (dessert) goes straight to Front House. A correct delivery
+  ticks one open requirement on the active order at once.
+- `HandIdentityTracker` gives every hand a stable ID and an anatomical
+  `side` (chirality + body-wrist votes, never screen x), coasts missed hands
+  on a bounded prediction (`isPredicted`, falling `trackingConfidence`) and
+  recovers a returning hand's ID. Predicted or unidentified hands are drawn
+  but must never trigger gameplay. `-debugTracking YES` shows the overlay.
+- Kitchen art is in `Assets.xcassets/Kitchen`, exported from Figma.
+
+Procurement (`ProcurementGame`, `ProcurementScene`):
+
+- The 3 ingredient cards (`IngredientCardPicker`: 2 for the active order, 1
+  for a later one, only the used card is re-dealt), cutting, washing, trays.
+  Every portal goes through `ProcurementGame.delivery(of:sliced:to:)`.
+- `KitchenCrew` is a timed stand-in for Chef and Front House, not AI.
+- Chopping is `ChopDetector` (Vision/Gestures/): one chop per real swap
+  between left-up/right-down and left-down/right-up across the board's
+  middle, with a dead band; scrubbing is the GestureLab `MotionRecognizer`
+  (open hands circling).
+
+Chef (`ChefGame`, `ChefScene`):
+
+- 5 floating raw bubbles (`ChefBubblePicker`): one per dish still needed,
+  the active order's first, then the next orders'; a used bubble is replaced
+  in its own slot and flies in from the Procurement portal.
+- `CookingPot` per station: the boiling pot (tuber) and fryer (tentacle)
+  cook by themselves; coral lettuce in the broth pot opens `SoupPanel` and
+  only becomes soup through `StirGesture` (pinched hands circling — the
+  opposite of washing's open hands). The finished dish floats over its pot
+  until carried through the Front House portal (`ChefGame.delivery(of:)`).
+- Playtest stand-in for Procurement: mushroom and star jelly requirements are
+  ticked off as soon as their order becomes active.
+
+Front House (`FrontHouseGame`, `FrontHouseScene`):
+
+- 5 floating finished dishes (`BubbleRack`), arriving from the Chef portal
+  (left) or the Procurement portal (right); clean trays on the stand, counted
+  by the shared `KitchenCrew.cleanTrays`.
+- A clean tray set on the counter becomes the `ServingTray`; each dish only
+  fits its own compartment, and only if the active order wants it. A drink is
+  poured at the dispenser (`DispenserPanel`, `LeverGesture`: pinch, pull left
+  to open, push right to close once full).
+- The complete tray carried onto the active ticket serves it: the order keeps
+  its place on the rail, `.eating` for `eatTime` (3 s, tray on the green
+  table), then `.finishedEating` (dirty tray there). The next waiting order
+  is active at once (`OrderQueue.activeIndex`). Nothing new is dealt until
+  the dirty tray goes through the Procurement portal; then the order is
+  complete, the rail slides left and a new order arrives at the end, in both
+  modes. At most `tableSeats` (2) trays on the table. The playtest stand-in
+  washes returned trays and sends them back clean after `washTime`.
+
 ### One round
 
 1. A recipe card shows the dish and its ingredients, and the dish clock starts.

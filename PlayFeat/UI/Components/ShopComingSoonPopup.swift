@@ -7,8 +7,11 @@
 
 import SwiftUI
 
-/// A "coming soon" popup for the not-yet-built shop, with the game mascot.
+/// A "coming soon" popup for something not built yet, with the game mascot.
+/// Says the shop by default; role selection reuses it for the unplayable roles.
 struct ShopComingSoonPopup: View {
+    var title: LocalizedStringKey = "Shop Opening Soon!"
+    var message: LocalizedStringKey = "Our shop is under maintanence — check back soon to spend your coins!"
     var onClose: () -> Void
 
     var body: some View {
@@ -23,11 +26,11 @@ struct ShopComingSoonPopup: View {
                     .scaledToFit()
                     .frame(width: 260, height: 260)
 
-                Text("Shop Opening Soon!")
+                Text(title)
                     .font(.atkinson(size: 44, weight: .bold))
                     .foregroundStyle(.appTertiaryText)
 
-                Text("Our shop is under maintanence — check back soon to spend your coins!")
+                Text(message)
                     .font(.atkinson(size: 24, weight: .medium))
                     .foregroundStyle(.appTertiaryText)
                     .multilineTextAlignment(.center)

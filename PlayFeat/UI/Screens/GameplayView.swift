@@ -91,6 +91,11 @@ struct GameplayView: View {
         !sceneManager.isInTutorial && (hasCalibrated || !needsCalibration)
     }
 
+    private var isCameraDenied: Bool {
+        handPoseManager.authorizationStatus == .denied
+            || handPoseManager.authorizationStatus == .restricted
+    }
+
     /// The hidden Stop control is only live during actual play: the countdown
     /// and the game-over cover have their own flow.
     private var canStop: Bool {
@@ -130,12 +135,22 @@ struct GameplayView: View {
                             // anyone else who walks into shot is ignored.
                             handPoseManager.lockOntoPlayer()
                             hasCalibrated = true
+                        } onBack: {
+                            sceneManager.goToMainMenu()
                         }
                         .designScaled()
                     } else {
                         gameBody
                     }
                 }
+            }
+
+            // Over the seat check and the board alike. Information only, so it
+            // never takes the touches the Back and Stop controls need.
+            if isCameraDenied {
+                CameraPermissionDeniedOverlay()
+                    .designScaled()
+                    .allowsHitTesting(false)
             }
 
             #if DEBUG
@@ -191,12 +206,6 @@ struct GameplayView: View {
                 if isCountingDown {
                     GetReadyOverlay(count: countdown)
                         .ignoresSafeArea()
-                }
-
-                if handPoseManager.authorizationStatus == .denied
-                    || handPoseManager.authorizationStatus == .restricted
-                {
-                    CameraPermissionDeniedOverlay()
                 }
 
                 if canStop {
