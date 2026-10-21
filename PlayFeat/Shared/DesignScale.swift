@@ -123,7 +123,7 @@ private struct HostedContent<Content: View>: UIViewControllerRepresentable {
 
 enum DesignCanvas {
     /// The page size the art and every hardcoded point value assume.
-    static let size = TutorialView.pageSize
+    static let size = CGSize(width: 1376, height: 1034)
 
     /// The width `available` would have if it were the canvas's shape.
     ///
