@@ -30,15 +30,6 @@ struct FrontHouseLayout: KitchenLayout {
     var drinkBubble: CGRect { rect(x: 1164, y: 568, width: 161.3, height: 161.3, .trailing) }
     var assemblyTray: CGRect { rect(x: 532, y: 713, width: 336.9, height: 273.8, .center) }
 
-    /// Where the drink stands, at the assembly tray's bottom-left corner.
-    var drinkSpot: CGRect {
-        let tray = assemblyTray
-        let size = CGSize(width: tray.width * TrayArt.drinkSize.width, height: tray.height * TrayArt.drinkSize.height)
-        return CGRect(x: tray.minX + tray.width * TrayArt.drinkCenter.x - size.width / 2,
-                      y: tray.minY + tray.height * TrayArt.drinkCenter.y - size.height / 2,
-                      width: size.width, height: size.height)
-    }
-
     func area(of compartment: TrayCompartment) -> CGRect {
         switch compartment {
         case .vegetable: rect(x: 555.8, y: 732, width: 108.3, height: 108.3, .center)
@@ -79,14 +70,13 @@ struct FrontHouseLayout: KitchenLayout {
 
     // MARK: - Drops
 
-    /// Every drop target and its area. The tray includes the drink's spot
-    /// at its corner; `activeTicket` is where the active order sits on the
-    /// rail.
+    /// Every drop target and its area. `activeTicket` is where the active
+    /// order sits on the rail.
     func dropTargets(activeTicket: Int) -> [(zone: DropZone, rect: CGRect)] {
         let compartments = TrayCompartment.allCases.map { (zone: DropZone.compartment($0), rect: area(of: $0)) }
-        return compartments + [
-            (.assemblyTray, assemblyTray.union(drinkSpot)),
-            (.activeOrder, trayTicket(activeTicket)),
+        let ticket = activeTicket < Self.ticketCount ? [(zone: DropZone.activeOrder, rect: trayTicket(activeTicket))] : []
+        return compartments + ticket + [
+            (.assemblyTray, assemblyTray),
             (.procurementPortal, procurementPortal),
         ]
     }

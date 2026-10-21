@@ -65,6 +65,7 @@ struct FrontHouseGameTests {
     @Test func fiveBubblesTheActiveOrdersFirstThenTheNext() {
         let game = makeGame([order(Self.full), order([.bubbleTuber, .starJelly])])
         #expect(game.bubbles.map { $0?.ingredient } == Self.full + [.bubbleTuber])
+        #expect(game.bubbles.compactMap { $0 }.count == BubblePicker.slotCount)
     }
 
     /// A dish on the tray isn't supplied again; the freed bubble looks ahead.
@@ -81,6 +82,34 @@ struct FrontHouseGameTests {
         for index in before.indices where index != used {
             #expect(game.bubbles[index] == before[index])
         }
+    }
+
+    /// A bubble let go away from every target stays there, until it's used.
+    @Test func aDishCanBeLeftAnywhere() throws {
+        let game = makeGame([order(Self.full)])
+        let item = try dish(.coralLettuce, in: game)
+        game.place(item, at: CGPoint(x: 0.5, y: 0.6))
+        #expect(game.bubbleSpots[item] == CGPoint(x: 0.5, y: 0.6))
+
+        game.drop(.cleanTray, at: .assemblyTray)
+        game.drop(item, at: .compartment(.soup))
+        #expect(game.bubbleSpots[item] == nil)
+    }
+
+    /// Five dish bubbles, and the glass on top of them.
+    @Test func fiveDishBubblesPlusTheGlass() {
+        let game = makeGame([order(Self.full, drink: true), order([.bubbleTuber, .starJelly])])
+        #expect(game.bubbles.compactMap { $0 }.count == BubblePicker.slotCount)
+        _ = pourAGlass(game, from: 0)
+        #expect(game.isDrinkReady)
+        #expect(game.bubbles.compactMap { $0 }.count == BubblePicker.slotCount)
+    }
+
+    @Test func theGlassCanBeLeftAnywhere() {
+        let game = makeGame([order(Self.full, drink: true)])
+        _ = pourAGlass(game, from: 0)
+        game.place(.drink, at: CGPoint(x: 0.3, y: 0.4))
+        #expect(game.bubbleSpots[.drink] == CGPoint(x: 0.3, y: 0.4))
     }
 
     // MARK: - Clean trays
@@ -164,25 +193,72 @@ struct FrontHouseGameTests {
         #expect(!game.canOpenDispenser, "one glass at a time")
     }
 
-    @Test func theDrinkGoesOnATrayWhoseOrderWantsOne() throws {
-        let game = makeGame([order([.starJelly, .coralLettuce], drink: true)])
-        _ = pourAGlass(game, from: 0)
-        #expect(!game.accepts(.drink, at: .assemblyTray), "no tray yet")
-
+    /// The drink is served on its own, straight to the ticket, and never
+    /// on the tray. Alone it doesn't serve the order.
+    @Test func theDrinkCanBeServedBeforeTheTray() throws {
+        let game = makeGame([order([.starJelly, .coralLettuce], drink: true), order([.tentacle])])
+        let first = game.queue.active.id
+        let clock = pourAGlass(game, from: 0)
         try assemble(game)
-        #expect(!game.tray!.isComplete(for: game.queue.active), "still missing its drink")
-        game.drop(.drink, at: .assemblyTray)
+        #expect(!game.accepts(.drink, at: .assemblyTray))
+        #expect(game.tray!.isComplete(for: game.queue.active), "the tray doesn't wait for the drink")
 
-        #expect(game.tray?.hasDrink == true)
+        game.drop(.drink, at: .activeOrder)
+        #expect(game.queue.active.isDrinkServed)
+        #expect(game.queue.active.id == first, "still waiting for its tray")
         #expect(!game.isDrinkReady)
-        #expect(game.tray!.isComplete(for: game.queue.active))
+
+        game.drop(.servingTray(try #require(game.tray)), at: .activeOrder)
+        #expect(game.queue.orders[0].stage == .eating)
+        #expect(game.queue.active.id != first)
+        play(game, from: clock, for: FrontHouseGame.eatTime + 0.5)
+        #expect(game.queue.orders[0].stage == .finishedEating)
+    }
+
+    /// With the tray served and the drink still owed, the order stays
+    /// active and on the clock; the drink completes it.
+    @Test func theDrinkCanBeServedAfterTheTray() throws {
+        let game = makeGame([order([.starJelly, .coralLettuce], drink: true), order([.tentacle])])
+        let first = game.queue.active.id
+        try assemble(game)
+        game.drop(.servingTray(try #require(game.tray)), at: .activeOrder)
+        #expect(game.queue.active.id == first, "not served without its drink")
+        #expect(game.queue.active.isTrayServed)
+        #expect(game.queue.active.stage == .waiting)
+        #expect(game.tray == nil)
+
+        let clock = pourAGlass(game, from: 0)
+        game.drop(.drink, at: .activeOrder)
+        #expect(game.queue.orders[0].stage == .eating)
+        #expect(game.queue.active.id != first, "the next order is active now")
+        play(game, from: clock, for: FrontHouseGame.eatTime + 0.5)
+        #expect(game.queue.orders[0].stage == .finishedEating)
+    }
+
+    /// A served tray can't be built or served again while the drink is owed.
+    @Test func aServedTrayIsServedOnce() throws {
+        let game = makeGame([order([.starJelly, .coralLettuce], drink: true), order([.starJelly, .coralLettuce])])
+        try assemble(game)
+        game.drop(.servingTray(try #require(game.tray)), at: .activeOrder)
+        game.drop(.cleanTray, at: .assemblyTray)
+        #expect(!game.accepts(try dish(.starJelly, in: game), at: .compartment(.dessert)))
+    }
+
+    /// Running out of time with only the tray served still costs a life, and
+    /// the served tray goes back to be washed.
+    @Test func anOrderWaitingForItsDrinkStillExpires() throws {
+        let game = makeGame([order([.starJelly, .coralLettuce], drink: true)], cleanTrays: 1)
+        try assemble(game)
+        game.drop(.servingTray(try #require(game.tray)), at: .activeOrder)
+        play(game, from: 0, for: OrderQueue.timeLimit + 0.5)
+        #expect(game.shift.lives == KitchenShift.startingLives - 1)
+        #expect(game.crew.dirtyTrays == 1)
     }
 
     @Test func noDrinkForAnOrderThatDoesNotWantOne() throws {
         let game = makeGame([order([.starJelly, .coralLettuce])])
         _ = pourAGlass(game, from: 0)
-        try assemble(game)
-        #expect(!game.accepts(.drink, at: .assemblyTray))
+        #expect(!game.accepts(.drink, at: .activeOrder))
     }
 
     // MARK: - Serving, eating and the dirty tray
@@ -267,15 +343,25 @@ struct FrontHouseGameTests {
         #expect(game.queue.orders[0].stage == .finishedEating)
     }
 
-    /// Two trays on the table at most, so the active ticket stays on the rail.
-    @Test func atMostTwoTraysOnTheTable() throws {
-        let game = makeGame([order([.starJelly, .coralLettuce])], cleanTrays: 3)
+    /// All three tickets can be served; then the next order waits off the
+    /// rail, off the clock, and gets its full time once a tray is back.
+    @Test func allThreeTicketsCanBeServed() throws {
+        let game = makeGame([order([.starJelly, .coralLettuce])], cleanTrays: 4)
         for _ in 0..<FrontHouseGame.tableSeats {
             try assemble(game)
             game.drop(.servingTray(try #require(game.tray)), at: .activeOrder)
         }
+        #expect(game.traysOnTable == 3)
         try assemble(game)
-        #expect(!game.accepts(.servingTray(try #require(game.tray)), at: .activeOrder))
+        #expect(!game.accepts(.servingTray(try #require(game.tray)), at: .activeOrder), "no fourth seat")
+
+        let clock = play(game, from: 0, for: OrderQueue.timeLimit + 5)
+        #expect(game.shift.lives == KitchenShift.startingLives, "the waiting order is off the clock")
+
+        game.drop(.dirtyTray, at: .procurementPortal)
+        play(game, from: clock, for: 1)
+        #expect(game.queue.activeIndex == 2)
+        #expect(game.shift.activeFractionLeft > 0.9)
     }
 
     /// Playtest: the stand-in Procurement washes a returned tray and it comes

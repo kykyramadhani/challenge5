@@ -9,7 +9,7 @@
 
 import Foundation
 
-enum CarriedItem: Equatable {
+enum CarriedItem: Hashable {
     /// Raw, taken from one of the floating slots: a Procurement card or a
     /// Chef bubble.
     case ingredient(KitchenIngredient, cardSlot: Int)
@@ -45,7 +45,8 @@ nonisolated enum DropZone: Hashable {
     /// Front House: where the tray is assembled, and one of its compartments.
     case assemblyTray
     case compartment(TrayCompartment)
-    /// Front House: the active order's ticket, where its tray is served.
+    /// Front House: the active order's ticket, where its tray and its drink
+    /// are served.
     case activeOrder
     case procurementPortal
 

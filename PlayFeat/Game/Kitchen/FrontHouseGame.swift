@@ -9,11 +9,14 @@
 //  The single source of truth the SwiftUI counter and FrontHouseScene read.
 //
 //  An order's lifecycle here: set a clean tray down → fill its compartments
-//  (and a drink if asked) → carry it to the active ticket. Served, it keeps
-//  its place on the rail with its tray on the table, and the next order is
-//  active at once. The customer eats for `eatTime`, a dirty tray appears,
-//  and only once that goes through the Procurement portal is the order
-//  complete: the rail slides left and a new order is dealt at the end.
+//  → carry it to the active ticket. A drink, if asked for, is carried to the
+//  ticket on its own, before or after the tray; the order is only served
+//  once both are there, and stays active and on the clock until then.
+//  Served, it keeps its place on the rail with its tray on the table, and
+//  the next order is active at once. The customer eats for `eatTime`, a
+//  dirty tray appears, and only once that goes through the Procurement
+//  portal is the order complete: the rail slides left and a new order is
+//  dealt at the end.
 //
 //  In the playtest the player is the only Front House and nobody plays the
 //  other roles: dishes arrive as soon as an order wants them, and dirty
@@ -33,9 +36,10 @@ final class FrontHouseGame {
     }
 
     static let eatTime: TimeInterval = 3
-    /// Trays that can be on the table at once, so the active ticket is
-    /// always one of the three on the rail.
-    static let tableSeats = FrontHouseLayout.ticketCount - 1
+    /// Every ticket on the rail can be served. With all of them on the
+    /// table the next order waits off the rail, off the clock, until a dirty
+    /// tray goes back.
+    static let tableSeats = FrontHouseLayout.ticketCount
     /// How long the stand-in Procurement takes to wash a returned tray.
     static let washTime: TimeInterval = 8
     /// How long the tap has to run to fill a glass.
@@ -59,6 +63,9 @@ final class FrontHouseGame {
     /// 0...1 up the glass while pouring.
     private(set) var fill = 0.0
     private(set) var isTapOpen = false
+    /// Bubbles the player let go of away from any target, where they were
+    /// left (fractions of the screen). The rest float in their own slot.
+    private(set) var bubbleSpots: [CarriedItem: CGPoint] = [:]
     /// What hands are carrying, so the counter doesn't also draw it in place.
     private(set) var itemsInHand: [CarriedItem] = []
 
@@ -106,13 +113,12 @@ final class FrontHouseGame {
         case (.cleanTray, .assemblyTray):
             return tray == nil && crew.cleanTrays > 0
         case let (.dish(dish, slot), .compartment(compartment)):
-            guard rack.holds(dish, in: slot), active.stage == .waiting, let tray else { return false }
+            guard rack.holds(dish, in: slot), isAssemblingActiveTray, let tray else { return false }
             return tray.canPlace(dish, in: compartment, for: active)
-        case (.drink, .assemblyTray), (.drink, .compartment):
-            guard isDrinkReady, active.stage == .waiting, let tray else { return false }
-            return tray.canAddDrink(for: active)
+        case (.drink, .activeOrder):
+            return isDrinkReady && active.isDrinkOwed
         case let (.servingTray(carried), .activeOrder):
-            return carried == tray && hasFreeSeat && carried.isComplete(for: active)
+            return carried == tray && isAssemblingActiveTray && hasFreeSeat && carried.isComplete(for: active)
         case (.dirtyTray, .procurementPortal):
             return queue.orders.contains { $0.stage == .finishedEating }
         default:
@@ -125,6 +131,7 @@ final class FrontHouseGame {
     func drop(_ item: CarriedItem, at zone: DropZone) {
         guard accepts(item, at: zone) else { return }
         putBack(item)
+        bubbleSpots[item] = nil
         switch (item, zone) {
         case (.cleanTray, _):
             crew.takeCleanTray()
@@ -134,15 +141,26 @@ final class FrontHouseGame {
             tray?.place(dish, in: compartment)
         case (.drink, _):
             isDrinkReady = false
-            tray?.addDrink()
+            shift.serveActiveDrink()
+            serveActiveOrderIfReady()
         case (.servingTray, _):
-            serveActiveOrder()
+            tray = nil
+            shift.serveActiveTray()
+            serveActiveOrderIfReady()
         case (.dirtyTray, _):
             returnDirtyTray()
         default:
             break
         }
         refreshBubbles()
+    }
+
+    /// A dish or the drink let go away from any target stays there.
+    func place(_ item: CarriedItem, at spot: CGPoint) {
+        switch item {
+        case .dish, .drink: bubbleSpots[item] = spot
+        default: break
+        }
     }
 
     func pickUp(_ item: CarriedItem) {
@@ -161,8 +179,13 @@ final class FrontHouseGame {
 
     private var hasFreeSeat: Bool { traysOnTable < Self.tableSeats }
 
-    private func serveActiveOrder() {
-        tray = nil
+    /// The active order still needs its tray: not served, and not expired.
+    private var isAssemblingActiveTray: Bool { active.stage == .waiting && !active.isTrayServed }
+
+    /// With its tray and its drink both there, the customer starts eating
+    /// and the next order is active.
+    private func serveActiveOrderIfReady() {
+        guard active.isReadyToServe else { return }
         eatingSince[active.id] = now
         shift.serveActiveOrder()
     }
@@ -176,10 +199,19 @@ final class FrontHouseGame {
 
     /// An order is done once its dirty tray is back at Procurement.
     private func returnDirtyTray() {
+        let wasWaitingOffRail = isActiveOrderOffRail
+        sendTrayToProcurement()
+        shift.completeServedOrder()
+        if wasWaitingOffRail { shift.restartActiveClock() }
+    }
+
+    private func sendTrayToProcurement() {
         crew.receiveDirtyTray()
         if shift.mode == .playtest { washedAt.append(now + Self.washTime) }
-        shift.completeServedOrder()
     }
+
+    /// Every ticket is on the table, so the active order isn't shown yet.
+    private var isActiveOrderOffRail: Bool { queue.activeIndex >= FrontHouseLayout.ticketCount }
 
     /// Playtest stand-in for the Procurement player: a returned tray comes
     /// back clean after `washTime`.
@@ -192,11 +224,17 @@ final class FrontHouseGame {
         }
     }
 
-    /// Only a waiting order runs out of time. Whatever was already on its
-    /// tray is thrown away with it; the empty tray stays for the next order.
+    /// Only a waiting order runs out of time — one whose tray is served but
+    /// whose drink isn't too. Whatever was already on its tray is thrown
+    /// away with it; the empty tray stays for the next order, and a tray
+    /// already served goes back to Procurement to be washed.
     private func failExpiredOrder() {
-        guard shift.hasActiveOrderExpired else { return }
-        if tray != nil { tray = ServingTray() }
+        guard shift.hasActiveOrderExpired, !isActiveOrderOffRail else { return }
+        if active.isTrayServed {
+            sendTrayToProcurement()
+        } else if tray != nil {
+            tray = ServingTray()
+        }
         shift.failActiveOrder()
         refreshBubbles()
     }
@@ -204,8 +242,10 @@ final class FrontHouseGame {
     // MARK: - The dispenser
 
     /// Pinching the dispenser zooms in on it, unless a filled glass is
-    /// already waiting.
-    var canOpenDispenser: Bool { station == .counter && !isDrinkReady && !isOver }
+    /// already waiting: one drink at a time.
+    var canOpenDispenser: Bool {
+        station == .counter && !isDrinkReady && !isOver
+    }
 
     func openDispenser() {
         guard canOpenDispenser else { return }
@@ -248,11 +288,12 @@ final class FrontHouseGame {
     /// it.
     var wantedDishes: [KitchenIngredient] {
         let onTray = tray.map { Array($0.dishes.values) } ?? []
-        let current = active.stage == .waiting ? active.items.removingOneOfEach(onTray) : []
+        let current = isAssemblingActiveTray ? active.items.removingOneOfEach(onTray) : []
         return current + queue.upcoming.flatMap(\.items)
     }
 
+    /// Five dish bubbles at most; the glass is extra, one at a time.
     private func refreshBubbles() {
-        rack.refill(wanted: wantedDishes)
+        rack.refill(wanted: wantedDishes, limit: BubblePicker.slotCount)
     }
 }

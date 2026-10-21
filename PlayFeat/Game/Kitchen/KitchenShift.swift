@@ -91,8 +91,24 @@ final class KitchenShift {
         updateRunningLow()
     }
 
+    /// Gives the active order its full time again.
+    func restartActiveClock() {
+        queue.restartClock(at: now)
+        updateRunningLow()
+    }
+
     func finishEating(orderID: KitchenOrder.ID) {
         queue.finishEating(orderID: orderID)
+    }
+
+    /// The active order's tray or drink reaches the customer; the order
+    /// itself is served once both have (`serveActiveOrder`).
+    func serveActiveTray() {
+        queue.serveActiveTray()
+    }
+
+    func serveActiveDrink() {
+        queue.serveActiveDrink()
     }
 
     /// A served order's dirty tray is back: it counts as served, leaves the

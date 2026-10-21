@@ -117,9 +117,13 @@ Shared by every role:
 
 Procurement (`ProcurementGame`, `ProcurementScene`):
 
+- A washed tray floats off to Front House by itself (`traysWashed`); only
+  dirty trays are carried, to the sink.
 - The 3 ingredient cards (`IngredientCardPicker`: 2 for the active order, 1
   for a later one, only the used card is re-dealt), cutting, washing, trays.
   Every portal goes through `ProcurementGame.delivery(of:sliced:to:)`.
+  A card or sliced ingredient let go away from any target becomes a bubble
+  there (`bubbleSpots`), but never on the tray bubble.
 - `KitchenCrew` is a timed stand-in for Chef and Front House, not AI.
 - Chopping is `ChopDetector` (Vision/Gestures/): one chop per real swap
   between left-up/right-down and left-down/right-up across the board's
@@ -128,14 +132,18 @@ Procurement (`ProcurementGame`, `ProcurementScene`):
 
 Chef (`ChefGame`, `ChefScene`):
 
-- 5 floating raw bubbles (`ChefBubblePicker`): one per dish still needed,
+- Floating raw bubbles (`BubblePicker` / `BubbleRack`): one per dish still needed,
   the active order's first, then the next orders'; a used bubble is replaced
-  in its own slot and flies in from the Procurement portal.
+  in its own slot and flies in from the Procurement portal. At most 5 bubbles
+  on screen, counting pots in use (Chef); Front House has 5 dishes plus one
+  glass. A bubble let go away from any target stays there (`bubbleSpots`).
 - `CookingPot` per station: the boiling pot (tuber) and fryer (tentacle)
   cook by themselves; coral lettuce in the broth pot opens `SoupPanel` and
   only becomes soup through `StirGesture` (pinched hands circling — the
-  opposite of washing's open hands). The finished dish floats over its pot
-  until carried through the Front House portal (`ChefGame.delivery(of:)`).
+  opposite of washing's open hands). The finished dish stays in its pot (no
+  bubble) until a hand takes it out; let go elsewhere it's a bubble there,
+  still holding its pot until it goes through the Front House portal
+  (`ChefGame.delivery(of:)`) or the trash.
 - Playtest stand-in for Procurement: mushroom and star jelly requirements are
   ticked off as soon as their order becomes active.
 
@@ -147,14 +155,19 @@ Front House (`FrontHouseGame`, `FrontHouseScene`):
 - A clean tray set on the counter becomes the `ServingTray`; each dish only
   fits its own compartment, and only if the active order wants it. A drink is
   poured at the dispenser (`DispenserPanel`, `LeverGesture`: pinch, pull left
-  to open, push right to close once full).
-- The complete tray carried onto the active ticket serves it: the order keeps
+  to open, push right to close once full) and served on its own, never on
+  the tray: carried to the active ticket, before or after its tray
+  (`KitchenOrder.isTrayServed` / `isDrinkServed`). The order is only served
+  once both are there (`isReadyToServe`); until then it stays active and on
+  the clock. The ticket ticks a served tray and fades an owed glass.
+- The complete tray (and drink) on the active ticket serves it: the order keeps
   its place on the rail, `.eating` for `eatTime` (3 s, tray on the green
   table), then `.finishedEating` (dirty tray there). The next waiting order
   is active at once (`OrderQueue.activeIndex`). Nothing new is dealt until
   the dirty tray goes through the Procurement portal; then the order is
   complete, the rail slides left and a new order arrives at the end, in both
-  modes. At most `tableSeats` (2) trays on the table. The playtest stand-in
+  modes. All 3 tickets can be served (`tableSeats`); the next order then
+  waits off the rail and off the clock until a dirty tray goes back. The playtest stand-in
   washes returned trays and sends them back clean after `washTime`.
 
 ### One round

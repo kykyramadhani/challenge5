@@ -93,6 +93,20 @@ struct ProcurementGameTests {
         #expect(game.cards == before)
     }
 
+    /// A card let go away from every target stays there, still the same card,
+    /// until it's used.
+    @Test func aCardCanBeLeftAnywhere() throws {
+        let game = makeGame(order: [.coralLettuce, .bubbleTuber])
+        let item = CarriedItem.ingredient(game.cards[0], cardSlot: 0)
+        game.place(item, at: CGPoint(x: 0.5, y: 0.7))
+        #expect(game.bubbleSpots[item] == CGPoint(x: 0.5, y: 0.7))
+
+        game.drop(item, at: .trash)
+        #expect(game.bubbleSpots[item] == nil)
+        game.place(.dirtyTray, at: CGPoint(x: 0.5, y: 0.7))
+        #expect(game.bubbleSpots[.dirtyTray] == nil, "trays aren't left lying around")
+    }
+
     // MARK: - Cutting
 
     @Test func threeChopsSliceTheIngredientAndCloseTheBoard() throws {
@@ -329,6 +343,16 @@ struct ProcurementGameTests {
 
     // MARK: - Trays
 
+    /// A dirty tray in a hand is no longer in the bubble.
+    @Test func aCarriedDirtyTrayLeavesTheBubble() {
+        let game = makeGame(crew: KitchenCrew(cleanTrays: 0, dirtyTrays: 2))
+        game.pickUp(.dirtyTray)
+        #expect(game.crew.dirtyTrays - game.dirtyTraysInHand == 1)
+        game.drop(.dirtyTray, at: .sink)
+        #expect(game.crew.dirtyTrays - game.dirtyTraysInHand == 1)
+        #expect(game.dirtyTraysInHand == 0)
+    }
+
     @Test func washingTurnsADirtyTrayIntoACleanOneForFrontHouse() {
         let game = makeGame(crew: KitchenCrew(cleanTrays: 0, dirtyTrays: 1))
         game.drop(.dirtyTray, at: .sink)
@@ -336,14 +360,13 @@ struct ProcurementGameTests {
         #expect(game.crew.dirtyTrays == 0)
 
         game.addScrub(circles: 1.5)
-        #expect(game.cleanTraysReady == 0)
+        #expect(game.crew.cleanTrays == 0)
         game.addScrub(circles: 1.5)
-        #expect(game.cleanTraysReady == 1)
-
-        play(game, until: 1)
-        game.drop(.cleanTray, at: .frontHousePortal)
+        // Washed, it floats off to Front House by itself — once.
         #expect(game.crew.cleanTrays == 1)
-        // The same tray can't go through twice.
+        #expect(game.traysWashed == 1)
+        game.addScrub(circles: 1.5)
+        #expect(game.crew.cleanTrays == 1)
         #expect(!game.accepts(.cleanTray, at: .frontHousePortal))
     }
 

@@ -30,7 +30,11 @@ struct FrontHouseWorktop: View {
             drinkBubble
             assemblyTray
             FloatingBubbles(bubbles: game.bubbles, isCooked: true,
-                            slotRect: layout.bubble,
+                            slotRect: { slot in
+                                let item = game.bubbles[slot].map { CarriedItem.dish($0.ingredient, slot: slot) }
+                                return layout.bubble(at: item.flatMap { game.bubbleSpots[$0] },
+                                                     otherwise: layout.bubble(slot))
+                            },
                             sourceRect: { $0.preparation.isChefWork ? layout.chefPortal : layout.procurementPortal },
                             isHeld: { slot, bubble in game.itemsInHand.contains(.dish(bubble.ingredient, slot: slot)) })
         }
@@ -89,7 +93,7 @@ struct FrontHouseWorktop: View {
         if game.isDrinkReady {
             IngredientBubble(imageName: TrayArt.drinkImage, artScale: 0.45)
                 .opacity(isHeld(.drink) ? 0 : 1)
-                .placed(in: layout.drinkBubble,
+                .placed(in: layout.bubble(at: game.bubbleSpots[.drink], otherwise: layout.drinkBubble),
                         designSize: CGSize(width: IngredientBubble.size, height: IngredientBubble.size))
                 .transition(.scale(scale: 0.2).combined(with: .opacity))
         }

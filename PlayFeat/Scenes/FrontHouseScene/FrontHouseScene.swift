@@ -6,8 +6,8 @@
 //
 //  - At the counter: pick up a floating dish, a clean tray from the stand,
 //    the filled glass, the assembled tray or the dirty tray, and let it go
-//    over a compartment, the counter, the active ticket or the Procurement
-//    portal. A pinch on the dispenser zooms in on it instead.
+//    over a compartment, the counter, the active ticket (tray and glass
+//    each on their own) or the Procurement portal. A pinch on the dispenser zooms in on it instead.
 //  - With the dispenser zoomed in: `LeverGesture` — a pinched hand pulled
 //    left opens the tap, pushed back right closes it.
 //
@@ -53,7 +53,10 @@ final class FrontHouseScene: KitchenScene {
     override func carryTargets() -> [(item: CarriedItem, rect: CGRect)] {
         guard let game else { return [] }
         var targets: [(item: CarriedItem, rect: CGRect)] = game.bubbles.indices.compactMap { slot in
-            game.bubbles[slot].map { (.dish($0.ingredient, slot: slot), counter.bubble(slot)) }
+            game.bubbles[slot].map { bubble in
+                let item = CarriedItem.dish(bubble.ingredient, slot: slot)
+                return (item, counter.bubble(at: game.bubbleSpots[item], otherwise: counter.bubble(slot)))
+            }
         }
         if game.tray == nil, game.crew.cleanTrays > 0 {
             targets.append((.cleanTray, counter.trayStand))
@@ -62,7 +65,7 @@ final class FrontHouseScene: KitchenScene {
             targets.append((.servingTray(tray), counter.assemblyTray))
         }
         if game.isDrinkReady {
-            targets.append((.drink, counter.drinkBubble))
+            targets.append((.drink, counter.bubble(at: game.bubbleSpots[.drink], otherwise: counter.drinkBubble)))
         }
         for (index, order) in game.queue.orders.enumerated() where order.stage == .finishedEating {
             targets.append((.dirtyTray, counter.dirtyTrayBubble(index)))
@@ -82,10 +85,8 @@ final class FrontHouseScene: KitchenScene {
         counter.dropTargets(activeTicket: activeTicket)
     }
 
-    /// A drink goes straight to its spot at the tray's corner, wherever on
-    /// the tray it was let go.
     override func dropPoint(for item: CarriedItem, at zone: DropZone) -> CGPoint {
-        item == .drink ? counter.drinkSpot.center : counter.center(of: zone, activeTicket: activeTicket)
+        counter.center(of: zone, activeTicket: activeTicket)
     }
 
     private var activeTicket: Int { game?.queue.activeIndex ?? 0 }
@@ -96,6 +97,11 @@ final class FrontHouseScene: KitchenScene {
 
     override func drop(_ item: CarriedItem, at zone: DropZone) {
         game?.drop(item, at: zone)
+    }
+
+    override func place(_ item: CarriedItem, at spot: CGPoint) -> Bool {
+        game?.place(item, at: spot)
+        return game?.bubbleSpots[item] != nil
     }
 
     override func didPickUp(_ item: CarriedItem) { game?.pickUp(item) }

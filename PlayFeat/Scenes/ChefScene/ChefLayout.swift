@@ -56,16 +56,6 @@ struct ChefLayout: KitchenLayout {
         return rect(x: x, y: 983, width: 197.6, height: 31, .center)
     }
 
-    /// The finished dish's bubble, over the top-right of its pot.
-    func readyBubble(_ station: DropZone) -> CGRect {
-        let origin: CGPoint = switch station {
-        case .boilingPot: CGPoint(x: 492, y: 721)
-        case .brothPot: CGPoint(x: 764, y: 730)
-        default: CGPoint(x: 1010, y: 700)
-        }
-        return rect(x: origin.x, y: origin.y, width: 161.3, height: 161.3, .center)
-    }
-
     // MARK: - Drops
 
     /// Every drop target and its area: a station is its pot and its hob.

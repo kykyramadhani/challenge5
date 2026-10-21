@@ -99,6 +99,11 @@ class KitchenScene: SKScene {
     /// Every place an item can be let go over, with its area.
     func dropTargets() -> [(zone: DropZone, rect: CGRect)] { [] }
 
+    /// Leaves `item` floating where it was let go, away from any target
+    /// (`spot` in fractions of the screen). Returns whether the role lets
+    /// that item float freely.
+    func place(_ item: CarriedItem, at spot: CGPoint) -> Bool { false }
+
     /// A pinch started on something that is pressed rather than carried
     /// (Front House's dispenser). Returns whether it took the pinch.
     func press(by hand: Hand) -> Bool { false }
@@ -278,26 +283,44 @@ class KitchenScene: SKScene {
     }
 
     /// Lets go: the nearest place that takes the item, within reach, gets
-    /// it; anywhere else it floats back where it came from and nothing
-    /// changes.
+    /// it. Over a place that doesn't take it, it floats back; anywhere else a
+    /// bubble stays where it was let go.
     private func release(_ grip: Grip) {
         let targets = dropTargets()
         let taking = targets.filter { accepts(grip.item, at: $0.zone) }
         guard let zone = type(of: layout).nearestTarget(to: grip.position, among: taking, reach: layout.dropReach)
         else {
-            if targets.contains(where: { $0.rect.contains(grip.position) }) { audio?.play(.wrongIngredient) }
-            floatBack(grip)
+            if targets.contains(where: { $0.rect.contains(grip.position) }) {
+                audio?.play(.wrongIngredient)
+                floatBack(grip)
+            } else {
+                leave(grip)
+            }
             return
         }
+        // Where it flies is decided before the drop changes the game: serving
+        // moves the active ticket on, and the tray flies to the old one.
+        let target = convertPoint(fromView: dropPoint(for: grip.item, at: zone))
         drop(grip.item, at: zone)
         audio?.play(.bubblePut)
-        let target = convertPoint(fromView: dropPoint(for: grip.item, at: zone))
         let away = SKAction.group([
             .move(to: target, duration: 0.3),
             .scale(to: 0.1, duration: 0.3),
             .rotate(byAngle: zone.isPortal ? .pi * 2 : 0, duration: 0.3),
         ])
         grip.node.run(.sequence([away, .removeFromParent()]))
+    }
+
+    /// Lets a bubble float where it was let go, if the role allows it.
+    private func leave(_ grip: Grip) {
+        let spot = CGPoint(x: grip.position.x / size.width, y: grip.position.y / size.height)
+        guard place(grip.item, at: spot) else {
+            floatBack(grip)
+            return
+        }
+        grip.node.removeFromParent()
+        didPutBack(grip.item)
+        audio?.play(.bubblePut)
     }
 
     private func floatBack(_ grip: Grip) {

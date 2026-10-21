@@ -5,8 +5,9 @@
 //  Everything in the Chef's kitchen over the camera feed (Figma 616:8996 and
 //  616:20353): the Procurement portal ingredients arrive through, the Front
 //  House portal, the counter with the boiling pot, broth pot and fryer —
-//  showing what is cooking, a bar while it boils or fries, and the finished
-//  dish's bubble — the trash can, and the five floating raw ingredients.
+//  showing what is cooking or done, and a bar while it boils or fries — the
+//  trash can, the five floating raw ingredients, and any finished dish taken
+//  out and left elsewhere.
 //  Placed from ChefLayout, the same rects the scene hit-tests hands against.
 //
 
@@ -37,7 +38,10 @@ struct ChefWorktop: View {
     /// Raw ingredients arrive from the Procurement portal.
     private var floatingBubbles: some View {
         FloatingBubbles(bubbles: game.bubbles,
-                        slotRect: layout.bubble,
+                        slotRect: { slot in
+                            let item = game.bubbles[slot].map { CarriedItem.ingredient($0.ingredient, cardSlot: slot) }
+                            return layout.bubble(at: item.flatMap { game.bubbleSpots[$0] }, otherwise: layout.bubble(slot))
+                        },
                         sourceRect: { _ in layout.procurementPortal },
                         isHeld: { slot, bubble in
                             game.itemsInHand.contains(.ingredient(bubble.ingredient, cardSlot: slot))
@@ -58,7 +62,7 @@ struct ChefWorktop: View {
 
 /// One cooking station: its hob, the pot showing what is in it (simmering
 /// while it cooks), the bar under it while it boils or fries, and the
-/// finished dish's bubble once it's done.
+/// finished dish's bubble only once a hand has taken it out and left it.
 private struct CookingStationView: View {
     let game: ChefGame
     let station: DropZone
@@ -85,9 +89,15 @@ private struct CookingStationView: View {
         if case .cooking = pot { true } else { false }
     }
 
+    /// The dish has been taken out of the pot: in a hand, or left elsewhere.
+    private var isDishOut: Bool {
+        guard let dish = pot.readyIngredient else { return false }
+        return game.itemsInHand.contains(.cooked(dish)) || game.bubbleSpots[.cooked(dish)] != nil
+    }
+
     /// The pot with what is in it, from the Figma cooking frame.
     private var potImage: String {
-        let isFull = !pot.isEmpty
+        let isFull = !pot.isEmpty && !isDishOut
         switch station {
         case .boilingPot: return isFull ? "BoilPotTuber" : "BoilPot"
         case .brothPot: return isFull ? "BrothPotSoup" : "BrothPot"
@@ -105,11 +115,11 @@ private struct CookingStationView: View {
     }
 
     @ViewBuilder private var readyBubble: some View {
-        if let dish = pot.readyIngredient {
+        if let dish = pot.readyIngredient, let spot = game.bubbleSpots[.cooked(dish)],
+           !game.itemsInHand.contains(.cooked(dish)) {
             IngredientBubble(ingredient: dish, isCooked: true)
-                .opacity(game.itemsInHand.contains(.cooked(dish)) ? 0 : 1)
                 .transition(.scale(scale: 0.2).combined(with: .opacity))
-                .placed(in: layout.readyBubble(station),
+                .placed(in: layout.bubble(at: spot, otherwise: layout.pot(station)),
                         designSize: CGSize(width: IngredientBubble.size, height: IngredientBubble.size))
         }
     }

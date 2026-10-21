@@ -52,6 +52,17 @@ extension KitchenLayout {
     /// stroke that drifts past the work's edge still counts.
     var workArea: CGRect { panel.insetBy(dx: 55 * scale, dy: 55 * scale) }
 
+    // MARK: - Floating bubbles
+
+    /// A floating bubble's rect: centred on `spot` (fractions of the screen)
+    /// if the player left it somewhere, else its own `slot`.
+    func bubble(at spot: CGPoint?, otherwise slot: CGRect) -> CGRect {
+        guard let spot else { return slot }
+        let side = 161.3 * scale
+        return CGRect(x: spot.x * size.width - side / 2, y: spot.y * size.height - side / 2,
+                      width: side, height: side)
+    }
+
     // MARK: - Drops
 
     /// How far outside a drop target a release still counts: hands wobble as

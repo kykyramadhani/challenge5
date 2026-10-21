@@ -50,11 +50,17 @@ final class ChefScene: KitchenScene {
     override func carryTargets() -> [(item: CarriedItem, rect: CGRect)] {
         guard let game else { return [] }
         var targets: [(item: CarriedItem, rect: CGRect)] = game.bubbles.indices.compactMap { slot in
-            game.bubbles[slot].map { (.ingredient($0.ingredient, cardSlot: slot), kitchen.bubble(slot)) }
+            game.bubbles[slot].map { bubble in
+                let item = CarriedItem.ingredient(bubble.ingredient, cardSlot: slot)
+                return (item, kitchen.bubble(at: game.bubbleSpots[item], otherwise: kitchen.bubble(slot)))
+            }
         }
+        // A finished dish is taken out of the pot itself; once let go
+        // elsewhere it's a bubble there.
         for station in ChefGame.stations {
             if let dish = game.pots[station]?.readyIngredient {
-                targets.append((.cooked(dish), kitchen.readyBubble(station)))
+                let item = CarriedItem.cooked(dish)
+                targets.append((item, kitchen.bubble(at: game.bubbleSpots[item], otherwise: kitchen.pot(station))))
             }
         }
         return targets
@@ -70,6 +76,11 @@ final class ChefScene: KitchenScene {
 
     override func drop(_ item: CarriedItem, at zone: DropZone) {
         game?.drop(item, at: zone)
+    }
+
+    override func place(_ item: CarriedItem, at spot: CGPoint) -> Bool {
+        game?.place(item, at: spot)
+        return game?.bubbleSpots[item] != nil
     }
 
     override func didPickUp(_ item: CarriedItem) { game?.pickUp(item) }

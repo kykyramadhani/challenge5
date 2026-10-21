@@ -8,6 +8,7 @@
 //  House portal.
 //
 
+import CoreGraphics
 import Testing
 @testable import PlayFeat
 
@@ -70,7 +71,7 @@ struct ChefGameTests {
         let before = game.bubbles
         let used = try slot(of: .bubbleTuber, in: game)
 
-        game.drop(.ingredient(.bubbleTuber, cardSlot: used), at: .boilingPot)
+        game.drop(.ingredient(.bubbleTuber, cardSlot: used), at: .trash)
 
         let replacement = try #require(game.bubbles[used])
         #expect(replacement.id != before[used]?.id)
@@ -106,6 +107,25 @@ struct ChefGameTests {
         let tuberSlot = try slot(of: .bubbleTuber, in: game)
         #expect(!game.accepts(.ingredient(.coralLettuce, cardSlot: tuberSlot), at: .brothPot))
         #expect(!game.accepts(.ingredient(.coralLettuce, cardSlot: 99), at: .brothPot))
+    }
+
+    /// Raw bubbles plus pots in use never pass five.
+    @Test func atMostFiveBubblesCountingThePots() throws {
+        let game = makeGame([[.bubbleTuber, .coralLettuce, .tentacle, .coralLettuce], [.tentacle, .bubbleTuber]])
+        game.drop(try bubble(.tentacle, in: game), at: .fryer)
+        #expect(game.bubbles.compactMap { $0 }.count == 4)
+        play(game, for: ChefGame.fryTime + 0.5)
+        #expect(game.readyDishCount == 1)
+        #expect(game.bubbles.compactMap { $0 }.count == 4)
+    }
+
+    @Test func aRawBubbleCanBeLeftAnywhere() throws {
+        let game = makeGame([[.tentacle, .starJelly]])
+        let item = try bubble(.tentacle, in: game)
+        game.place(item, at: CGPoint(x: 0.3, y: 0.4))
+        #expect(game.bubbleSpots[item] == CGPoint(x: 0.3, y: 0.4))
+        game.place(.dirtyTray, at: CGPoint(x: 0.3, y: 0.4))
+        #expect(game.bubbleSpots[.dirtyTray] == nil, "trays don't float")
     }
 
     // MARK: - Stations

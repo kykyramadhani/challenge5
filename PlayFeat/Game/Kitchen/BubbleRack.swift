@@ -21,9 +21,10 @@ nonisolated struct BubbleRack {
     private var nextID = 0
 
     /// Clears bubbles nobody needs any more and sends new ones in for empty
-    /// slots. Bubbles still wanted keep their slot and their identity.
-    mutating func refill(wanted: [KitchenIngredient]) {
-        let refilled = BubblePicker.refill(slots.map { $0?.ingredient }, wanted: wanted)
+    /// slots, up to `limit` floating. Bubbles still wanted keep their slot
+    /// and their identity.
+    mutating func refill(wanted: [KitchenIngredient], limit: Int) {
+        let refilled = BubblePicker.refill(slots.map { $0?.ingredient }, wanted: wanted, limit: limit)
         for slot in slots.indices where slots[slot]?.ingredient != refilled[slot] {
             slots[slot] = refilled[slot].map { ingredient in
                 defer { nextID += 1 }
@@ -36,6 +37,8 @@ nonisolated struct BubbleRack {
     mutating func empty(_ slot: Int) {
         slots[slot] = nil
     }
+
+    var count: Int { slots.compactMap { $0 }.count }
 
     func holds(_ ingredient: KitchenIngredient, in slot: Int) -> Bool {
         slots.indices.contains(slot) && slots[slot]?.ingredient == ingredient
