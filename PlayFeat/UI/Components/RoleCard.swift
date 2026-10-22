@@ -33,7 +33,7 @@ struct RoleCard: View {
             }
 
             ClickButton(action: onPlay) {
-                PlayRoleLabel()
+                KitchenButtonLabel(title: "PLAY ROLE")
             }
             .buttonStyle(.plain)
         }
@@ -41,28 +41,6 @@ struct RoleCard: View {
         .frame(width: 362, height: 453)
         .background(.kitchenPageTint, in: RoundedRectangle(cornerRadius: 46, style: .continuous))
         .shadow(color: .nebulaPink, radius: 10)
-    }
-}
-
-/// The textured pink pill. The texture is Figma's button art; the label is
-/// drawn on top so it can be translated.
-private struct PlayRoleLabel: View {
-    var body: some View {
-        Text("PLAY ROLE")
-            .font(.atkinson(size: 24, weight: .black))
-            .tracking(0.48)
-            .foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.15), radius: 0, y: 2.5)
-            .frame(width: 219, height: 63)
-            .background(alignment: .top) {
-                // The art's 3D base is a Figma effect, which doesn't export.
-                Image("PlayRoleButton")
-                    .resizable()
-                    .frame(width: 219, height: 76)
-                    .shadow(color: .black.opacity(0.2), radius: 0, y: 12.7)
-            }
-            .frame(height: 76, alignment: .top)
-            .shadow(color: .black.opacity(0.25), radius: 1.3, y: 5)
     }
 }
 
