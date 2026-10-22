@@ -70,22 +70,21 @@ struct FrontHouseLayout: KitchenLayout {
 
     // MARK: - Drops
 
-    /// Every drop target and its area. `activeTicket` is where the active
-    /// order sits on the rail.
-    func dropTargets(activeTicket: Int) -> [(zone: DropZone, rect: CGRect)] {
+    /// Every drop target and its area.
+    var dropTargets: [(zone: DropZone, rect: CGRect)] {
         let compartments = TrayCompartment.allCases.map { (zone: DropZone.compartment($0), rect: area(of: $0)) }
-        let ticket = activeTicket < Self.ticketCount ? [(zone: DropZone.activeOrder, rect: trayTicket(activeTicket))] : []
-        return compartments + ticket + [
+        let tickets = (0..<Self.ticketCount).map { (zone: DropZone.ticket($0), rect: trayTicket($0)) }
+        return compartments + tickets + [
             (.assemblyTray, assemblyTray),
             (.procurementPortal, procurementPortal),
         ]
     }
 
     /// Where a dropped item flies to.
-    func center(of zone: DropZone, activeTicket: Int) -> CGPoint {
+    func center(of zone: DropZone) -> CGPoint {
         switch zone {
         case let .compartment(compartment): area(of: compartment).center
-        case .activeOrder: eatingTray(activeTicket).center
+        case let .ticket(index): eatingTray(index).center
         case .procurementPortal: procurementPortal.center
         default: assemblyTray.center
         }

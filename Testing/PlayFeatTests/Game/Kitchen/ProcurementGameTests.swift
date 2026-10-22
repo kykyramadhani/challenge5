@@ -2,7 +2,7 @@
 //  ProcurementGameTests.swift
 //  PlayFeatTests
 //
-//  A Procurement shift without a camera: the order rail and its clock, card
+//  A Procurement shift without a camera: the order rail and its clocks, card
 //  replacement, chopping, washing and the tray loop through the stand-in crew.
 //
 
@@ -36,29 +36,31 @@ struct ProcurementGameTests {
 
     // MARK: - Orders
 
-    @Test func activeOrderExpiresAfterSixtySecondsAndCostsALife() {
+    @Test func anOrderExpiresSixtySecondsAfterItArrivesAndCostsALife() {
         let game = makeGame(order: [.coralLettuce])
-        let firstID = game.queue.active.id
+        let firstID = game.queue.orders[0].id
 
         play(game, until: 51)
-        #expect(game.isActiveOrderRunningLow)
+        #expect(game.shift.runningLowOrderIDs == [firstID])
         #expect(game.lives == 3)
 
         play(game, until: 61)
         #expect(game.lives == 2)
-        #expect(game.queue.active.id == firstID + 1)
-        #expect(game.queue.orders.count == OrderQueue.size)
-        #expect(!game.isActiveOrderRunningLow)
+        #expect(!game.queue.orders.contains { $0.id == firstID })
+        #expect(game.shift.runningLowOrderIDs.isEmpty)
     }
 
-    @Test func servingShiftsTheRailAndDealsANewOrderAtTheEnd() throws {
+    /// Finishing an order empties its place; nothing refills it at once, the
+    /// next order arrives on its own schedule.
+    @Test func aServedOrderLeavesTheRail() throws {
         let game = makeGame()
-        let ids = game.queue.orders.map(\.id)
 
         game.drop(.ingredient(.starJelly, cardSlot: try slot(of: .starJelly, in: game)), at: .frontHousePortal)
 
         #expect(game.ordersServed == 1)
-        #expect(game.queue.orders.map(\.id) == Array(ids.dropFirst()) + [ids.last! + 1])
+        #expect(game.queue.orders.isEmpty)
+        play(game, until: OrderQueue.arrivalInterval + 0.1)
+        #expect(game.queue.orders.count == 1)
     }
 
     @Test func losingTheLastLifeEndsTheShift() {
@@ -139,18 +141,17 @@ struct ProcurementGameTests {
 
     // MARK: - Delivery
 
-    /// Lettuce (soup), tuber (boiled) and tentacle (fried) go to the Chef raw.
-    /// Front House refuses them; through the Chef portal exactly one of the
-    /// two matching requirements is ticked off at once, before any cooking.
+    /// Lettuce (soup), tuber (boiled) and tentacle (fried) go to the Chef raw:
+    /// exactly one of the two matching requirements is ticked off at once,
+    /// before any cooking.
     @Test(arguments: [KitchenIngredient.coralLettuce, .bubbleTuber, .tentacle])
     func rawIngredientsForTheChefAreMarkedDoneImmediately(ingredient: KitchenIngredient) throws {
         let game = makeGame(order: [ingredient, .starJelly, ingredient])
         let item = CarriedItem.ingredient(ingredient, cardSlot: try slot(of: ingredient, in: game))
 
-        #expect(!game.accepts(item, at: .frontHousePortal))
         game.drop(item, at: .kitchenPortal)
 
-        #expect(game.queue.active.delivered == [0])
+        #expect(game.queue.active?.delivered == [0])
         #expect(game.ordersServed == 0)
         #expect(game.crew.sentIngredients == [ingredient])
     }
@@ -161,8 +162,8 @@ struct ProcurementGameTests {
 
         game.drop(.ingredient(.starJelly, cardSlot: try slot(of: .starJelly, in: game)), at: .frontHousePortal)
 
-        #expect(game.queue.active.isDelivered(at: 1))
-        #expect(!game.queue.active.isDelivered(at: 0))
+        #expect(game.queue.active?.isDelivered(at: 1) == true)
+        #expect(game.queue.active?.isDelivered(at: 0) == false)
     }
 
     @Test func slicedMushroomThroughFrontHouseIsMarkedDone() throws {
@@ -171,46 +172,46 @@ struct ProcurementGameTests {
         (0..<ProcurementGame.chopsNeeded).forEach { _ in game.registerChop() }
         play(game, until: 1)
 
-        #expect(!game.accepts(.sliced(.glowingMushroom), at: .kitchenPortal))
         game.drop(.sliced(.glowingMushroom), at: .frontHousePortal)
 
-        #expect(game.queue.active.delivered == [0])
+        #expect(game.queue.active?.delivered == [0])
         #expect(game.slicedOnBoard == nil)
     }
 
-    /// Every wrong route is refused: nothing ticked, nothing sent, no card
-    /// used up — the item just floats back.
-    @Test func wrongDestinationsAreRefused() throws {
-        let game = makeGame(order: [.coralLettuce, .starJelly, .glowingMushroom])
+    /// Either portal will do: the role on the other side passes it on, so
+    /// raw lettuce through Front House still reaches the Chef's stove.
+    @Test(arguments: [DropZone.kitchenPortal, .frontHousePortal])
+    func anyPortalTakesAnIngredient(portal: DropZone) throws {
+        let game = makeGame(order: [.coralLettuce, .starJelly])
+        game.drop(.ingredient(.coralLettuce, cardSlot: try slot(of: .coralLettuce, in: game)), at: portal)
+        game.drop(.ingredient(.starJelly, cardSlot: try slot(of: .starJelly, in: game)), at: portal)
+
+        #expect(game.ordersServed == 1)
+    }
+
+    /// A mushroom has to be sliced first, whichever portal: nothing ticked,
+    /// nothing sent, no card used up — it just floats back.
+    @Test(arguments: [DropZone.kitchenPortal, .frontHousePortal])
+    func aRawMushroomIsRefused(portal: DropZone) throws {
+        let game = makeGame(order: [.glowingMushroom, .starJelly])
         let cards = game.cards
-        let refused: [(CarriedItem, DropZone)] = [
-            (.ingredient(.coralLettuce, cardSlot: try slot(of: .coralLettuce, in: game)), .frontHousePortal),
-            (.ingredient(.starJelly, cardSlot: try slot(of: .starJelly, in: game)), .kitchenPortal),
-            (.ingredient(.glowingMushroom, cardSlot: try slot(of: .glowingMushroom, in: game)), .kitchenPortal),
-            (.ingredient(.glowingMushroom, cardSlot: try slot(of: .glowingMushroom, in: game)), .frontHousePortal),
-        ]
+        let item = CarriedItem.ingredient(.glowingMushroom, cardSlot: try slot(of: .glowingMushroom, in: game))
 
-        for (item, portal) in refused {
-            #expect(!game.accepts(item, at: portal), "\(item) through \(portal)")
-            game.drop(item, at: portal)
-        }
+        #expect(!game.accepts(item, at: portal))
+        game.drop(item, at: portal)
 
-        #expect(game.queue.active.delivered.isEmpty)
+        #expect(game.queue.active?.delivered.isEmpty == true)
         #expect(game.crew.sentIngredients.isEmpty)
         #expect(game.cards == cards)
     }
 
-    /// An ingredient the active order doesn't (or no longer) need doesn't
-    /// count, even through the right portal.
+    /// An ingredient no order needs (any more) doesn't count.
     @Test func anIngredientTheActiveOrderDoesNotNeedIsRefused() throws {
         let game = makeGame(order: [.starJelly, .coralLettuce])
         game.drop(.ingredient(.starJelly, cardSlot: try slot(of: .starJelly, in: game)), at: .frontHousePortal)
 
-        let again = CarriedItem.ingredient(.starJelly, cardSlot: try slot(of: .starJelly, in: game))
-        #expect(!game.accepts(again, at: .frontHousePortal))
-        game.drop(again, at: .frontHousePortal)
-
-        #expect(game.queue.active.delivered == [0])
+        #expect(game.delivery(of: .starJelly, sliced: false, to: .frontHousePortal) == nil)
+        #expect(game.queue.active?.delivered == [0])
         #expect(game.crew.sentIngredients == [.starJelly])
     }
 
@@ -220,10 +221,10 @@ struct ProcurementGameTests {
         let game = makeGame(order: [.coralLettuce, .coralLettuce, .starJelly])
 
         game.drop(.ingredient(.coralLettuce, cardSlot: try slot(of: .coralLettuce, in: game)), at: .kitchenPortal)
-        #expect(game.queue.active.delivered == [0])
+        #expect(game.queue.active?.delivered == [0])
 
         game.drop(.ingredient(.coralLettuce, cardSlot: try slot(of: .coralLettuce, in: game)), at: .kitchenPortal)
-        #expect(game.queue.active.delivered == [0, 1])
+        #expect(game.queue.active?.delivered == [0, 1])
 
         #expect(game.delivery(of: .coralLettuce, sliced: false, to: .kitchenPortal) == nil)
     }
@@ -238,7 +239,7 @@ struct ProcurementGameTests {
         game.drop(.sliced(.glowingMushroom), at: .frontHousePortal)
         game.drop(.sliced(.glowingMushroom), at: .frontHousePortal)
 
-        #expect(game.queue.active.delivered == [0])
+        #expect(game.queue.active?.delivered == [0])
     }
 
     /// When an order runs out of time, what was delivered for it goes with it
@@ -250,18 +251,16 @@ struct ProcurementGameTests {
         play(game, until: OrderQueue.timeLimit + 1)
 
         #expect(game.crew.sentIngredients.isEmpty)
-        #expect(game.queue.active.delivered.isEmpty)
+        #expect(game.queue.active?.delivered.isEmpty == true)
     }
 
     // MARK: - Completing an order
 
     /// Playtest: the last correct delivery finishes the order on the spot —
-    /// no clean tray, and the Chef hasn't cooked the lettuce yet. The rail
-    /// shifts left and a new order is dealt at the end.
+    /// no clean tray, and the Chef hasn't cooked the lettuce yet.
     @Test func inThePlaytestDeliveringEverythingCompletesTheOrderAtOnce() throws {
         let game = makeGame(order: [.coralLettuce, .glowingMushroom, .starJelly],
                             crew: KitchenCrew(cleanTrays: 0, dirtyTrays: 0))
-        let ids = game.queue.orders.map(\.id)
 
         game.drop(.ingredient(.coralLettuce, cardSlot: try slot(of: .coralLettuce, in: game)), at: .kitchenPortal)
         game.drop(.ingredient(.glowingMushroom, cardSlot: try slot(of: .glowingMushroom, in: game)), at: .cuttingBoard)
@@ -273,9 +272,7 @@ struct ProcurementGameTests {
         game.drop(.ingredient(.starJelly, cardSlot: try slot(of: .starJelly, in: game)), at: .frontHousePortal)
 
         #expect(game.ordersServed == 1)
-        #expect(game.queue.orders.map(\.id) == Array(ids.dropFirst()) + [ids.last! + 1])
-        #expect(game.queue.active.delivered.isEmpty)
-        #expect(game.queue.fractionLeft(at: game.now) == 1)
+        #expect(game.queue.orders.isEmpty)
         #expect(game.crew.sentIngredients.isEmpty)
         #expect(game.lives == ProcurementGame.startingLives)
     }
@@ -295,17 +292,17 @@ struct ProcurementGameTests {
     /// until Front House serves it — here once the Chef has cooked.
     @Test func inMultiplayerAFullyDeliveredOrderWaitsToBeServed() throws {
         let game = makeGame(order: [.coralLettuce, .starJelly], mode: .multiplayer)
-        let firstID = game.queue.active.id
+        let firstID = game.queue.orders[0].id
 
         game.drop(.ingredient(.coralLettuce, cardSlot: try slot(of: .coralLettuce, in: game)), at: .kitchenPortal)
         game.drop(.ingredient(.starJelly, cardSlot: try slot(of: .starJelly, in: game)), at: .frontHousePortal)
-        #expect(game.queue.active.id == firstID)
-        #expect(game.queue.active.isFullyDelivered)
+        #expect(game.queue.active?.id == firstID)
+        #expect(game.queue.active?.isFullyDelivered == true)
         #expect(game.ordersServed == 0)
 
         play(game, until: KitchenCrew.cookTime + 0.5)
         #expect(game.ordersServed == 1)
-        #expect(game.queue.active.id == firstID + 1)
+        #expect(!game.queue.orders.contains { $0.id == firstID })
     }
 
     /// Multiplayer: delivered but never served still runs out of time.
@@ -402,9 +399,9 @@ struct ProcurementGameTests {
 
     /// A refused drop isn't work done: it scores nothing.
     @Test func aRefusedDeliveryIsNotReported() throws {
-        let game = makeGame(order: [.coralLettuce])
+        let game = makeGame(order: [.glowingMushroom])
 
-        game.drop(.ingredient(.coralLettuce, cardSlot: try slot(of: .coralLettuce, in: game)), at: .frontHousePortal)
+        game.drop(.ingredient(.glowingMushroom, cardSlot: try slot(of: .glowingMushroom, in: game)), at: .frontHousePortal)
 
         #expect(game.report.overallScore == 0)
     }

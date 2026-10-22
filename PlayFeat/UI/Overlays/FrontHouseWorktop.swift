@@ -194,15 +194,13 @@ struct FrontHouseRail: View {
         let shown = Array(shift.queue.orders.prefix(FrontHouseLayout.ticketCount).enumerated())
         ForEach(shown, id: \.element.id) { index, order in
             if order.stage == .waiting {
-                let isActive = index == shift.queue.activeIndex
-                TrayTicketView(order: order, isActive: isActive,
-                               isRunningLow: isActive && shift.isActiveOrderRunningLow,
-                               fractionLeft: { shift.activeFractionLeft })
+                TrayTicketView(order: order,
+                               isRunningLow: shift.runningLowOrderIDs.contains(order.id),
+                               fractionLeft: { shift.fractionLeft(of: order) })
                     .placed(in: layout.trayTicket(index), designSize: TrayTicketView.size)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: shift.queue.orders.map(\.id))
-        .animation(.easeOut(duration: 0.3), value: shift.queue.activeIndex)
     }
 }

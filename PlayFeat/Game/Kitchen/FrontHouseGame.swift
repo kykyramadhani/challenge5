@@ -9,11 +9,11 @@
 //  The single source of truth the SwiftUI counter and FrontHouseScene read.
 //
 //  An order's lifecycle here: set a clean tray down → fill its compartments
-//  → carry it to the active ticket. A drink, if asked for, is carried to the
-//  ticket on its own, before or after the tray; the order is only served
-//  once both are there, and stays active and on the clock until then.
-//  Served, it keeps its place on the rail with its tray on the table, and
-//  the next order is active at once. The customer eats for `eatTime`, a
+//  → carry it to that order's ticket; any waiting order can be picked. A
+//  drink, if asked for, is carried to the ticket on its own, before or after
+//  the tray; the order is only served once both are there, and stays on the
+//  clock until then. Served, it keeps its place on the rail with its tray on
+//  the table. The customer eats for `eatTime`, a
 //  dirty tray appears, and only once that goes through the Procurement
 //  portal is the order complete: the rail slides left and a new order is
 //  dealt at the end.
@@ -36,10 +36,6 @@ final class FrontHouseGame {
     }
 
     static let eatTime: TimeInterval = 3
-    /// Every ticket on the rail can be served. With all of them on the
-    /// table the next order waits off the rail, off the clock, until a dirty
-    /// tray goes back.
-    static let tableSeats = FrontHouseLayout.ticketCount
     /// How long the stand-in Procurement takes to wash a returned tray.
     static let washTime: TimeInterval = 8
     /// How long the tap has to run to fill a glass.
@@ -76,6 +72,8 @@ final class FrontHouseGame {
     @ObservationIgnored private var washedAt: [TimeInterval] = []
     @ObservationIgnored private var stationFinishedAt: TimeInterval?
     @ObservationIgnored private var lastTick: TimeInterval = 0
+    /// The rail as last seen, to notice orders arriving and leaving.
+    @ObservationIgnored private var knownRail: [KitchenOrder.ID] = []
 
     init(mode: KitchenMode,
          wallTime: TimeInterval = CACurrentMediaTime(),
@@ -84,14 +82,13 @@ final class FrontHouseGame {
         shift = KitchenShift(mode: mode, wallTime: wallTime, makeOrder: makeOrder)
         self.crew = crew
         shift.onTick = { [weak self] in self?.tick(wallTime: $0) }
-        refreshBubbles()
+        catchUpWithRail()
     }
 
     var queue: OrderQueue { shift.queue }
     var isOver: Bool { shift.isOver }
     var now: TimeInterval { shift.now }
     var bubbles: [FloatingBubble?] { rack.slots }
-    private var active: KitchenOrder { queue.active }
 
     /// One step of the shift. Internal so tests can drive the clock.
     func tick(wallTime: TimeInterval) {
@@ -102,7 +99,8 @@ final class FrontHouseGame {
         finishEating()
         returnWashedTrays()
         closeFinishedStation()
-        failExpiredOrder()
+        failExpiredOrders()
+        catchUpWithRail()
     }
 
     // MARK: - Dropping things
@@ -115,12 +113,13 @@ final class FrontHouseGame {
         case (.cleanTray, .assemblyTray):
             return tray == nil && crew.cleanTrays > 0
         case let (.dish(dish, slot), .compartment(compartment)):
-            guard rack.holds(dish, in: slot), isAssemblingActiveTray, let tray else { return false }
-            return tray.canPlace(dish, in: compartment, for: active)
-        case (.drink, .activeOrder):
-            return isDrinkReady && active.isDrinkOwed
-        case let (.servingTray(carried), .activeOrder):
-            return carried == tray && isAssemblingActiveTray && hasFreeSeat && carried.isComplete(for: active)
+            guard rack.holds(dish, in: slot), let tray else { return false }
+            return ordersWantingTrays.contains { tray.canPlace(dish, in: compartment, for: $0) }
+        case let (.drink, .ticket(index)):
+            return isDrinkReady && waitingOrder(at: index)?.isDrinkOwed == true
+        case let (.servingTray(carried), .ticket(index)):
+            guard carried == tray, let order = waitingOrder(at: index), !order.isTrayServed else { return false }
+            return carried.isComplete(for: order)
         case (.dirtyTray, .procurementPortal):
             return queue.orders.contains { $0.stage == .finishedEating }
         default:
@@ -141,15 +140,17 @@ final class FrontHouseGame {
         case let (.dish(dish, slot), .compartment(compartment)):
             rack.empty(slot)
             tray?.place(dish, in: compartment)
-        case (.drink, _):
+        case let (.drink, .ticket(index)):
+            guard let order = waitingOrder(at: index) else { return }
             isDrinkReady = false
-            shift.serveActiveDrink()
+            shift.serveDrink(of: order.id)
             report.record(.beverageMade)
-            serveActiveOrderIfReady()
-        case (.servingTray, _):
+            serveIfReady(order.id)
+        case let (.servingTray, .ticket(index)):
+            guard let order = waitingOrder(at: index) else { return }
             tray = nil
-            shift.serveActiveTray()
-            serveActiveOrderIfReady()
+            shift.serveTray(of: order.id)
+            serveIfReady(order.id)
         case (.dirtyTray, _):
             returnDirtyTray()
         default:
@@ -180,17 +181,21 @@ final class FrontHouseGame {
     /// Orders served and still on the table, eating or finished.
     var traysOnTable: Int { queue.orders.filter { $0.stage != .waiting }.count }
 
-    private var hasFreeSeat: Bool { traysOnTable < Self.tableSeats }
+    /// The waiting order whose ticket is at `index` on the rail.
+    private func waitingOrder(at index: Int) -> KitchenOrder? {
+        guard index < FrontHouseLayout.ticketCount, queue.orders.indices.contains(index) else { return nil }
+        let order = queue.orders[index]
+        return order.stage == .waiting ? order : nil
+    }
 
-    /// The active order still needs its tray: not served, and not expired.
-    private var isAssemblingActiveTray: Bool { active.stage == .waiting && !active.isTrayServed }
+    /// The waiting orders that still need their tray, most urgent first.
+    private var ordersWantingTrays: [KitchenOrder] { queue.waiting.filter { !$0.isTrayServed } }
 
-    /// With its tray and its drink both there, the customer starts eating
-    /// and the next order is active.
-    private func serveActiveOrderIfReady() {
-        guard active.isReadyToServe else { return }
-        eatingSince[active.id] = now
-        shift.serveActiveOrder()
+    /// With its tray and its drink both there, the customer starts eating.
+    private func serveIfReady(_ orderID: KitchenOrder.ID) {
+        guard queue.orders.first(where: { $0.id == orderID })?.isReadyToServe == true else { return }
+        eatingSince[orderID] = now
+        shift.serveOrder(orderID)
         report.record(.orderServed)
     }
 
@@ -203,19 +208,14 @@ final class FrontHouseGame {
 
     /// An order is done once its dirty tray is back at Procurement.
     private func returnDirtyTray() {
-        let wasWaitingOffRail = isActiveOrderOffRail
         sendTrayToProcurement()
         shift.completeServedOrder()
-        if wasWaitingOffRail { shift.restartActiveClock() }
     }
 
     private func sendTrayToProcurement() {
         crew.receiveDirtyTray()
         if shift.mode == .playtest { washedAt.append(now + Self.washTime) }
     }
-
-    /// Every ticket is on the table, so the active order isn't shown yet.
-    private var isActiveOrderOffRail: Bool { queue.activeIndex >= FrontHouseLayout.ticketCount }
 
     /// Playtest stand-in for the Procurement player: a returned tray comes
     /// back clean after `washTime`.
@@ -229,17 +229,23 @@ final class FrontHouseGame {
     }
 
     /// Only a waiting order runs out of time — one whose tray is served but
-    /// whose drink isn't too. Whatever was already on its tray is thrown
-    /// away with it; the empty tray stays for the next order, and a tray
-    /// already served goes back to Procurement to be washed.
-    private func failExpiredOrder() {
-        guard shift.hasActiveOrderExpired, !isActiveOrderOffRail else { return }
-        if active.isTrayServed {
-            sendTrayToProcurement()
-        } else if tray != nil {
-            tray = ServingTray()
-        }
-        shift.failActiveOrder()
+    /// whose drink isn't too. A tray already served goes back to Procurement
+    /// to be washed. If what's on the counter tray no longer fits any order,
+    /// it's thrown away; the empty tray stays for the next one.
+    private func failExpiredOrders() {
+        let expired = shift.expiredOrders
+        guard !expired.isEmpty else { return }
+        expired.filter(\.isTrayServed).forEach { _ in sendTrayToProcurement() }
+        shift.failExpiredOrders()
+        if let tray, !ordersWantingTrays.contains(where: tray.fits) { self.tray = ServingTray() }
+    }
+
+    /// Orders arrived or left: the bubbles look ahead to whatever is on the
+    /// rail now.
+    private func catchUpWithRail() {
+        let rail = queue.orders.map(\.id)
+        guard rail != knownRail else { return }
+        knownRail = rail
         refreshBubbles()
     }
 
@@ -287,13 +293,11 @@ final class FrontHouseGame {
 
     // MARK: - Bubbles
 
-    /// Every dish Front House still needs, most urgent first: what the
-    /// waiting active order still lacks on its tray, then the orders behind
-    /// it.
+    /// Every dish Front House still needs, most urgent order first, less
+    /// what's already on the tray.
     var wantedDishes: [KitchenIngredient] {
         let onTray = tray.map { Array($0.dishes.values) } ?? []
-        let current = isAssemblingActiveTray ? active.items.removingOneOfEach(onTray) : []
-        return current + queue.upcoming.flatMap(\.items)
+        return ordersWantingTrays.flatMap(\.items).removingOneOfEach(onTray)
     }
 
     /// Five dish bubbles at most; the glass is extra, one at a time.

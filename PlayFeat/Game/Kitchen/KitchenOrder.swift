@@ -24,6 +24,8 @@ nonisolated struct KitchenOrder: Identifiable, Equatable {
     let items: [KitchenIngredient]
     let needsDrink: Bool
     private(set) var stage = Stage.waiting
+    /// Seconds of play when it reached the rail; its own clock runs from here.
+    private(set) var arrivedAt: TimeInterval = 0
     /// Front House: the tray and the drink are served separately, in either
     /// order. Only with both is the order served (`serve()`).
     private(set) var isTrayServed = false
@@ -88,6 +90,10 @@ nonisolated struct KitchenOrder: Identifiable, Equatable {
     mutating func serve() {
         guard stage == .waiting else { return }
         stage = .eating
+    }
+
+    mutating func arrive(at time: TimeInterval) {
+        arrivedAt = time
     }
 
     mutating func serveTray() {

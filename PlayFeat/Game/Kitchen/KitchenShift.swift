@@ -2,7 +2,7 @@
 //  KitchenShift.swift
 //  PlayFeat
 //
-//  What every role's shift has in common: the order rail and its clock,
+//  What every role's shift has in common: the order rail and its clocks,
 //  lives, the served count and the end of the shift. ProcurementGame and
 //  ChefGame each own one and add their own stations on top, so the rules for
 //  timing, losing and completing orders live in one place.
@@ -22,9 +22,9 @@ final class KitchenShift {
     private(set) var isOver = false
     /// Whole seconds of play, for the shift clock.
     private(set) var elapsedSeconds = 0
-    /// The active ticket has under ten seconds left. Flips rarely, so it is
-    /// safe to observe; the border itself is drawn from `activeFractionLeft`.
-    private(set) var isActiveOrderRunningLow = false
+    /// Orders with under ten seconds left. Changes rarely, so it is safe to
+    /// observe; each ticket's border is drawn from `fractionLeft(of:)`.
+    private(set) var runningLowOrderIDs: Set<KitchenOrder.ID> = []
 
     /// The role's game step, run on every timer tick once the shift starts.
     @ObservationIgnored var onTick: ((TimeInterval) -> Void)?
@@ -44,9 +44,12 @@ final class KitchenShift {
     /// Seconds of play — the clock every order deadline is measured on.
     var now: TimeInterval { clock.elapsed }
 
-    var activeFractionLeft: CGFloat { queue.fractionLeft(at: now) }
+    func fractionLeft(of order: KitchenOrder) -> CGFloat { queue.fractionLeft(of: order, at: now) }
 
-    var hasActiveOrderExpired: Bool { queue.hasExpired(at: now) }
+    var isAnyOrderRunningLow: Bool { !runningLowOrderIDs.isEmpty }
+
+    /// Waiting orders whose time has run out, not yet failed.
+    var expiredOrders: [KitchenOrder] { queue.expiredOrders(at: now) }
 
     // MARK: - Lifecycle
 
@@ -65,35 +68,40 @@ final class KitchenShift {
         timer = nil
     }
 
-    /// Moves play time on to `wallTime`. Internal so tests can drive it.
+    /// Moves play time on to `wallTime` and deals the orders due by then.
+    /// Internal so tests can drive it.
     func advanceClock(to wallTime: TimeInterval) {
         clock.advance(to: wallTime)
+        queue.dealArrivals(at: now)
         let seconds = Int(now)
         if seconds != elapsedSeconds { elapsedSeconds = seconds }
         updateRunningLow()
     }
 
     private func updateRunningLow() {
-        let runningLow = queue.isRunningLow(at: now)
-        if runningLow != isActiveOrderRunningLow { isActiveOrderRunningLow = runningLow }
+        let runningLow = Set(queue.orders.filter { queue.isRunningLow($0, at: now) }.map(\.id))
+        if runningLow != runningLowOrderIDs { runningLowOrderIDs = runningLow }
     }
 
     // MARK: - Orders
 
-    func markActiveRequirementDelivered(at index: Int) {
-        queue.markActiveRequirementDelivered(at: index)
+    func markDelivered(_ requirement: OrderQueue.Requirement) {
+        queue.markDelivered(requirement)
     }
 
-    /// The customer has their tray and starts eating, off the clock; the
-    /// next order becomes active straight away.
-    func serveActiveOrder() {
-        queue.serveActive(at: now)
-        updateRunningLow()
+    /// An order's tray or drink reaches the customer; the order itself is
+    /// served once both have (`serveOrder`).
+    func serveTray(of orderID: KitchenOrder.ID) {
+        queue.serveTray(of: orderID)
     }
 
-    /// Gives the active order its full time again.
-    func restartActiveClock() {
-        queue.restartClock(at: now)
+    func serveDrink(of orderID: KitchenOrder.ID) {
+        queue.serveDrink(of: orderID)
+    }
+
+    /// The customer has their tray and starts eating, off the clock.
+    func serveOrder(_ orderID: KitchenOrder.ID) {
+        queue.serve(orderID)
         updateRunningLow()
     }
 
@@ -101,49 +109,43 @@ final class KitchenShift {
         queue.finishEating(orderID: orderID)
     }
 
-    /// The active order's tray or drink reaches the customer; the order
-    /// itself is served once both have (`serveActiveOrder`).
-    func serveActiveTray() {
-        queue.serveActiveTray()
-    }
-
-    func serveActiveDrink() {
-        queue.serveActiveDrink()
-    }
-
-    /// A served order's dirty tray is back: it counts as served, leaves the
-    /// rail, and a new order is dealt at the end.
+    /// A served order's dirty tray is back: it counts as served and leaves
+    /// the rail.
     func completeServedOrder() {
         ordersServed += 1
-        queue.clearFinishedOrder()
+        queue.clearFinishedOrder(at: now)
     }
 
-    /// Whether the active order is done and can leave the rail. Every
+    /// The waiting orders that are done and can leave the rail. Every
     /// requirement has to be delivered either way; with all three roles it
     /// also has to have been served, which only Front House knows
     /// (`isServed`).
-    func isActiveOrderFinished(isServed: @autoclosure () -> Bool) -> Bool {
-        guard queue.active.isFullyDelivered else { return false }
-        switch mode {
-        case .playtest: return true
-        case .multiplayer: return isServed()
+    func finishedOrders(isServed: (KitchenOrder) -> Bool) -> [KitchenOrder] {
+        queue.waiting.filter { order in
+            guard order.isFullyDelivered else { return false }
+            switch mode {
+            case .playtest: return true
+            case .multiplayer: return isServed(order)
+            }
         }
     }
 
-    /// The active order is done: it counts as served and the rail moves up.
-    func completeActiveOrder() {
+    /// The order is done: it counts as served and leaves the rail.
+    func complete(_ orderID: KitchenOrder.ID) {
         ordersServed += 1
-        queue.advance(at: now)
+        queue.remove(orderID, at: now)
         updateRunningLow()
     }
 
-    /// The active order ran out of time: it costs a life and the rail moves
-    /// up. The last life ends the shift.
-    func failActiveOrder() {
-        lives -= 1
-        queue.advance(at: now)
+    /// Every order that ran out of time leaves the rail and costs a life.
+    /// The last life ends the shift at once.
+    func failExpiredOrders() {
+        let expired = expiredOrders.count
+        guard expired > 0 else { return }
+        lives = max(0, lives - expired)
+        queue.removeExpiredOrders(at: now)
         updateRunningLow()
-        if lives <= 0 { end() }
+        if lives == 0 { end() }
     }
 
     /// Ends the shift: the last life lost, or the player pressing Stop.

@@ -45,9 +45,9 @@ nonisolated enum DropZone: Hashable {
     /// Front House: where the tray is assembled, and one of its compartments.
     case assemblyTray
     case compartment(TrayCompartment)
-    /// Front House: the active order's ticket, where its tray and its drink
-    /// are served.
-    case activeOrder
+    /// Front House: the ticket at this place on the rail, where its order's
+    /// tray and drink are served.
+    case ticket(Int)
     case procurementPortal
 
     var isPortal: Bool { self == .kitchenPortal || self == .frontHousePortal || self == .procurementPortal }

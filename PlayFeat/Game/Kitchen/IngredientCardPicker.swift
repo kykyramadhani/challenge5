@@ -38,6 +38,8 @@ enum IngredientCardPicker {
             return pick
         }
         if let pick = pick(from: upcoming, avoiding: others) { return pick }
+        // No later order yet: another card for this one.
+        if let pick = pick(from: current, avoiding: others) { return pick }
         // More ingredients than cards: something unused always remains.
         return pick(from: KitchenIngredient.allCases, avoiding: others) ?? .starJelly
     }

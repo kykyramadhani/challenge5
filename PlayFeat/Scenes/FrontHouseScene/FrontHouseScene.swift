@@ -6,8 +6,8 @@
 //
 //  - At the counter: pick up a floating dish, a clean tray from the stand,
 //    the filled glass, the assembled tray or the dirty tray, and let it go
-//    over a compartment, the counter, the active ticket (tray and glass
-//    each on their own) or the Procurement portal. A pinch on the dispenser zooms in on it instead.
+//    over a compartment, the counter, any waiting order's ticket (tray and
+//    glass each on their own) or the Procurement portal. A pinch on the dispenser zooms in on it instead.
 //  - With the dispenser zoomed in: `LeverGesture` — a pinched hand pulled
 //    left opens the tap, pushed back right closes it.
 //
@@ -81,15 +81,9 @@ final class FrontHouseScene: KitchenScene {
         return true
     }
 
-    override func dropTargets() -> [(zone: DropZone, rect: CGRect)] {
-        counter.dropTargets(activeTicket: activeTicket)
-    }
+    override func dropTargets() -> [(zone: DropZone, rect: CGRect)] { counter.dropTargets }
 
-    override func dropPoint(for item: CarriedItem, at zone: DropZone) -> CGPoint {
-        counter.center(of: zone, activeTicket: activeTicket)
-    }
-
-    private var activeTicket: Int { game?.queue.activeIndex ?? 0 }
+    override func dropPoint(for item: CarriedItem, at zone: DropZone) -> CGPoint { counter.center(of: zone) }
 
     override func accepts(_ item: CarriedItem, at zone: DropZone) -> Bool {
         game?.accepts(item, at: zone) ?? false
