@@ -48,6 +48,8 @@ final class ChefGame {
     private(set) var pots: [DropZone: CookingPot] = [.boilingPot: .empty, .brothPot: .empty, .fryer: .empty]
     /// 0...1 through stirring the soup.
     private(set) var stirProgress = 0.0
+    /// The player's own work this shift, for the shift report.
+    private(set) var report = ShiftReport(role: .chef)
     /// Bubbles the player let go of away from any station, where they were
     /// left (fractions of the screen). The rest float in their own slot.
     private(set) var bubbleSpots: [CarriedItem: CGPoint] = [:]
@@ -216,6 +218,7 @@ final class ChefGame {
     private func deliver(_ ingredient: KitchenIngredient) {
         guard let requirement = delivery(of: ingredient) else { return }
         shift.markActiveRequirementDelivered(at: requirement)
+        report.record(ingredient.preparation == .soup ? .soupCooked : .boiledOrFried)
     }
 
     // MARK: - Orders

@@ -26,6 +26,12 @@ final class SceneManager {
         screen = .roleSelect
     }
 
+    /// Leaving the shift removes its view, which stops the camera and the
+    /// shift clock before the report shows.
+    func goToShiftReport(_ report: ShiftReport) {
+        screen = .shiftReport(report)
+    }
+
     func play(_ role: KitchenRole) {
         switch role {
         case .procurement: screen = .procurement

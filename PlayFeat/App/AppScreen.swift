@@ -20,6 +20,8 @@ enum AppScreen: Hashable {
     case chef
     /// A Front House shift.
     case frontHouse
+    /// The end-of-shift report, carrying the score of the role just played.
+    case shiftReport(ShiftReport)
     case mainMenu
     case shop
     case gameplay

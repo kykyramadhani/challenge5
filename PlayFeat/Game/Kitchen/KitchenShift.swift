@@ -143,10 +143,11 @@ final class KitchenShift {
         lives -= 1
         queue.advance(at: now)
         updateRunningLow()
-        if lives <= 0 { endShift() }
+        if lives <= 0 { end() }
     }
 
-    private func endShift() {
+    /// Ends the shift: the last life lost, or the player pressing Stop.
+    func end() {
         isOver = true
         stop()
     }

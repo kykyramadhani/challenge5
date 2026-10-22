@@ -282,6 +282,17 @@ struct ChefGameTests {
 
     // MARK: - Hands
 
+    /// Stop ends the shift with lives to spare, the same way losing the
+    /// last one does.
+    @Test func stoppingEndsTheShiftEarly() {
+        let game = makeGame([[.bubbleTuber]])
+
+        game.shift.end()
+
+        #expect(game.shift.isOver)
+        #expect(game.shift.lives == KitchenShift.startingLives)
+    }
+
     @Test func carriedItemsAreTrackedUntilUsedOrPutBack() throws {
         let game = makeGame([[.bubbleTuber, .coralLettuce]])
         let tuber = try bubble(.bubbleTuber, in: game)
@@ -294,5 +305,34 @@ struct ChefGameTests {
 
         game.drop(tuber, at: .boilingPot)
         #expect(game.itemsInHand.isEmpty)
+    }
+
+    // MARK: - Shift report
+
+    @Test func soupAndBoiledOrFriedDishesAreReportedApart() throws {
+        let game = makeGame([[.coralLettuce, .bubbleTuber, .tentacle, .starJelly]])
+        game.drop(try bubble(.coralLettuce, in: game), at: .brothPot)
+        game.addStir(circles: 3)
+        play(game, for: 1)
+        game.drop(try bubble(.bubbleTuber, in: game), at: .boilingPot)
+        game.drop(try bubble(.tentacle, in: game), at: .fryer)
+        play(game, from: 1, for: ChefGame.boilTime + 0.5)
+
+        for dish in [KitchenIngredient.coralLettuce, .bubbleTuber, .tentacle] {
+            game.drop(.cooked(dish), at: .frontHousePortal)
+        }
+
+        #expect(game.report.count(of: .soupCooked) == 1)
+        #expect(game.report.count(of: .boiledOrFried) == 2)
+    }
+
+    /// The stand-in's mushroom and star jelly are Procurement's work, not the
+    /// player's.
+    @Test func theStandInsWorkIsNotReported() {
+        let game = makeGame([[.glowingMushroom, .starJelly]])
+
+        play(game, for: 1)
+
+        #expect(game.report.overallScore == 0)
     }
 }

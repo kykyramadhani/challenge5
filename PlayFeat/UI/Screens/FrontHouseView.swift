@@ -20,7 +20,8 @@ struct FrontHouseView: View {
 
     var body: some View {
         KitchenShiftView(sceneManager: sceneManager, handPoseManager: handPoseManager, audio: audio,
-                         shift: game.shift, scene: scene, isPanelOpen: game.station == .pouring) {
+                         shift: game.shift, scene: scene, isPanelOpen: game.station == .pouring,
+                         report: { game.report }) {
             (layout: FrontHouseLayout) in FrontHouseWorktop(game: game, layout: layout)
         } rail: {
             FrontHouseRail(shift: game.shift, layout: $0)

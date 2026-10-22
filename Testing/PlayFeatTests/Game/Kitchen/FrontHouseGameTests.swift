@@ -415,4 +415,28 @@ struct FrontHouseGameTests {
             #expect(Set(compartments).count == compartments.count)
         }
     }
+
+    // MARK: - Shift report
+
+    @Test func aServedOrderAndItsDrinkAreReported() throws {
+        let game = makeGame([order([.starJelly, .coralLettuce], drink: true), order([.tentacle])])
+        _ = pourAGlass(game, from: 0)
+        try assemble(game)
+
+        game.drop(.drink, at: .activeOrder)
+        game.drop(.servingTray(try #require(game.tray)), at: .activeOrder)
+
+        #expect(game.report.count(of: .beverageMade) == 1)
+        #expect(game.report.count(of: .orderServed) == 1)
+    }
+
+    /// A tray still waiting for its drink hasn't served the order yet.
+    @Test func anOrderIsOnlyReportedOnceFullyServed() throws {
+        let game = makeGame([order([.starJelly, .coralLettuce], drink: true), order([.tentacle])])
+        try assemble(game)
+
+        game.drop(.servingTray(try #require(game.tray)), at: .activeOrder)
+
+        #expect(game.report.overallScore == 0)
+    }
 }
