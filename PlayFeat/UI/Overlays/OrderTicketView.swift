@@ -4,18 +4,18 @@
 //
 //  One order on the rail, drawn at Figma size (162 pt wide; 295 tall for four
 //  items, 147 for two). Each item shows the raw ingredient over how it has to
-//  be prepared, ticked off the moment Procurement delivers it. The active
+//  be prepared, ticked off the moment Procurement delivers it. Every waiting
 //  ticket carries a green border down its sides and along its bottom that is
-//  its clock, and blinks red in its last ten seconds.
+//  its own clock, and blinks red in its last ten seconds.
 //
 
 import SwiftUI
 
 struct OrderTicketView: View {
     let order: KitchenOrder
-    let isActive: Bool
+    let isOnClock: Bool
     let isRunningLow: Bool
-    /// Read every frame while active; the border is the order's clock.
+    /// Read every frame while on the clock; the border is the order's clock.
     var fractionLeft: () -> CGFloat = { 1 }
 
     static let width: CGFloat = 162
@@ -40,7 +40,7 @@ struct OrderTicketView: View {
                     .position(Self.cellCenter(index))
             }
 
-            if isActive { TicketClockBorder(ticket: TicketShape(isShort: isShort), fractionLeft: fractionLeft) }
+            if isOnClock { TicketClockBorder(ticket: TicketShape(isShort: isShort), fractionLeft: fractionLeft) }
         }
         .frame(width: Self.width, height: height, alignment: .top)
         .accessibilityElement(children: .ignore)
@@ -148,9 +148,9 @@ struct RunningLowBlink: View {
 #Preview {
     HStack(alignment: .top) {
         OrderTicketView(order: KitchenOrder(id: 0, items: [.glowingMushroom, .coralLettuce, .bubbleTuber, .starJelly]),
-                        isActive: true, isRunningLow: false, fractionLeft: { 0.7 })
+                        isOnClock: true, isRunningLow: false, fractionLeft: { 0.7 })
         OrderTicketView(order: KitchenOrder(id: 1, items: [.coralLettuce, .coralLettuce]),
-                        isActive: false, isRunningLow: false)
+                        isOnClock: false, isRunningLow: false)
     }
     .padding()
     .background(.gray)

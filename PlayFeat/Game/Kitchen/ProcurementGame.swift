@@ -63,7 +63,7 @@ final class ProcurementGame {
         let shift = KitchenShift(mode: mode, wallTime: wallTime, makeOrder: makeOrder)
         self.shift = shift
         self.crew = crew
-        cards = IngredientCardPicker.deal(current: shift.queue.active.items,
+        cards = IngredientCardPicker.deal(current: shift.queue.active?.items ?? [],
                                           upcoming: shift.queue.upcoming.flatMap(\.items))
         shift.onTick = { [weak self] in self?.tick(wallTime: $0) }
     }
@@ -76,10 +76,8 @@ final class ProcurementGame {
     var ordersServed: Int { shift.ordersServed }
     var isOver: Bool { shift.isOver }
     var elapsedSeconds: Int { shift.elapsedSeconds }
-    var isActiveOrderRunningLow: Bool { shift.isActiveOrderRunningLow }
     /// Seconds of play, for views that animate against the order clock.
     var now: TimeInterval { shift.now }
-    var activeFractionLeft: CGFloat { shift.activeFractionLeft }
 
     /// One step of the shift. Internal so tests can drive the clock.
     func tick(wallTime: TimeInterval) {
@@ -87,7 +85,7 @@ final class ProcurementGame {
         shift.advanceClock(to: wallTime)
         crew.update(at: now)
         closeFinishedStation()
-        settleActiveOrder()
+        settleOrders()
     }
 
     // MARK: - Dropping things
@@ -153,7 +151,7 @@ final class ProcurementGame {
         case .cleanTray, .cooked, .dish, .drink, .servingTray:
             break  // other roles'; `accepts` never lets one through here
         }
-        settleActiveOrder()
+        settleOrders()
     }
 
     private func use(_ ingredient: KitchenIngredient, sliced: Bool, at zone: DropZone) {
@@ -170,23 +168,25 @@ final class ProcurementGame {
 
     // MARK: - Delivery
 
-    /// The one check every portal uses: which of the active order's
-    /// requirements `ingredient` fills if handed over through `portal`, or
-    /// nil when it doesn't count — the wrong portal for it, not prepared yet
-    /// (a mushroom must be sliced first), or nothing on the active order is
-    /// still waiting for it. With two of the same ingredient on a ticket it is
+    /// The one check every portal uses: which order's requirement
+    /// `ingredient` fills if handed over through `portal`, or nil when it
+    /// doesn't count — not prepared yet (a mushroom must be sliced first), or
+    /// no waiting order still needs it. Either portal will do: whoever gets
+    /// it passes it on to the role that needs it. It goes to the most urgent
+    /// order that does; with two of the same ingredient on a ticket it is
     /// always the next one still open.
-    func delivery(of ingredient: KitchenIngredient, sliced: Bool, to portal: DropZone) -> Int? {
-        guard portal == ingredient.deliveryPortal, sliced == ingredient.isDeliveredSliced else { return nil }
-        return queue.active.nextOpenRequirement(for: ingredient)
+    func delivery(of ingredient: KitchenIngredient, sliced: Bool,
+                  to portal: DropZone) -> OrderQueue.Requirement? {
+        guard portal.isPortal, sliced == ingredient.isDeliveredSliced else { return nil }
+        return queue.nextOpenRequirement(for: ingredient)
     }
 
-    /// Ticks the requirement off on the active order the moment the item goes
-    /// through — no waiting for the Chef to cook or Front House to serve —
-    /// and hands it to the crew to finish.
+    /// Ticks the requirement off the moment the item goes through — no
+    /// waiting for the Chef to cook or Front House to serve — and hands it to
+    /// the crew to finish.
     private func deliver(_ ingredient: KitchenIngredient, sliced: Bool, to portal: DropZone) {
         guard let requirement = delivery(of: ingredient, sliced: sliced, to: portal) else { return }
-        shift.markActiveRequirementDelivered(at: requirement)
+        shift.markDelivered(requirement)
         crew.receive(ingredient, at: now)
     }
 
@@ -213,13 +213,13 @@ final class ProcurementGame {
 
     // MARK: - Rules
 
-    /// What the active order still needs from Procurement: its items minus
+    /// What the most urgent order still needs from Procurement: its items minus
     /// whatever is already cooking, waiting at Front House, or on the board.
     var currentNeeds: [KitchenIngredient] {
         var underway: [KitchenIngredient] = []
         if let slicedOnBoard { underway.append(slicedOnBoard) }
         if case let .cutting(ingredient) = station { underway.append(ingredient) }
-        return queue.active.openItems.removingOneOfEach(underway)
+        return (queue.active?.openItems ?? []).removingOneOfEach(underway)
     }
 
     private func isCard(_ ingredient: KitchenIngredient, at slot: Int) -> Bool {
@@ -243,25 +243,22 @@ final class ProcurementGame {
         station = .worktop
     }
 
-    /// A finished active order leaves the rail; one that runs out of time
-    /// costs a life. Either way the next one moves up and a new one is dealt
-    /// at the end.
-    private func settleActiveOrder() {
-        if shift.isActiveOrderFinished(isServed: crew.canServe(queue.active)) {
-            completeActiveOrder()
-        } else if shift.hasActiveOrderExpired {
-            crew.discardDeliveries()
-            shift.failActiveOrder()
-        }
+    /// Finished orders leave the rail; every order that runs out of time
+    /// costs a life, and what was delivered for it is lost.
+    private func settleOrders() {
+        // One at a time: serving one uses up what the next might have counted.
+        while let order = shift.finishedOrders(isServed: crew.canServe).first { complete(order) }
+        shift.expiredOrders.forEach { crew.discardDeliveries(for: $0) }
+        shift.failExpiredOrders()
     }
 
     /// The playtest clears the order out at once; with all three roles Front
     /// House has served it on a tray.
-    private func completeActiveOrder() {
+    private func complete(_ order: KitchenOrder) {
         switch mode {
-        case .playtest: crew.takeAway(queue.active, at: now)
-        case .multiplayer: crew.serve(queue.active, at: now)
+        case .playtest: crew.takeAway(order, at: now)
+        case .multiplayer: crew.serve(order, at: now)
         }
-        shift.completeActiveOrder()
+        shift.complete(order.id)
     }
 }

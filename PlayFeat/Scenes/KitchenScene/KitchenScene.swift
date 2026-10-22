@@ -237,6 +237,12 @@ class KitchenScene: SKScene {
             grip.position = carried(grip.position, toward: hand.viewPoint, delta: delta)
             grip.node.position = convertPoint(fromView: grip.position)
 
+            if let portal = portalTouched(by: grip) {
+                grips[hand.id] = nil
+                send(grip, into: portal)
+                continue
+            }
+
             if hand.isPinching {
                 grip.openSince = nil
             } else {
@@ -298,8 +304,23 @@ class KitchenScene: SKScene {
             }
             return
         }
+        send(grip, into: zone)
+    }
+
+    /// A portal that takes the item sucks it in the moment the bubble touches
+    /// it, without letting go. One that doesn't take it is just passed over.
+    private func portalTouched(by grip: Grip) -> DropZone? {
+        let radius = layout.heldBubbleDiameter / 2
+        return dropTargets().first { target in
+            target.zone.isPortal && accepts(grip.item, at: target.zone)
+                && target.rect.insetBy(dx: -radius, dy: -radius).contains(grip.position)
+        }?.zone
+    }
+
+    /// Hands the item to `zone` and flies the bubble into it.
+    private func send(_ grip: Grip, into zone: DropZone) {
         // Where it flies is decided before the drop changes the game: serving
-        // moves the active ticket on, and the tray flies to the old one.
+        // moves an order on, and the tray flies to where it was.
         let target = convertPoint(fromView: dropPoint(for: grip.item, at: zone))
         drop(grip.item, at: zone)
         audio?.play(.bubblePut)

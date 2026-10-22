@@ -12,8 +12,8 @@
 //  - Coral lettuce goes in the broth pot, which opens the zoomed-in pot: it
 //    becomes soup only once it has been stirred with pinched, circling hands.
 //  - A finished dish stays in its pot until a hand takes it out; carried
-//    through the Front House portal it ticks its requirement off the active
-//    order.
+//    through the Front House portal it ticks its requirement off whichever
+//    waiting order needs it, the most urgent first.
 //
 //  In the playtest the player is the only Chef and nobody plays Procurement:
 //  mushrooms and star jelly, which never pass through the Chef, are ticked
@@ -55,13 +55,15 @@ final class ChefGame {
     private(set) var itemsInHand: [CarriedItem] = []
 
     @ObservationIgnored private var stationFinishedAt: TimeInterval?
+    /// The rail as last seen, to notice orders arriving and leaving.
+    @ObservationIgnored private var knownRail: [KitchenOrder.ID] = []
 
     init(mode: KitchenMode,
          wallTime: TimeInterval = CACurrentMediaTime(),
          makeOrder: @escaping (Int) -> KitchenOrder = KitchenOrder.randomNeedingChef) {
         shift = KitchenShift(mode: mode, wallTime: wallTime, makeOrder: makeOrder)
         shift.onTick = { [weak self] in self?.tick(wallTime: $0) }
-        orderBecameActive()
+        catchUpWithRail()
     }
 
     var queue: OrderQueue { shift.queue }
@@ -74,7 +76,7 @@ final class ChefGame {
         shift.advanceClock(to: wallTime)
         finishCooking()
         closeFinishedStation()
-        settleActiveOrder()
+        settleOrders()
     }
 
     // MARK: - Dropping things
@@ -112,7 +114,7 @@ final class ChefGame {
             break
         }
         refreshBubbles()
-        settleActiveOrder()
+        settleOrders()
     }
 
     /// A raw or cooked bubble let go away from any station stays there.
@@ -204,37 +206,38 @@ final class ChefGame {
 
     // MARK: - Delivery
 
-    /// The one check the Front House portal uses: which of the active
-    /// order's requirements a cooked `ingredient` fills, or nil when nothing
-    /// on the active order is still waiting for it.
-    func delivery(of ingredient: KitchenIngredient) -> Int? {
+    /// The one check the Front House portal uses: which order's requirement
+    /// a cooked `ingredient` fills, or nil when no waiting order still needs
+    /// it.
+    func delivery(of ingredient: KitchenIngredient) -> OrderQueue.Requirement? {
         guard ingredient.preparation.isChefWork else { return nil }
-        return queue.active.nextOpenRequirement(for: ingredient)
+        return queue.nextOpenRequirement(for: ingredient)
     }
 
     /// Ticks the requirement off the moment the dish goes through.
     private func deliver(_ ingredient: KitchenIngredient) {
         guard let requirement = delivery(of: ingredient) else { return }
-        shift.markActiveRequirementDelivered(at: requirement)
+        shift.markDelivered(requirement)
     }
 
     // MARK: - Orders
 
-    /// A finished active order leaves the rail; one that runs out of time
-    /// costs a life. Either way the next one moves up.
-    private func settleActiveOrder() {
+    /// Finished orders leave the rail; every order that runs out of time
+    /// costs a life.
+    private func settleOrders() {
         // ponytail: nothing tells the Chef yet that Front House served an
         // order, so in multiplayer it never completes here; the sync will.
-        if shift.isActiveOrderFinished(isServed: false) {
-            shift.completeActiveOrder()
-            orderBecameActive()
-        } else if shift.hasActiveOrderExpired {
-            shift.failActiveOrder()
-            orderBecameActive()
-        }
+        shift.finishedOrders(isServed: { _ in false }).forEach { shift.complete($0.id) }
+        shift.failExpiredOrders()
+        catchUpWithRail()
     }
 
-    private func orderBecameActive() {
+    /// Orders arrived or left: the bubbles follow whatever is on the rail
+    /// now.
+    private func catchUpWithRail() {
+        let rail = queue.orders.map(\.id)
+        guard rail != knownRail else { return }
+        knownRail = rail
         handOffProcurementWork()
         refreshBubbles()
     }
@@ -243,21 +246,20 @@ final class ChefGame {
     /// Procurement straight to Front House is already there.
     private func handOffProcurementWork() {
         guard shift.mode == .playtest else { return }
-        let order = queue.active
-        for index in order.items.indices where !order.items[index].preparation.isChefWork {
-            shift.markActiveRequirementDelivered(at: index)
+        for order in queue.waiting {
+            for index in order.items.indices where !order.items[index].preparation.isChefWork {
+                shift.markDelivered(OrderQueue.Requirement(orderID: order.id, index: index))
+            }
         }
     }
 
     // MARK: - Bubbles
 
-    /// Every raw ingredient the Chef still needs, most urgent first: the
-    /// active order's open dishes, then the orders behind it — less what is
-    /// already in a pot.
+    /// Every raw ingredient the Chef still needs, most urgent order first —
+    /// less what is already in a pot.
     var wantedIngredients: [KitchenIngredient] {
-        let active = queue.active.openItems.filter(\.preparation.isChefWork)
-        let later = queue.upcoming.flatMap(\.items).filter(\.preparation.isChefWork)
-        return (active + later).removingOneOfEach(pots.values.compactMap(\.ingredient))
+        let open = queue.waiting.flatMap(\.openItems).filter(\.preparation.isChefWork)
+        return open.removingOneOfEach(pots.values.compactMap(\.ingredient))
     }
 
     var bubbles: [FloatingBubble?] { rack.slots }

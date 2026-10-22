@@ -65,7 +65,7 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Rail: View, Panel:
         .onDisappear(perform: endShift)
         .onChange(of: shift.lives) { old, new in if new < old { audio.play(.loseHeart) } }
         .onChange(of: shift.ordersServed) { audio.play(.putOrder) }
-        .onChange(of: shift.isActiveOrderRunningLow) { _, isLow in
+        .onChange(of: shift.isAnyOrderRunningLow) { _, isLow in
             if isLow { audio.startClockWarning() } else { audio.stopClockWarning() }
         }
         .onChange(of: shift.isOver) { _, isOver in

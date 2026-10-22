@@ -26,14 +26,6 @@ nonisolated enum KitchenIngredient: String, CaseIterable, Codable {
         }
     }
 
-    /// The one routing rule: the portal Procurement hands this ingredient
-    /// over through. Anything the Chef still has to cook or fry goes to the
-    /// kitchen raw; anything ready to serve — desserts as they are, chopped
-    /// vegetables once sliced — goes straight to Front House.
-    var deliveryPortal: DropZone {
-        preparation.isChefWork ? .kitchenPortal : .frontHousePortal
-    }
-
     /// Where it goes on Front House's tray once it's prepared. Boiled tuber
     /// shares the main box with fried tentacle (the "carbs" box in Figma).
     var trayCompartment: TrayCompartment {

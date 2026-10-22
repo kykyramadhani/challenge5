@@ -28,6 +28,14 @@ struct ChefGameTests {
         }
     }
 
+    /// Plays until `count` more orders have arrived; returns the time.
+    @discardableResult
+    private func waitForOrders(_ count: Int, in game: ChefGame) -> Double {
+        let time = Double(count) * OrderQueue.arrivalInterval + 0.1
+        play(game, for: time)
+        return time
+    }
+
     private func slot(of ingredient: KitchenIngredient, in game: ChefGame) throws -> Int {
         try #require(game.bubbles.firstIndex { $0?.ingredient == ingredient })
     }
@@ -45,21 +53,24 @@ struct ChefGameTests {
     /// Four bubbles for the active order's dishes, the fifth for the next.
     @Test func fiveBubblesFourForTheActiveOrderOneForTheNext() {
         let game = makeGame([[.bubbleTuber, .coralLettuce, .tentacle, .coralLettuce], [.tentacle, .bubbleTuber]])
+        #expect(kinds(game) == [.bubbleTuber, .coralLettuce, .tentacle, .coralLettuce, nil], "the next isn't here yet")
+        waitForOrders(1, in: game)
         #expect(kinds(game) == [.bubbleTuber, .coralLettuce, .tentacle, .coralLettuce, .tentacle])
     }
 
     /// Bubbles only ever stand for a dish some order still needs: with one
-    /// tuber per order there are four, not five.
+    /// tuber per order and three orders there are three, not five.
     @Test func neverMoreBubblesThanDishesNeeded() {
         let game = makeGame([[.bubbleTuber, .starJelly]])
-        #expect(kinds(game) == [.bubbleTuber, .bubbleTuber, .bubbleTuber, .bubbleTuber, nil])
+        waitForOrders(2, in: game)
+        #expect(kinds(game) == [.bubbleTuber, .bubbleTuber, .bubbleTuber, nil, nil])
     }
 
     /// What goes from Procurement straight to Front House never floats here,
     /// and in the playtest it's already ticked off.
     @Test func procurementOnlyItemsAreHandledByTheStandIn() {
         let game = makeGame([[.glowingMushroom, .bubbleTuber, .starJelly, .tentacle]])
-        #expect(game.queue.active.delivered == [0, 2])
+        #expect(game.queue.active?.delivered == [0, 2])
         #expect(!kinds(game).contains(.glowingMushroom))
         #expect(!kinds(game).contains(.starJelly))
     }
@@ -112,9 +123,10 @@ struct ChefGameTests {
     /// Raw bubbles plus pots in use never pass five.
     @Test func atMostFiveBubblesCountingThePots() throws {
         let game = makeGame([[.bubbleTuber, .coralLettuce, .tentacle, .coralLettuce], [.tentacle, .bubbleTuber]])
+        let arrived = waitForOrders(1, in: game)
         game.drop(try bubble(.tentacle, in: game), at: .fryer)
         #expect(game.bubbles.compactMap { $0 }.count == 4)
-        play(game, for: ChefGame.fryTime + 0.5)
+        play(game, from: arrived, for: ChefGame.fryTime + 0.5)
         #expect(game.readyDishCount == 1)
         #expect(game.bubbles.compactMap { $0 }.count == 4)
     }
@@ -169,10 +181,10 @@ struct ChefGameTests {
         #expect(game.pots[station] == .ready(ingredient))
         #expect(game.cookingProgress(in: station) == 1)
 
-        let activeID = game.queue.active.id
+        let activeID = game.queue.active?.id
         game.drop(.cooked(ingredient), at: .frontHousePortal)
         #expect(game.pots[station] == .empty)
-        #expect(game.queue.active.id != activeID, "the order's last dish completes it")
+        #expect(game.queue.active?.id != activeID, "the order's last dish completes it")
         #expect(!game.accepts(.cooked(ingredient), at: .frontHousePortal))
     }
 
@@ -214,21 +226,24 @@ struct ChefGameTests {
 
         game.drop(.cooked(.coralLettuce), at: .frontHousePortal)
 
-        #expect(game.queue.active.isDelivered(at: 1))
-        #expect(!game.queue.active.isDelivered(at: 0))
+        #expect(game.queue.active?.isDelivered(at: 1) == true)
+        #expect(game.queue.active?.isDelivered(at: 0) == false)
         #expect(game.shift.ordersServed == 0)
     }
 
-    /// Cooked for an order further down the rail: Front House doesn't want it
-    /// yet, so it waits over its pot — or goes in the trash.
-    @Test func aDishNoActiveOrderWantsStaysPut() throws {
+    /// Any waiting order can be worked on: a dish only the second order
+    /// wants counts for it, and completes it.
+    @Test func aDishForALaterOrderCountsForIt() throws {
         let game = makeGame([[.bubbleTuber, .bubbleTuber, .bubbleTuber, .bubbleTuber], [.tentacle, .starJelly]])
+        let arrived = waitForOrders(1, in: game)
+        let first = game.queue.orders[0].id
         game.drop(try bubble(.tentacle, in: game), at: .fryer)
-        play(game, for: ChefGame.fryTime + 0.5)
+        play(game, from: arrived, for: ChefGame.fryTime + 0.5)
 
-        #expect(!game.accepts(.cooked(.tentacle), at: .frontHousePortal))
-        game.drop(.cooked(.tentacle), at: .trash)
-        #expect(game.pots[.fryer] == .empty)
+        game.drop(.cooked(.tentacle), at: .frontHousePortal)
+        #expect(game.shift.ordersServed == 1)
+        #expect(game.queue.orders.map(\.id) == [first])
+        #expect(game.delivery(of: .tentacle) == nil, "nothing else wants one")
     }
 
     /// Dishes sitting in pots, even cooked, don't finish an order.
@@ -243,25 +258,26 @@ struct ChefGameTests {
     }
 
     /// Playtest: the last dish through the portal completes the order at
-    /// once; the rail shifts, a new order is dealt and the bubbles follow it.
+    /// once; the next order is active and the bubbles follow it.
     @Test func theLastDishCompletesTheOrderInThePlaytest() throws {
         let game = makeGame([[.bubbleTuber, .starJelly], [.tentacle, .glowingMushroom]])
+        let arrived = waitForOrders(1, in: game)
         let ids = game.queue.orders.map(\.id)
         game.drop(try bubble(.bubbleTuber, in: game), at: .boilingPot)
-        play(game, for: ChefGame.boilTime + 0.5)
+        play(game, from: arrived, for: ChefGame.boilTime + 0.5)
 
         game.drop(.cooked(.bubbleTuber), at: .frontHousePortal)
 
         #expect(game.shift.ordersServed == 1)
-        #expect(game.queue.orders.map(\.id) == Array(ids.dropFirst()) + [ids.last! + 1])
-        #expect(game.queue.active.delivered == [1], "the new order's mushroom is handed off")
+        #expect(game.queue.orders.map(\.id) == [ids[1]])
+        #expect(game.queue.active?.delivered == [1], "the new order's mushroom is handed off")
         #expect(kinds(game).compactMap { $0 }.allSatisfy(game.wantedIngredients.contains))
     }
 
     /// Multiplayer: a fully delivered order stays until Front House serves it.
     @Test func inMultiplayerADeliveredOrderStaysActive() throws {
         let game = makeGame([[.bubbleTuber, .bubbleTuber]], mode: .multiplayer)
-        let activeID = game.queue.active.id
+        let activeID = game.queue.active?.id
         let round = ChefGame.boilTime + 0.5
         for index in 0..<2 {
             game.drop(try bubble(.bubbleTuber, in: game), at: .boilingPot)
@@ -269,8 +285,8 @@ struct ChefGameTests {
             game.drop(.cooked(.bubbleTuber), at: .frontHousePortal)
         }
 
-        #expect(game.queue.active.isFullyDelivered)
-        #expect(game.queue.active.id == activeID)
+        #expect(game.queue.active?.isFullyDelivered == true)
+        #expect(game.queue.active?.id == activeID)
         #expect(game.shift.ordersServed == 0)
     }
 

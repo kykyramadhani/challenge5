@@ -77,11 +77,20 @@ above are still in the code but no longer reached from launch.
 
 Shared by every role:
 
-- `KitchenShift` (Game/Kitchen/): `OrderQueue` (4 orders, leftmost active,
-  60 s each), the play clock, lives, served count. Each role's game owns one.
-  When the active order is done depends on `KitchenMode`: `.playtest` (what
-  ships now) completes it the moment every requirement is delivered;
-  `.multiplayer` keeps it active until Front House serves it — syncing that
+- `KitchenShift` (Game/Kitchen/): `OrderQueue`, the play clock, lives,
+  served count. Each role's game owns one. Order timing follows
+  `docs/PlayFeat_Single_Player_Rules.md`: the first order arrives at 0 s,
+  then one 20 s after the last arrival while fewer than 3 are on the rail
+  (served Front House orders count until their tray is back). A full rail
+  stops arrivals; the first place to open starts a fresh 20 s, later ones
+  don't shorten it, and an empty rail just waits. Every waiting order has its
+  own 60 s clock from its arrival (`arrivedAt`), never reset; each one that
+  runs out leaves and costs a heart (`failExpiredOrders`), and 0 hearts ends
+  the shift at once.
+  The player may work on any waiting order. When an order is done depends
+  on `KitchenMode`: `.playtest` (what ships now) completes it the moment
+  every requirement is delivered (`finishedOrders`); `.multiplayer` keeps it
+  until Front House serves it — syncing that
   across the three roles' iPads is still to do (see the multiplayer plan).
 - `KitchenShiftView` (UI/Screens/): camera, then `ShiftPhase`: the seat
   check (`SeatCalibrationView`, every shift — whoever passes is locked in as
@@ -94,18 +103,24 @@ Shared by every role:
   grab/carry/release rules; each role subclasses it to say what can be picked
   up and where it can go. `KitchenLayout` maps Figma rects (1376×1034) to the
   screen; SwiftUI draws from each role's layout and the scene hit-tests the
-  same rects. On the simulator a finger stands in for a hand
+  same rects. A carried item that touches a portal taking it is sucked in at
+  once, no letting go needed (`portalTouched`). On the simulator a finger
+  stands in for a hand
   (`-debugGameplay YES`, plus `-debugRole chef` or `-debugRole frontHouse`).
 - `KitchenOrder.random` deals one dish per tray compartment (`TrayCompartment`:
   vegetable, dessert, soup, main — top-left to bottom-right) and maybe a drink, so every role's order
   fits Front House's tray. Its `stage` (waiting → eating → finishedEating) is
-  the customer's side; the active order is the leftmost waiting one, and only
-  it is on the clock.
+  the customer's side. `OrderQueue.waiting` lists the waiting orders most
+  urgent (leftmost) first; `active` is the first of them, nil while the rail
+  waits for an arrival.
 - Routing follows `Preparation`: mushroom is chopped by Procurement, then
   sent to Front House; coral lettuce (`.soup`), bubble tuber (`.boil`) and
   tentacle (`.fry`) go raw to the Chef, who cooks them and sends them to Front
-  House; star jelly (dessert) goes straight to Front House. A correct delivery
-  ticks one open requirement on the active order at once.
+  House; star jelly (dessert) goes straight to Front House. Procurement may
+  use either portal: the other side passes it on to the right role, so only
+  the preparation is checked (a mushroom must be sliced). A correct delivery
+  ticks one open requirement at once, on the most urgent waiting order that
+  still needs it (`OrderQueue.nextOpenRequirement(for:)`).
 - `HandIdentityTracker` gives every hand a stable ID and an anatomical
   `side` (chirality + body-wrist votes, never screen x), coasts missed hands
   on a bounded prediction (`isPredicted`, falling `trackingConfidence`) and
@@ -117,8 +132,9 @@ Procurement (`ProcurementGame`, `ProcurementScene`):
 
 - A washed tray floats off to Front House by itself (`traysWashed`); only
   dirty trays are carried, to the sink.
-- The 3 ingredient cards (`IngredientCardPicker`: 2 for the active order, 1
-  for a later one, only the used card is re-dealt), cutting, washing, trays.
+- The 3 ingredient cards (`IngredientCardPicker`: 2 for the most urgent
+  order, 1 for a later one — or the same one if there's no later order yet —
+  only the used card is re-dealt), cutting, washing, trays.
   Every portal goes through `ProcurementGame.delivery(of:sliced:to:)`.
   A card or sliced ingredient let go away from any target becomes a bubble
   there (`bubbleSpots`), but never on the tray bubble.
@@ -131,7 +147,7 @@ Procurement (`ProcurementGame`, `ProcurementScene`):
 Chef (`ChefGame`, `ChefScene`):
 
 - Floating raw bubbles (`BubblePicker` / `BubbleRack`): one per dish still needed,
-  the active order's first, then the next orders'; a used bubble is replaced
+  the most urgent order's first, then the next orders'; a used bubble is replaced
   in its own slot and flies in from the Procurement portal. At most 5 bubbles
   on screen, counting pots in use (Chef); Front House has 5 dishes plus one
   glass. A bubble let go away from any target stays there (`bubbleSpots`).
@@ -151,22 +167,21 @@ Front House (`FrontHouseGame`, `FrontHouseScene`):
   (left) or the Procurement portal (right); clean trays on the stand, counted
   by the shared `KitchenCrew.cleanTrays`.
 - A clean tray set on the counter becomes the `ServingTray`; each dish only
-  fits its own compartment, and only if the active order wants it. A drink is
+  fits its own compartment, and only if the tray still adds up to some
+  waiting order (`ServingTray.fits`). A drink is
   poured at the dispenser (`DispenserPanel`, `LeverGesture`: pinch, pull left
   to open, push right to close once full) and served on its own, never on
-  the tray: carried to the active ticket, before or after its tray
-  (`KitchenOrder.isTrayServed` / `isDrinkServed`). The order is only served
-  once both are there (`isReadyToServe`); until then it stays active and on
-  the clock. The ticket ticks a served tray and fades an owed glass.
-- The complete tray (and drink) on the active ticket serves it: the order keeps
-  its place on the rail, `.eating` for `eatTime` (3 s, tray on the green
-  table), then `.finishedEating` (dirty tray there). The next waiting order
-  is active at once (`OrderQueue.activeIndex`). Nothing new is dealt until
+  the tray: carried to its order's ticket (`DropZone.ticket`), before or
+  after its tray (`KitchenOrder.isTrayServed` / `isDrinkServed`). The order
+  is only served once both are there (`isReadyToServe`); until then it stays
+  on the clock. The ticket ticks a served tray and fades an owed glass. A
+  counter tray that no longer fits any order after one expires is emptied.
+- The complete tray (and drink) dropped on any waiting order's ticket serves
+  that order: it keeps its place on the rail, `.eating` for `eatTime` (3 s,
+  tray on the green table), then `.finishedEating` (dirty tray there). Nothing new is dealt until
   the dirty tray goes through the Procurement portal; then the order is
-  complete, the rail slides left and a new order arrives at the end, in both
-  modes. All 3 tickets can be served (`tableSeats`); the next order then
-  waits off the rail and off the clock until a dirty tray goes back. The playtest stand-in
-  washes returned trays and sends them back clean after `washTime`.
+  complete and leaves the rail, in both modes. The playtest stand-in washes
+  returned trays and sends them back clean after `washTime`.
 
 ### One round
 

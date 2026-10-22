@@ -36,9 +36,16 @@ nonisolated struct ServingTray: Equatable, Hashable {
     }
 
     /// Whether a finished `dish` can go into `compartment` for `order`: its
-    /// own compartment, still empty, and the order wants that dish there.
+    /// own compartment, still empty, and the order wants that dish there and
+    /// everything already on the tray.
     func canPlace(_ dish: KitchenIngredient, in compartment: TrayCompartment, for order: KitchenOrder) -> Bool {
-        dish.trayCompartment == compartment && dishes[compartment] == nil && order.items.contains(dish)
+        dish.trayCompartment == compartment && dishes[compartment] == nil
+            && order.items.contains(dish) && fits(order)
+    }
+
+    /// Everything on the tray so far is something `order` wants.
+    func fits(_ order: KitchenOrder) -> Bool {
+        dishes.values.allSatisfy(order.items.contains)
     }
 
     /// Every dish the order asks for is on the tray, and nothing else. The

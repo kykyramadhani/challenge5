@@ -4,8 +4,8 @@
 //
 //  Stand-in for the two roles the player isn't playing. The Chef cooks what
 //  comes through the kitchen portal after a fixed time; Front House keeps
-//  what arrives, serves the active order on a clean tray once everything for
-//  it is there, and the tray comes back to Procurement dirty.
+//  what arrives, serves an order on a clean tray once everything for it is
+//  there, and the tray comes back to Procurement dirty.
 //
 //  ponytail: timed automation, not AI. Chef and Front House never make
 //  mistakes or choices; replace with real role logic when those roles become
@@ -83,12 +83,13 @@ nonisolated struct KitchenCrew {
         dirtyTrays += landed
     }
 
-    /// The active order ran out of time: what was delivered for it — still
-    /// cooking or waiting at Front House — is thrown away with it, so it
-    /// can't quietly count toward the next order.
-    mutating func discardDeliveries() {
-        cooking = []
-        pantry = []
+    /// `order` ran out of time: what was delivered for it — still cooking or
+    /// waiting at Front House — is thrown away with it, so it can't quietly
+    /// count toward another order.
+    mutating func discardDeliveries(for order: KitchenOrder) {
+        for index in order.items.indices where order.isDelivered(at: index) {
+            remove(order.items[index])
+        }
     }
 
     // MARK: - Serving
