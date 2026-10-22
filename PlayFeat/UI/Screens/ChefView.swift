@@ -19,7 +19,8 @@ struct ChefView: View {
 
     var body: some View {
         KitchenShiftView(sceneManager: sceneManager, handPoseManager: handPoseManager, audio: audio,
-                         shift: game.shift, scene: scene, isPanelOpen: game.station == .stirring) {
+                         shift: game.shift, scene: scene, isPanelOpen: game.station == .stirring,
+                         report: { game.report }) {
             (layout: ChefLayout) in ChefWorktop(game: game, layout: layout)
         } rail: {
             OrderRail(shift: game.shift, layout: $0)

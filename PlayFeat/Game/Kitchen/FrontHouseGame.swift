@@ -56,6 +56,8 @@ final class FrontHouseGame {
     private(set) var tray: ServingTray?
     /// A filled glass waits by the dispenser.
     private(set) var isDrinkReady = false
+    /// The player's own work this shift, for the shift report.
+    private(set) var report = ShiftReport(role: .frontHouse)
     /// 0...1 up the glass while pouring.
     private(set) var fill = 0.0
     private(set) var isTapOpen = false
@@ -142,6 +144,7 @@ final class FrontHouseGame {
             guard let order = waitingOrder(at: index) else { return }
             isDrinkReady = false
             shift.serveDrink(of: order.id)
+            report.record(.beverageMade)
             serveIfReady(order.id)
         case let (.servingTray, .ticket(index)):
             guard let order = waitingOrder(at: index) else { return }
@@ -193,6 +196,7 @@ final class FrontHouseGame {
         guard queue.orders.first(where: { $0.id == orderID })?.isReadyToServe == true else { return }
         eatingSince[orderID] = now
         shift.serveOrder(orderID)
+        report.record(.orderServed)
     }
 
     private func finishEating() {

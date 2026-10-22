@@ -108,6 +108,10 @@ struct LocalizationTests {
             "Coming Soon!",
             // Procurement workstations
             "MOVE YOUR HAND BASED ON THE PATTERN",
+            // Shift report
+            "SHIFT REPORT", "OVERALL SCORE", "CONTINUE",
+            "Ingredients Cut & Tray Washed", "Ingredients Sent",
+            "Soup Cooked", "Boiled & Fried", "Order Served", "Beverage Made",
         ]
 
         defer { AppLocalization.apply(.english) }

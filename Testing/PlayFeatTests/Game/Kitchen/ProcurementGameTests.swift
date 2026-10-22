@@ -381,4 +381,28 @@ struct ProcurementGameTests {
         play(game, until: KitchenCrew.trayReturnTime + 0.5)
         #expect(game.crew.dirtyTrays == 1)
     }
+
+    // MARK: - Shift report
+
+    @Test func cuttingWashingAndSendingAreReported() throws {
+        let game = makeGame(order: [.glowingMushroom, .starJelly], crew: KitchenCrew(cleanTrays: 1, dirtyTrays: 1))
+        game.drop(.ingredient(.glowingMushroom, cardSlot: try slot(of: .glowingMushroom, in: game)), at: .cuttingBoard)
+        (0..<ProcurementGame.chopsNeeded + 2).forEach { _ in game.registerChop() }
+        play(game, until: 1)
+        game.drop(.sliced(.glowingMushroom), at: .frontHousePortal)
+        game.drop(.dirtyTray, at: .sink)
+        (0..<4).forEach { _ in game.addScrub(circles: 1.5) }
+
+        #expect(game.report.count(of: .ingredientCutOrTrayWashed) == 2, "one cut, one wash")
+        #expect(game.report.count(of: .ingredientSent) == 1)
+    }
+
+    /// A refused drop isn't work done: it scores nothing.
+    @Test func aRefusedDeliveryIsNotReported() throws {
+        let game = makeGame(order: [.glowingMushroom])
+
+        game.drop(.ingredient(.glowingMushroom, cardSlot: try slot(of: .glowingMushroom, in: game)), at: .frontHousePortal)
+
+        #expect(game.report.overallScore == 0)
+    }
 }

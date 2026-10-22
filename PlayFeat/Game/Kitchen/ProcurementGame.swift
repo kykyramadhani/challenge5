@@ -44,6 +44,8 @@ final class ProcurementGame {
     /// Trays washed so far. Each one floats off to Front House by itself;
     /// the count is only there for the worktop to animate it.
     private(set) var traysWashed = 0
+    /// The player's own work this shift, for the shift report.
+    private(set) var report = ShiftReport(role: .procurement)
     /// Dirty trays a hand has taken out of the bubble, so it isn't also
     /// drawn there.
     private(set) var dirtyTraysInHand = 0
@@ -187,6 +189,7 @@ final class ProcurementGame {
     private func deliver(_ ingredient: KitchenIngredient, sliced: Bool, to portal: DropZone) {
         guard let requirement = delivery(of: ingredient, sliced: sliced, to: portal) else { return }
         shift.markDelivered(requirement)
+        report.record(.ingredientSent)
         crew.receive(ingredient, at: now)
     }
 
@@ -198,6 +201,7 @@ final class ProcurementGame {
         chops += 1
         guard chops == Self.chopsNeeded else { return }
         slicedOnBoard = ingredient
+        report.record(.ingredientCutOrTrayWashed)
         stationFinishedAt = now
     }
 
@@ -207,6 +211,7 @@ final class ProcurementGame {
         washProgress = min(1, washProgress + circles / Self.circlesNeeded)
         guard washProgress >= 1 else { return }
         traysWashed += 1
+        report.record(.ingredientCutOrTrayWashed)
         crew.receiveCleanTray()
         stationFinishedAt = now
     }

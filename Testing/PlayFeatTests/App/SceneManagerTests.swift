@@ -94,4 +94,16 @@ struct SceneManagerTests {
 
         #expect(!manager.isInTutorial)
     }
+
+    /// A finished shift shows the report of the role that was played.
+    @Test func endingAShiftShowsItsReport() {
+        let manager = SceneManager()
+        manager.play(.chef)
+        var report = ShiftReport(role: .chef)
+        report.record(.soupCooked)
+
+        manager.goToShiftReport(report)
+
+        #expect(manager.screen == .shiftReport(report))
+    }
 }

@@ -83,6 +83,9 @@ struct ContentView: View {
         case .frontHouse:
             FrontHouseView(sceneManager: sceneManager, handPoseManager: handPoseManager, audio: audio)
                 .transition(.opacity)
+        case .shiftReport(let report):
+            ShiftReportView(report: report) { sceneManager.goToRoleSelect() }
+                .transition(.opacity)
         case .mainMenu:
             GameOpening(sceneManager: sceneManager)
                 .transition(.opacity)

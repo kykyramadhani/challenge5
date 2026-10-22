@@ -27,6 +27,9 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Rail: View, Panel:
     let scene: KitchenScene
     /// Whether the role has a zoomed-in panel open over its worktop.
     let isPanelOpen: Bool
+    /// The role's score, read once the shift is over. Only the role's own
+    /// game knows what its player did.
+    let report: () -> ShiftReport
     @ViewBuilder let worktop: (Layout) -> Worktop
     /// The order tickets along the top.
     @ViewBuilder let rail: (Layout) -> Rail
@@ -99,7 +102,16 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Rail: View, Panel:
                        startingLives: KitchenShift.startingLives)
             .placed(in: layout.shiftClock, designSize: ShiftClockCard.size)
         panelLayer(layout)
+        stopButtonLayer
         sceneLayer(size: size)
+    }
+
+    /// A tap anywhere shows a Stop button that ends the shift, through the
+    /// same game over as losing the last life. Under the SpriteKit layer,
+    /// which lets touches through on a device; on the simulator the scene
+    /// takes them as hands instead, so it can't be reached there.
+    private var stopButtonLayer: some View {
+        StopButtonLayer(onStop: shift.end)
     }
 
     /// The live feed. The gray behind it is Figma's stand-in for the camera,
@@ -152,7 +164,7 @@ struct KitchenShiftView<Layout: KitchenLayout, Worktop: View, Rail: View, Panel:
     @ViewBuilder
     private var shiftOverCover: some View {
         if showShiftOver {
-            GameOverOverlay { sceneManager.goToRoleSelect() }
+            GameOverOverlay { sceneManager.goToShiftReport(report()) }
                 .designScaled()
                 .zIndex(200)
         }

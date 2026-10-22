@@ -145,10 +145,11 @@ final class KitchenShift {
         lives = max(0, lives - expired)
         queue.removeExpiredOrders(at: now)
         updateRunningLow()
-        if lives == 0 { endShift() }
+        if lives == 0 { end() }
     }
 
-    private func endShift() {
+    /// Ends the shift: the last life lost, or the player pressing Stop.
+    func end() {
         isOver = true
         stop()
     }
