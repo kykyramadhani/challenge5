@@ -8,11 +8,6 @@
   A hand-tracking kitchen game for iPad. No touching the screen, just your hands.
 </p>
 
-<p align="center">
-  Made with and for the community at <b>PUSPADI</b> (Pusat Pemberdayaan Penyandang Disabilitas), Bali<br>
-  Apple Developer Academy · Challenge 5 &amp; Final Challenge
-</p>
-
 ---
 
 ## Contents
@@ -37,8 +32,7 @@ fills the screen, and Vision follows the player's hands and upper body in real
 time. You pinch floating bubbles, carry them across the kitchen and serve
 customers, all without touching the screen.
 
-That matters for the people we built it with: players at PUSPADI who can't
-easily use a touchscreen can still play, and one-hand mode lets players who
+That matters for the people we built it: one-hand mode lets players who
 have one arm available play the whole game.
 
 ## The game
@@ -245,16 +239,6 @@ builds:
 | [`CLAUDE.md`](CLAUDE.md) | How the project is built, conventions and gotchas |
 | [`docs/multiplayer-plan.md`](docs/multiplayer-plan.md) | The plan for playing on several iPads together |
 
-## Team
-
-Built at the **Apple Developer Academy** together with the community at
-**PUSPADI**, Bali.
-
-- Owen Limantoro
-- Rizky Insania
-
-See every contributor on the
-[contributors page](https://github.com/kykyramadhani/challenge5/graphs/contributors).
-
+Built at the **Apple Developer Academy**..
 Font: [Atkinson Hyperlegible](https://www.brailleinstitute.org/freefont/) by
 the Braille Institute.
