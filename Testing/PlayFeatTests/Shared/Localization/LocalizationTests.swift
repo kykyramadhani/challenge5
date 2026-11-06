@@ -100,18 +100,6 @@ struct LocalizationTests {
             "Speed Bonus", "Dishes Served", "Play Again", "Shop", "Main Menu",
             // Main menu
             "Most Dishes Served",
-            // Role selection
-            "CHOOSE YOUR ROLE", "PROCUREMENT", "CHEF", "FRONT-HOUSE", "PLAY ROLE",
-            "pass the ingredients to chef and front-house",
-            "process the ingredients based on the menu",
-            "arrange the food in tray and serve the beverages",
-            "Coming Soon!",
-            // Procurement workstations
-            "MOVE YOUR HAND BASED ON THE PATTERN",
-            // Shift report
-            "SHIFT REPORT", "OVERALL SCORE", "CONTINUE",
-            "Ingredients Cut & Tray Washed", "Ingredients Sent",
-            "Soup Cooked", "Boiled & Fried", "Order Served", "Beverage Made",
         ]
 
         defer { AppLocalization.apply(.english) }

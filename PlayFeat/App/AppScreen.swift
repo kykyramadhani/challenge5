@@ -10,18 +10,6 @@
 import Foundation
 
 enum AppScreen: Hashable {
-    /// The PlayFeat sign, shown at launch.
-    case title
-    /// Choosing Procurement, Chef or Front House.
-    case roleSelect
-    /// A Procurement shift.
-    case procurement
-    /// A Chef shift.
-    case chef
-    /// A Front House shift.
-    case frontHouse
-    /// The end-of-shift report, carrying the score of the role just played.
-    case shiftReport(ShiftReport)
     case mainMenu
     case shop
     case gameplay

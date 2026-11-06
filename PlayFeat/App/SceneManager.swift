@@ -12,7 +12,7 @@ import Foundation
 
 @Observable
 final class SceneManager {
-    private(set) var screen: AppScreen = .title
+    private(set) var screen: AppScreen = .mainMenu
 
     /// True until the walkthrough has been read or skipped this launch.
     private(set) var isInTutorial = true
@@ -20,24 +20,6 @@ final class SceneManager {
     /// Walkthrough read, or skipped.
     func finishTutorial() {
         isInTutorial = false
-    }
-
-    func goToRoleSelect() {
-        screen = .roleSelect
-    }
-
-    /// Leaving the shift removes its view, which stops the camera and the
-    /// shift clock before the report shows.
-    func goToShiftReport(_ report: ShiftReport) {
-        screen = .shiftReport(report)
-    }
-
-    func play(_ role: KitchenRole) {
-        switch role {
-        case .procurement: screen = .procurement
-        case .chef: screen = .chef
-        case .frontHouse: screen = .frontHouse
-        }
     }
 
     func play() {
