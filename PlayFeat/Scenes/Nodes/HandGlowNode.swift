@@ -23,8 +23,6 @@ final class HandGlowNode: SKNode {
     private let halo: SKSpriteNode
     private let core: SKSpriteNode
     private let trail: SKEmitterNode
-    private let openColor: UIColor
-    private let grabColor: UIColor
 
     /// The two house colours: accent while the hand is just being tracked,
     /// primary the moment it pinches. Green reads as "engaged", so it belongs
@@ -32,25 +30,18 @@ final class HandGlowNode: SKNode {
     static let openColor = UIColor(named: "AppAccent") ?? .orange
     static let grabColor = UIColor(named: "AppPrimary") ?? .green
 
-    /// The Procurement kitchen's purple: lilac while open, nebula pink while
-    /// pinching, so the glow matches the space theme instead of the old menu.
-    static let kitchenOpenColor = UIColor(red: 0.584, green: 0.424, blue: 0.988, alpha: 1)
-    static let kitchenGrabColor = UIColor(red: 0.855, green: 0.443, blue: 0.788, alpha: 1)
-
     /// Enough to read as a continuous ribbon while the hand is moving, few
     /// enough that a still hand isn't sitting in a puddle of them.
     private static let trailBirthRate: CGFloat = 34
 
-    init(radius: CGFloat = 46, openColor: UIColor = HandGlowNode.openColor, grabColor: UIColor = HandGlowNode.grabColor) {
+    init(radius: CGFloat = 46) {
         self.radius = radius
-        self.openColor = openColor
-        self.grabColor = grabColor
 
         let texture = Self.glowTexture
 
         halo = SKSpriteNode(texture: texture)
         core = SKSpriteNode(texture: texture)
-        trail = Self.makeTrail(texture: texture, radius: radius, color: openColor)
+        trail = Self.makeTrail(texture: texture, radius: radius)
 
         super.init()
 
@@ -84,7 +75,7 @@ final class HandGlowNode: SKNode {
 
     /// Tints every layer for the hand's current pose.
     func setGrabbing(_ isGrabbing: Bool) {
-        let colour = isGrabbing ? grabColor : openColor
+        let colour = isGrabbing ? Self.grabColor : Self.openColor
         guard core.color != colour else { return }
 
         halo.color = colour
@@ -170,7 +161,7 @@ final class HandGlowNode: SKNode {
         return SKTexture(image: image)
     }()
 
-    private static func makeTrail(texture: SKTexture, radius: CGFloat, color: UIColor) -> SKEmitterNode {
+    private static func makeTrail(texture: SKTexture, radius: CGFloat) -> SKEmitterNode {
         let emitter = SKEmitterNode()
         emitter.particleTexture = texture
         emitter.particleBlendMode = .add
@@ -189,7 +180,7 @@ final class HandGlowNode: SKNode {
         emitter.particleAlphaSpeed = -1.0
 
         emitter.particleColorBlendFactor = 1
-        emitter.particleColor = color
+        emitter.particleColor = openColor
 
         // Scattered around the palm instead of stacked on one point, so the
         // trail has some width to it.

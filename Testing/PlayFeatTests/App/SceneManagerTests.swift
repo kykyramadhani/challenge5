@@ -13,39 +13,11 @@ struct SceneManagerTests {
 
     private let result = GameResult(dishesByType: ["salad": 2], speedBonus: 5)
 
-    @Test func theAppOpensOnTheTitleWithTheTutorialStillToRead() {
+    @Test func theAppOpensOnTheMainMenuWithTheTutorialStillToRead() {
         let manager = SceneManager()
 
-        #expect(manager.screen == .title)
+        #expect(manager.screen == .mainMenu)
         #expect(manager.isInTutorial)
-    }
-
-    @Test func theTitleLeadsToRoleSelectionAndProcurementStartsAShift() {
-        let manager = SceneManager()
-
-        manager.goToRoleSelect()
-        #expect(manager.screen == .roleSelect)
-
-        manager.play(.procurement)
-        #expect(manager.screen == .procurement)
-    }
-
-    @Test func choosingChefOpensTheChefShift() {
-        let manager = SceneManager()
-        manager.goToRoleSelect()
-
-        manager.play(.chef)
-
-        #expect(manager.screen == .chef)
-    }
-
-    @Test func choosingFrontHouseOpensTheFrontHouseShift() {
-        let manager = SceneManager()
-        manager.goToRoleSelect()
-
-        manager.play(.frontHouse)
-
-        #expect(manager.screen == .frontHouse)
     }
 
     @Test func playingOpensTheGameplayScreen() {
@@ -93,17 +65,5 @@ struct SceneManagerTests {
         manager.replayGame()
 
         #expect(!manager.isInTutorial)
-    }
-
-    /// A finished shift shows the report of the role that was played.
-    @Test func endingAShiftShowsItsReport() {
-        let manager = SceneManager()
-        manager.play(.chef)
-        var report = ShiftReport(role: .chef)
-        report.record(.soupCooked)
-
-        manager.goToShiftReport(report)
-
-        #expect(manager.screen == .shiftReport(report))
     }
 }

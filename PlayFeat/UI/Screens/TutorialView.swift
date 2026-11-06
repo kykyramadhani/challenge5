@@ -47,7 +47,7 @@ struct TutorialView: View {
 
     /// The size every page was drawn at — stills and clips alike, so one
     /// layout calculation serves the lot.
-    static let pageSize = DesignCanvas.size
+    static let pageSize = CGSize(width: 1366, height: 1024)
 
     /// Seconds per character.
     private static let characterInterval: TimeInterval = 0.028
